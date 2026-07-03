@@ -199,10 +199,7 @@ function renderMaintenanceSheetHtml(wo, sheet, { editable = true } = {}) {
     const sectionId = section.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     return `
     <div class="sheet-section" data-sheet-section="${sectionId}">
-      <div class="sheet-section-head">
-        <h4>${section.title}</h4>
-        ${editable ? `<button type="button" class="btn ghost sheet-check-all" data-check-all-section="${sectionId}">Check All</button>` : ''}
-      </div>
+      <h4>${section.title}</h4>
       <div class="sheet-checklist">
         ${section.items.map((item) => {
           const row = normalized.checklist.find((c) => c.id === item.id);
@@ -264,6 +261,12 @@ function renderMaintenanceSheetHtml(wo, sheet, { editable = true } = {}) {
       </div>
 
       <div class="sheet-progress">Checklist ${progress.done} / ${progress.total} complete</div>
+      ${editable ? `
+        <div class="sheet-checkall-bar">
+          <button type="button" class="btn secondary" id="sheet-check-all-btn">Check All</button>
+          <p class="sheet-checkall-hint">Manually uncheck any tasks not completed.</p>
+        </div>
+      ` : ''}
       <div class="sheet-sections">${sectionHtml}</div>
 
       <div class="sheet-extra-fields">
@@ -349,37 +352,15 @@ function updateSheetProgress() {
   }
 }
 
-function wireSectionCheckAll() {
-  document.querySelectorAll('[data-check-all-section]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const sectionId = button.dataset.checkAllSection;
-      const boxes = document.querySelectorAll(`[data-sheet-section="${sectionId}"] [data-sheet-item]`);
-      const allChecked = Array.from(boxes).every((box) => box.checked);
-      boxes.forEach((box) => {
-        box.checked = !allChecked;
-      });
-      button.textContent = allChecked ? 'Check All' : 'Uncheck All';
-      updateSheetProgress();
+function wireGlobalCheckAll() {
+  document.getElementById('sheet-check-all-btn')?.addEventListener('click', () => {
+    document.querySelectorAll('[data-sheet-item]').forEach((box) => {
+      box.checked = true;
     });
+    updateSheetProgress();
   });
 
   document.querySelectorAll('[data-sheet-item]').forEach((input) => {
-    input.addEventListener('change', () => {
-      updateSheetProgress();
-      const sectionId = input.dataset.sheetSection;
-      const sectionButton = document.querySelector(`[data-check-all-section="${sectionId}"]`);
-      const sectionBoxes = document.querySelectorAll(`[data-sheet-section="${sectionId}"] [data-sheet-item]`);
-      if (sectionButton) {
-        const allChecked = Array.from(sectionBoxes).every((box) => box.checked);
-        sectionButton.textContent = allChecked ? 'Uncheck All' : 'Check All';
-      }
-    });
-  });
-
-  document.querySelectorAll('[data-check-all-section]').forEach((button) => {
-    const sectionId = button.dataset.checkAllSection;
-    const sectionBoxes = document.querySelectorAll(`[data-sheet-section="${sectionId}"] [data-sheet-item]`);
-    const allChecked = sectionBoxes.length > 0 && Array.from(sectionBoxes).every((box) => box.checked);
-    button.textContent = allChecked ? 'Uncheck All' : 'Check All';
+    input.addEventListener('change', updateSheetProgress);
   });
 }

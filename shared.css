@@ -1,4 +1,5 @@
-:root {
+:root,
+[data-theme='smi-racing'] {
   --bg: #0a0e1a;
   --panel: #1a1f35;
   --panel-strong: #141a2c;
@@ -10,6 +11,64 @@
   --shadow: 0 22px 45px rgba(0, 0, 0, 0.32);
   --success: #34d399;
   --warning: #fbbf24;
+  --bg-glow: rgba(225, 29, 41, 0.12);
+  --bg-top: #101623;
+}
+
+[data-theme='dale-earnhardt'] {
+  --bg: #080808;
+  --panel: #121212;
+  --panel-strong: #0d0d0d;
+  --text: #f3f4f6;
+  --muted: #a3a3a3;
+  --accent: #c41e3a;
+  --accent-soft: rgba(196, 30, 58, 0.22);
+  --border: rgba(192, 192, 192, 0.14);
+  --shadow: 0 22px 45px rgba(0, 0, 0, 0.55);
+  --bg-glow: rgba(192, 192, 192, 0.1);
+  --bg-top: #101010;
+}
+
+[data-theme='jeff-gordon'] {
+  --bg: #07112b;
+  --panel: #10214f;
+  --panel-strong: #0b1838;
+  --text: #eff6ff;
+  --muted: #93c5fd;
+  --accent: #ffd100;
+  --accent-soft: rgba(255, 209, 0, 0.18);
+  --border: rgba(147, 197, 253, 0.14);
+  --shadow: 0 22px 45px rgba(0, 0, 0, 0.42);
+  --bg-glow: rgba(228, 0, 43, 0.16);
+  --bg-top: #0a1a45;
+}
+
+[data-theme='richard-petty'] {
+  --bg: #0b1530;
+  --panel: #152a63;
+  --panel-strong: #0f1f4a;
+  --text: #f8fafc;
+  --muted: #bfdbfe;
+  --accent: #dc2626;
+  --accent-soft: rgba(220, 38, 38, 0.2);
+  --border: rgba(191, 219, 254, 0.12);
+  --shadow: 0 22px 45px rgba(0, 0, 0, 0.4);
+  --bg-glow: rgba(220, 38, 38, 0.14);
+  --bg-top: #0d1b3d;
+}
+
+[data-theme='daytona-night'] {
+  --bg: #09090b;
+  --panel: #171717;
+  --panel-strong: #111111;
+  --text: #fafafa;
+  --muted: #d4d4d8;
+  --accent: #f5c518;
+  --accent-soft: rgba(245, 197, 24, 0.18);
+  --border: rgba(245, 197, 24, 0.12);
+  --shadow: 0 22px 45px rgba(0, 0, 0, 0.5);
+  --bg-glow: rgba(245, 197, 24, 0.12);
+  --bg-top: #111111;
 }
 
 * {
@@ -25,9 +84,10 @@ body {
   min-height: 100vh;
   font-family: Inter, "Segoe UI", Roboto, sans-serif;
   background:
-    radial-gradient(circle at top right, rgba(225, 29, 41, 0.12), transparent 28%),
-    linear-gradient(180deg, #101623 0%, var(--bg) 100%);
+    radial-gradient(circle at top right, var(--bg-glow), transparent 28%),
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 100%);
   color: var(--text);
+  transition: background 220ms ease, color 220ms ease;
 }
 
 button,
@@ -58,6 +118,106 @@ a {
   align-items: center;
   gap: 18px;
   padding: 16px 0;
+  flex-wrap: wrap;
+}
+
+.nav-gear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.nav-gear-btn:hover {
+  background: var(--accent-soft);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: rotate(18deg);
+}
+
+.settings-panel {
+  width: min(560px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+}
+
+.settings-section + .settings-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-section h3 {
+  margin: 0 0 8px;
+}
+
+.settings-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.settings-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.theme-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.theme-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.theme-option:hover,
+.theme-option.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.theme-option-top {
+  display: grid;
+  gap: 2px;
+}
+
+.theme-option-sub {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.theme-swatches {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.theme-swatches span {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .brand {
@@ -89,11 +249,25 @@ a {
   display: block;
 }
 
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .nav-links {
   display: flex;
   align-items: center;
   gap: 18px;
   flex-wrap: wrap;
+}
+
+.nav-gear-btn--floating {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 40;
 }
 
 .nav-links a {
@@ -547,6 +721,32 @@ h2 {
 
 .hidden {
   display: none !important;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.72);
+  padding: 20px;
+  z-index: 50;
+}
+
+.modal-panel {
+  width: min(760px, 100%);
+  max-height: min(90vh, 850px);
+  overflow-y: auto;
+  padding: 24px;
+  position: relative;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 22px;
 }
 
 .grid {
