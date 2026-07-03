@@ -115,11 +115,38 @@ function readUrlParams() {
   return new URLSearchParams(window.location.search);
 }
 
+let currentUser = null;
+let currentUserPromise = null;
+
+async function loadCurrentUser() {
+  if (!currentUserPromise) {
+    currentUserPromise = (async () => {
+      try {
+        const response = await fetchApi('/api/auth/me');
+        if (response.ok) {
+          currentUser = await response.json();
+        } else {
+          currentUser = null;
+        }
+      } catch (err) {
+        currentUser = null;
+      }
+      return currentUser;
+    })();
+  }
+  return currentUserPromise;
+}
+
 const db = {
   getOfflineHelp,
   parseDeepLinkId,
   readUrlParams,
   loadCartData,
+  loadCurrentUser,
+  getCurrentUser: loadCurrentUser,
+  getCachedUser() {
+    return currentUser;
+  },
   async getCarts() {
     const r = await fetchApi('/api/carts');
     return r.ok ? r.json() : [];
@@ -266,5 +293,27 @@ const db = {
       { method: 'DELETE' },
     );
     return r.ok ? r.json() : null;
+  },
+  async getUsers() {
+    const r = await fetchApi('/api/users');
+    return r.ok ? r.json() : [];
+  },
+  async createUser(user) {
+    const r = await fetchApi('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(user),
+    });
+    if (!r.ok) {
+      let detail = `Create user failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = body.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
   },
 };

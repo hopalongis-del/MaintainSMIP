@@ -32,6 +32,9 @@ APP_PASSWORD = os.environ.get('APP_PASSWORD', 'WeLoveRacing!')
 APP_SECRET = os.environ.get('APP_SECRET', 'maintainsmip-session-secret')
 SESSION_COOKIE = 'ms_session'
 SESSION_MAX_AGE = 7 * 24 * 3600
+MASTER_USERNAME = 'admin'
+USER_ROLES = ('admin', 'manager', 'technician', 'readonly')
+WRITE_ROLES = ('admin', 'manager', 'technician')
 PUBLIC_PATHS = {
     '/login.html',
     '/api/auth/login',
@@ -40,28 +43,206 @@ PUBLIC_PATHS = {
     '/logo1.png',
 }
 
+TECHNICIAN_ACCOUNTS = [
+    ('gavin.weinmeister', 'Gavin Weinmeister', 'technician'),
+    ('kevin.stellman', 'Kevin Stellman', 'technician'),
+    ('cory.yeager', 'Cory Yeager', 'technician'),
+    ('mike.casady', 'Mike Casady', 'technician'),
+    ('dusty.hixson', 'Dusty Hixson', 'technician'),
+    ('brian.lachance', 'Brian Lachance', 'technician'),
+    ('stephen.hering', 'Stephen Hering', 'technician'),
+    ('mark.hixson', 'Mark Hixson', 'technician'),
+]
 
-def create_session_token() -> str:
-    expires = int(time.time()) + SESSION_MAX_AGE
-    payload = str(expires).encode()
-    signature = hmac.new(APP_SECRET.encode(), payload, hashlib.sha256).hexdigest()
-    return f'{expires}.{signature}'
+
+def hash_password(password: str) -> str:
+    salt = os.urandom(16).hex()
+    digest = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 120_000)
+    return f'pbkdf2_sha256${salt}${digest.hex()}'
 
 
-def verify_session_token(token: str) -> bool:
+def verify_password(password: str, stored_hash: str) -> bool:
     try:
-        expires_str, signature = token.split('.', 1)
-        expires = int(expires_str)
-        if expires < time.time():
+        scheme, salt, digest_hex = stored_hash.split('$', 2)
+        if scheme != 'pbkdf2_sha256':
             return False
-        expected = hmac.new(APP_SECRET.encode(), expires_str.encode(), hashlib.sha256).hexdigest()
-        return hmac.compare_digest(signature, expected)
+        digest = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 120_000)
+        return hmac.compare_digest(digest.hex(), digest_hex)
     except (ValueError, TypeError):
         return False
 
 
+def create_session_token(user_id: int) -> str:
+    expires = int(time.time()) + SESSION_MAX_AGE
+    payload = f'{expires}.{user_id}'
+    signature = hmac.new(APP_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f'{payload}.{signature}'
+
+
+def verify_session_token(token: str) -> Optional[int]:
+    try:
+        parts = token.split('.')
+        if len(parts) == 2:
+            expires_str, signature = parts
+            expires = int(expires_str)
+            if expires < time.time():
+                return None
+            expected = hmac.new(APP_SECRET.encode(), expires_str.encode(), hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(signature, expected):
+                return None
+            return 0
+        if len(parts) != 3:
+            return None
+        expires_str, user_id_str, signature = parts
+        expires = int(expires_str)
+        if expires < time.time():
+            return None
+        payload = f'{expires_str}.{user_id_str}'
+        expected = hmac.new(APP_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return None
+        return int(user_id_str)
+    except (ValueError, TypeError):
+        return None
+
+
+def user_public(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        'id': row['id'],
+        'username': row['username'],
+        'display_name': row['display_name'],
+        'role': row['role'],
+    }
+
+
+async def fetch_user_by_id(user_id: int) -> Optional[dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT id, username, display_name, role, active FROM users WHERE id = ?',
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def fetch_user_by_username(username: str) -> Optional[dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT id, username, display_name, role, active, password_hash FROM users WHERE username = ?',
+            (username,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def authenticate_user(username: str, password: str) -> Optional[dict[str, Any]]:
+    user = await fetch_user_by_username(username.lower())
+    if not user or not user.get('active'):
+        return None
+    if not verify_password(password, user['password_hash']):
+        return None
+    return user
+
+
+async def upsert_master_admin(password: str) -> dict[str, Any]:
+    password_hash = hash_password(password)
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT id FROM users WHERE username = ?',
+            (MASTER_USERNAME,),
+        )
+        existing = await cursor.fetchone()
+        if existing:
+            await connection.execute(
+                '''
+                UPDATE users
+                SET display_name = ?, role = 'admin', password_hash = ?, active = 1
+                WHERE username = ?
+                ''',
+                ('Master Admin', password_hash, MASTER_USERNAME),
+            )
+            user_id = existing['id']
+        else:
+            cursor = await connection.execute(
+                '''
+                INSERT INTO users (username, display_name, role, password_hash, active, created_date)
+                VALUES (?, ?, 'admin', ?, 1, ?)
+                ''',
+                (MASTER_USERNAME, 'Master Admin', password_hash, now),
+            )
+            user_id = cursor.lastrowid
+        await connection.commit()
+        cursor = await connection.execute(
+            'SELECT id, username, display_name, role, active FROM users WHERE id = ?',
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+        return dict(row)
+
+
+async def ensure_users_seeded() -> None:
+    """Seed accounts on first boot; always keep a reachable master admin."""
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute('SELECT COUNT(*) FROM users')
+        total_users = (await cursor.fetchone())[0]
+        cursor = await connection.execute(
+            "SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = 1",
+        )
+        active_admins = (await cursor.fetchone())[0]
+
+    if total_users == 0:
+        master_password = APP_PASSWORD or 'WeLoveRacing!'
+        await upsert_master_admin(master_password)
+        now = datetime.utcnow().isoformat()
+        async with aiosqlite.connect(DB_PATH) as connection:
+            for username, display_name, role in TECHNICIAN_ACCOUNTS:
+                await connection.execute(
+                    '''
+                    INSERT INTO users (username, display_name, role, password_hash, active, created_date)
+                    VALUES (?, ?, ?, ?, 1, ?)
+                    ''',
+                    (username, display_name, role, hash_password(master_password), now),
+                )
+            await connection.commit()
+        return
+
+    if active_admins == 0:
+        master_password = APP_PASSWORD or 'WeLoveRacing!'
+        await upsert_master_admin(master_password)
+
+
+def get_request_user(request: Request) -> Optional[dict[str, Any]]:
+    return getattr(request.state, 'user', None)
+
+
+def require_authenticated_user(request: Request) -> dict[str, Any]:
+    user = get_request_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail='Authentication required')
+    return user
+
+
+def require_write_access(request: Request) -> dict[str, Any]:
+    user = require_authenticated_user(request)
+    if user['role'] not in WRITE_ROLES:
+        raise HTTPException(status_code=403, detail='Read-only account cannot change data')
+    return user
+
+
+def require_admin(request: Request) -> dict[str, Any]:
+    user = require_authenticated_user(request)
+    if user['role'] != 'admin':
+        raise HTTPException(status_code=403, detail='Admin access required')
+    return user
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        request.state.user = None
         if not APP_PASSWORD:
             return await call_next(request)
 
@@ -70,8 +251,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         token = request.cookies.get(SESSION_COOKIE)
-        if token and verify_session_token(token):
-            return await call_next(request)
+        user_id = verify_session_token(token) if token else None
+        if user_id is not None:
+            if user_id == 0:
+                master = await fetch_user_by_username(MASTER_USERNAME)
+                if master and master.get('active'):
+                    request.state.user = master
+                    return await call_next(request)
+            else:
+                user = await fetch_user_by_id(user_id)
+                if user and user.get('active'):
+                    request.state.user = user
+                    return await call_next(request)
 
         if path.startswith('/api/'):
             return JSONResponse(status_code=401, content={'detail': 'Authentication required'})
@@ -133,6 +324,7 @@ async def lifespan(app: FastAPI):
     await seed_pm_templates()
     await seed_wo_templates()
     await ensure_wo_templates_seeded()
+    await ensure_users_seeded()
     await seed_demo_data()
     yield
 
@@ -444,6 +636,19 @@ async def create_tables() -> None:
                 photos TEXT,
                 notes TEXT,
                 linked_wo_id INTEGER,
+                created_date TEXT
+            )
+            '''
+        )
+        await connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                display_name TEXT NOT NULL,
+                role TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
                 created_date TEXT
             )
             '''
@@ -909,7 +1114,8 @@ async def list_wo_templates() -> List[WoTemplate]:
 
 
 @app.post('/api/wo/templates', response_model=WoTemplate)
-async def create_wo_template(item: WoTemplateCreate) -> WoTemplate:
+async def create_wo_template(request: Request, item: WoTemplateCreate) -> WoTemplate:
+    require_write_access(request)
     async with aiosqlite.connect(DB_PATH) as connection:
         cursor = await connection.execute('SELECT COUNT(*) FROM wo_templates')
         count = (await cursor.fetchone())[0]
@@ -965,7 +1171,10 @@ async def list_work_orders(
 
 
 @app.post('/api/workorders', response_model=WorkOrder)
-async def create_work_order(item: WorkOrderCreate) -> WorkOrder:
+async def create_work_order(request: Request, item: WorkOrderCreate) -> WorkOrder:
+    user = require_write_access(request)
+    if not item.assigned_to:
+        item = item.model_copy(update={'assigned_to': user['display_name']})
     created_date = datetime.utcnow().isoformat()
     async with aiosqlite.connect(DB_PATH) as connection:
         cursor = await connection.execute(
@@ -1020,7 +1229,8 @@ async def create_work_order(item: WorkOrderCreate) -> WorkOrder:
 
 
 @app.put('/api/workorders/{workorder_id}', response_model=WorkOrder)
-async def update_work_order(workorder_id: int, item: WorkOrderUpdate) -> WorkOrder:
+async def update_work_order(request: Request, workorder_id: int, item: WorkOrderUpdate) -> WorkOrder:
+    require_write_access(request)
     async with aiosqlite.connect(DB_PATH) as connection:
         connection.row_factory = aiosqlite.Row
         cursor = await connection.execute('SELECT * FROM work_orders WHERE id = ?', (workorder_id,))
@@ -1125,7 +1335,8 @@ async def list_pm_templates() -> List[PMTemplate]:
 
 
 @app.post('/api/pm/templates', response_model=PMTemplate)
-async def create_pm_template(item: PMTemplateCreate) -> PMTemplate:
+async def create_pm_template(request: Request, item: PMTemplateCreate) -> PMTemplate:
+    require_write_access(request)
     async with aiosqlite.connect(DB_PATH) as connection:
         cursor = await connection.execute('SELECT COUNT(*) FROM pm_templates')
         count = (await cursor.fetchone())[0]
@@ -1165,7 +1376,8 @@ async def create_pm_template(item: PMTemplateCreate) -> PMTemplate:
 
 
 @app.put('/api/pm/templates/{template_id}')
-async def update_pm_template(template_id: str, update: dict) -> dict:
+async def update_pm_template(request: Request, template_id: str, update: dict) -> dict:
+    require_write_access(request)
     json_fields = {'applies_to', 'checklist'}
     async with aiosqlite.connect(DB_PATH) as db:
         fields = {k: v for k, v in update.items() if k != 'id'}
@@ -1198,7 +1410,10 @@ async def list_pm_records(status: Optional[str] = Query(None)) -> List[PMRecord]
 
 
 @app.post('/api/pm/records', response_model=PMRecord)
-async def create_pm_record(item: PMRecordCreate) -> PMRecord:
+async def create_pm_record(request: Request, item: PMRecordCreate) -> PMRecord:
+    user = require_write_access(request)
+    if not item.tech_name:
+        item = item.model_copy(update={'tech_name': user['display_name']})
     async with aiosqlite.connect(DB_PATH) as connection:
         cursor = await connection.execute(
             '''
@@ -1233,7 +1448,8 @@ async def create_pm_record(item: PMRecordCreate) -> PMRecord:
 
 
 @app.put('/api/pm/records/{record_id}')
-async def update_pm_record(record_id: str, update: dict) -> dict:
+async def update_pm_record(request: Request, record_id: str, update: dict) -> dict:
+    require_write_access(request)
     json_fields = {'checklist_results', 'linked_wo_ids'}
     async with aiosqlite.connect(DB_PATH) as db:
         fields = {k: v for k, v in update.items() if k != 'id'}
@@ -1248,7 +1464,8 @@ async def update_pm_record(record_id: str, update: dict) -> dict:
 
 
 @app.delete('/api/workorders/{workorder_id}')
-async def delete_work_order(workorder_id: int) -> dict:
+async def delete_work_order(request: Request, workorder_id: int) -> dict:
+    require_write_access(request)
     async with aiosqlite.connect(DB_PATH) as connection:
         cursor = await connection.execute('SELECT id FROM work_orders WHERE id = ?', (workorder_id,))
         if not await cursor.fetchone():
@@ -1259,7 +1476,8 @@ async def delete_work_order(workorder_id: int) -> dict:
 
 
 @app.delete('/api/pm/records/{record_id}')
-async def delete_pm_record(record_id: int) -> dict:
+async def delete_pm_record(request: Request, record_id: int) -> dict:
+    require_write_access(request)
     async with aiosqlite.connect(DB_PATH) as connection:
         cursor = await connection.execute('SELECT id FROM pm_records WHERE id = ?', (record_id,))
         if not await cursor.fetchone():
@@ -1300,7 +1518,10 @@ async def get_accident(accident_id: int) -> AccidentReport:
 
 
 @app.post('/api/accidents', response_model=AccidentReport)
-async def create_accident(item: AccidentReportCreate) -> AccidentReport:
+async def create_accident(request: Request, item: AccidentReportCreate) -> AccidentReport:
+    user = require_write_access(request)
+    if not item.reported_by:
+        item = item.model_copy(update={'reported_by': user['display_name']})
     created_date = datetime.utcnow().isoformat()
     cart_serial = next(
         (cart.serial for cart in app.state.carts if cart.id == item.cart_id),
@@ -1353,7 +1574,8 @@ async def create_accident(item: AccidentReportCreate) -> AccidentReport:
 
 
 @app.put('/api/accidents/{accident_id}', response_model=AccidentReport)
-async def update_accident(accident_id: int, item: AccidentReportUpdate) -> AccidentReport:
+async def update_accident(request: Request, accident_id: int, item: AccidentReportUpdate) -> AccidentReport:
+    require_write_access(request)
     existing = await get_accident_row(accident_id)
     updated = {**existing}
     payload = item.model_dump(exclude_unset=True)
@@ -1402,7 +1624,8 @@ async def update_accident(accident_id: int, item: AccidentReportUpdate) -> Accid
 
 
 @app.post('/api/accidents/{accident_id}/photos')
-async def upload_accident_photo(accident_id: int, file: UploadFile = File(...)) -> dict:
+async def upload_accident_photo(request: Request, accident_id: int, file: UploadFile = File(...)) -> dict:
+    require_write_access(request)
     row = await get_accident_row(accident_id)
     if not is_allowed_image_upload(file):
         raise HTTPException(status_code=400, detail='Only image files are allowed')
@@ -1436,7 +1659,8 @@ async def upload_accident_photo(accident_id: int, file: UploadFile = File(...)) 
 
 
 @app.delete('/api/accidents/{accident_id}/photos')
-async def delete_accident_photo(accident_id: int, path: str = Query(...)) -> dict:
+async def delete_accident_photo(request: Request, accident_id: int, path: str = Query(...)) -> dict:
+    require_write_access(request)
     row = await get_accident_row(accident_id)
     photos = json.loads(row['photos'] or '[]')
     if path not in photos:
@@ -1456,7 +1680,8 @@ async def delete_accident_photo(accident_id: int, path: str = Query(...)) -> dic
 
 
 @app.delete('/api/accidents/{accident_id}')
-async def delete_accident(accident_id: int) -> dict:
+async def delete_accident(request: Request, accident_id: int) -> dict:
+    require_write_access(request)
     row = await get_accident_row(accident_id)
     photos = json.loads(row['photos'] or '[]')
     delete_photo_files(photos)
@@ -1539,7 +1764,29 @@ async def get_stats() -> dict:
 
 
 class LoginRequest(BaseModel):
+    username: Optional[str] = ''
     password: str
+
+
+class UserPublic(BaseModel):
+    id: int
+    username: str
+    display_name: str
+    role: str
+
+
+class UserCreate(BaseModel):
+    username: str
+    display_name: str
+    role: str = 'technician'
+    password: str
+
+
+class UserUpdate(BaseModel):
+    display_name: Optional[str] = None
+    role: Optional[str] = None
+    active: Optional[bool] = None
+    password: Optional[str] = None
 
 
 @app.get('/api/health')
@@ -1555,13 +1802,26 @@ def health() -> dict[str, Any]:
 
 
 @app.post('/api/auth/login')
-def login(body: LoginRequest, request: Request, response: Response) -> dict[str, bool]:
+async def login(body: LoginRequest, request: Request, response: Response) -> dict[str, Any]:
     if not APP_PASSWORD:
-        return {'ok': True}
-    if not hmac.compare_digest(body.password, APP_PASSWORD):
-        raise HTTPException(status_code=401, detail='Incorrect password')
+        return {'ok': True, 'user': None}
 
-    token = create_session_token()
+    username = (body.username or '').strip().lower()
+    password = body.password
+    user: Optional[dict[str, Any]] = None
+
+    if username:
+        user = await authenticate_user(username, password)
+        if not user and username == MASTER_USERNAME and hmac.compare_digest(password, APP_PASSWORD):
+            user = await upsert_master_admin(APP_PASSWORD)
+    elif hmac.compare_digest(password, APP_PASSWORD):
+        user = await upsert_master_admin(APP_PASSWORD)
+        user = await fetch_user_by_username(MASTER_USERNAME)
+
+    if not user:
+        raise HTTPException(status_code=401, detail='Incorrect username or password')
+
+    token = create_session_token(user['id'])
     response.set_cookie(
         SESSION_COOKIE,
         token,
@@ -1570,13 +1830,124 @@ def login(body: LoginRequest, request: Request, response: Response) -> dict[str,
         max_age=SESSION_MAX_AGE,
         secure=request.url.scheme == 'https',
     )
-    return {'ok': True}
+    return {'ok': True, 'user': user_public(user)}
+
+
+@app.get('/api/auth/me', response_model=UserPublic)
+async def auth_me(request: Request) -> dict[str, Any]:
+    user = require_authenticated_user(request)
+    return user_public(user)
 
 
 @app.post('/api/auth/logout')
 def logout(response: Response) -> dict[str, bool]:
     response.delete_cookie(SESSION_COOKIE)
     return {'ok': True}
+
+
+@app.get('/api/users', response_model=List[UserPublic])
+async def list_users(request: Request) -> List[dict[str, Any]]:
+    require_admin(request)
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT id, username, display_name, role, active FROM users ORDER BY display_name',
+        )
+        rows = await cursor.fetchall()
+    return [user_public(dict(row)) for row in rows if row['active']]
+
+
+@app.post('/api/users', response_model=UserPublic)
+async def create_user(request: Request, body: UserCreate) -> dict[str, Any]:
+    require_admin(request)
+    username = body.username.strip().lower()
+    if not username:
+        raise HTTPException(status_code=400, detail='Username is required')
+    if body.role not in USER_ROLES:
+        raise HTTPException(status_code=400, detail='Invalid role')
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail='Password must be at least 8 characters')
+
+    existing = await fetch_user_by_username(username)
+    if existing:
+        raise HTTPException(status_code=409, detail='Username already exists')
+
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            '''
+            INSERT INTO users (username, display_name, role, password_hash, active, created_date)
+            VALUES (?, ?, ?, ?, 1, ?)
+            ''',
+            (username, body.display_name.strip(), body.role, hash_password(body.password), now),
+        )
+        user_id = cursor.lastrowid
+        await connection.commit()
+        cursor = await connection.execute(
+            'SELECT id, username, display_name, role, active FROM users WHERE id = ?',
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+    return user_public(dict(row))
+
+
+@app.put('/api/users/{user_id}', response_model=UserPublic)
+async def update_user(request: Request, user_id: int, body: UserUpdate) -> dict[str, Any]:
+    require_admin(request)
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+        row = await cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail='User not found')
+        current = dict(row)
+
+        if body.role is not None and body.role not in USER_ROLES:
+            raise HTTPException(status_code=400, detail='Invalid role')
+
+        next_active = current['active'] if body.active is None else int(body.active)
+        next_role = body.role or current['role']
+        if current['role'] == 'admin' and (next_active == 0 or next_role != 'admin'):
+            cursor = await connection.execute(
+                "SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = 1 AND id != ?",
+                (user_id,),
+            )
+            remaining_admins = (await cursor.fetchone())[0]
+            if remaining_admins == 0:
+                raise HTTPException(status_code=400, detail='Cannot remove the last active admin')
+
+        fields: list[str] = []
+        values: list[Any] = []
+        if body.display_name is not None:
+            fields.append('display_name = ?')
+            values.append(body.display_name.strip())
+        if body.role is not None:
+            fields.append('role = ?')
+            values.append(body.role)
+        if body.active is not None:
+            fields.append('active = ?')
+            values.append(int(body.active))
+        if body.password:
+            if len(body.password) < 8:
+                raise HTTPException(status_code=400, detail='Password must be at least 8 characters')
+            fields.append('password_hash = ?')
+            values.append(hash_password(body.password))
+
+        if fields:
+            values.append(user_id)
+            await connection.execute(
+                f"UPDATE users SET {', '.join(fields)} WHERE id = ?",
+                values,
+            )
+            await connection.commit()
+
+        cursor = await connection.execute(
+            'SELECT id, username, display_name, role, active FROM users WHERE id = ?',
+            (user_id,),
+        )
+        updated = await cursor.fetchone()
+    return user_public(dict(updated))
 
 
 @app.get('/')

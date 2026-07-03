@@ -367,9 +367,12 @@ async function addWoComment(id, existingComments) {
   const text = document.getElementById('wo-new-comment').value.trim();
   if (!text) return;
 
+  const author = db.getCachedUser()?.display_name
+    || window.MaintainSMIPSettings?.getCurrentUser?.()?.display_name
+    || 'Technician';
   const updatedComments = [
     ...existingComments,
-    { author: 'Technician', text, date: new Date().toISOString() }
+    { author, text, date: new Date().toISOString() }
   ];
   await db.updateWorkOrder(id, { comments: updatedComments });
   await openWoDetail(id);
@@ -569,7 +572,7 @@ async function initWorkOrders() {
   });
 
   try {
-    await Promise.all([db.loadCartData(), loadWoTemplates()]);
+    await Promise.all([db.loadCartData(), db.loadCurrentUser(), loadWoTemplates()]);
     showDetailPlaceholder();
     setLocationFilterOptions();
     wireWoStatCards();

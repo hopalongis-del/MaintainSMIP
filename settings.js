@@ -321,9 +321,35 @@ function buildSettingsModal() {
           </div>
         </section>
 
-        <section class="settings-section">
+        <section class="settings-section" id="account-settings-section">
           <h3>Account</h3>
-          <p class="hero-sub">Password updates are coming soon.</p>
+          <p class="hero-sub" id="account-signed-in-copy">Signed in as —</p>
+          <div class="settings-subblock hidden" id="admin-users-panel">
+            <h4>Team Accounts</h4>
+            <p class="hero-sub">Master admin can add users and reset passwords. The last active admin cannot be removed.</p>
+            <div id="admin-users-list" class="admin-users-list"></div>
+            <form class="settings-form" id="admin-create-user-form">
+              <label>New Username
+                <input type="text" id="admin-new-username" placeholder="firstname.lastname" required />
+              </label>
+              <label>Display Name
+                <input type="text" id="admin-new-display-name" placeholder="Full name" required />
+              </label>
+              <label>Role
+                <select id="admin-new-role">
+                  <option value="technician">Technician</option>
+                  <option value="manager">Manager</option>
+                  <option value="readonly">Read-only</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </label>
+              <label>Password
+                <input type="password" id="admin-new-password" minlength="8" required />
+              </label>
+              <button class="btn secondary" type="submit">Add User</button>
+            </form>
+            <p class="hero-sub" id="admin-users-status"></p>
+          </div>
           <form id="change-password-form" class="settings-form">
             <label>Current Password
               <input type="password" id="settings-current-password" placeholder="Enter current password" autocomplete="current-password" disabled />
@@ -489,6 +515,90 @@ function createSettingsButton({ floating = false } = {}) {
   return button;
 }
 
+async function injectUserBadge() {
+  if (document.getElementById('nav-user') || typeof db === 'undefined') return;
+
+  const user = await db.getCurrentUser();
+  if (!user) return;
+
+  window.__currentUser = user;
+
+  const nav = document.querySelector('.nav');
+  if (!nav) return;
+
+  const navActions = nav.querySelector('.nav-actions') || nav;
+  const badge = document.createElement('div');
+  badge.className = 'nav-user';
+  badge.id = 'nav-user';
+  badge.innerHTML = `
+    <span class="nav-user-name">${user.display_name}</span>
+    <span class="nav-user-role">${user.role.replace('_', ' ')}</span>
+    <button type="button" class="btn ghost nav-logout-btn" id="nav-logout-btn">Sign out</button>
+  `;
+  navActions.appendChild(badge);
+
+  document.getElementById('nav-logout-btn')?.addEventListener('click', async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch (err) {
+      /* still redirect */
+    }
+    window.location.href = '/login.html';
+  });
+
+  const accountCopy = document.getElementById('account-signed-in-copy');
+  if (accountCopy) {
+    accountCopy.textContent = `Signed in as ${user.display_name} (${user.role.replace('_', ' ')}).`;
+  }
+
+  if (user.role === 'admin') {
+    document.getElementById('admin-users-panel')?.classList.remove('hidden');
+    await refreshAdminUsersList();
+  }
+}
+
+async function refreshAdminUsersList() {
+  const listEl = document.getElementById('admin-users-list');
+  if (!listEl || typeof db === 'undefined') return;
+  const users = await db.getUsers();
+  if (!Array.isArray(users)) {
+    listEl.innerHTML = '<p class="hero-sub">Could not load users.</p>';
+    return;
+  }
+  listEl.innerHTML = users.map((user) => `
+    <div class="admin-user-row">
+      <div>
+        <strong>${user.display_name}</strong>
+        <span class="hero-sub">${user.username} · ${user.role}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function wireAdminUserForm() {
+  const form = document.getElementById('admin-create-user-form');
+  if (!form || form._wired) return;
+  form._wired = true;
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const status = document.getElementById('admin-users-status');
+    const payload = {
+      username: document.getElementById('admin-new-username').value.trim(),
+      display_name: document.getElementById('admin-new-display-name').value.trim(),
+      role: document.getElementById('admin-new-role').value,
+      password: document.getElementById('admin-new-password').value,
+    };
+    const result = await db.createUser(payload);
+    if (result?.error) {
+      status.textContent = result.error;
+      return;
+    }
+    form.reset();
+    status.textContent = `Added ${result.display_name}.`;
+    await refreshAdminUsersList();
+  });
+}
+
 function injectSettingsButton() {
   if (document.getElementById('open-settings-btn')) return;
 
@@ -591,7 +701,12 @@ window.MaintainSMIPSettings = {
   getPmDueWindowDays,
   isPmDueSoon,
   getPmDueLabel,
-  getDefaultMechanic: () => getSettings().defaultMechanic || '',
+  getCurrentUser: () => window.__currentUser || db?.getCachedUser?.() || null,
+  getDefaultMechanic: () => {
+    const settingsMechanic = getSettings().defaultMechanic || '';
+    if (settingsMechanic) return settingsMechanic;
+    return window.__currentUser?.display_name || db?.getCachedUser?.()?.display_name || '';
+  },
   getDefaultLocation: () => getSettings().defaultLocation || '',
   getDefaultPriority: () => getSettings().defaultPriority || DEFAULT_SETTINGS.defaultPriority,
   getDefaultServiceType: () => getSettings().defaultServiceType || DEFAULT_SETTINGS.defaultServiceType,
@@ -603,11 +718,13 @@ window.MaintainSMIPSettings = {
 function initSettings() {
   buildSettingsModal();
   injectSettingsButton();
+  wireAdminUserForm();
   applySettings();
   syncSettingsForm();
   wireSettingsForm();
   wireSessionTimeout();
   maybeRedirectLandingPage();
+  injectUserBadge();
 
   document.getElementById('open-settings-btn')?.addEventListener('click', openSettings);
   document.getElementById('settings-close')?.addEventListener('click', closeSettings);

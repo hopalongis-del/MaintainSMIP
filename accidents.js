@@ -330,6 +330,12 @@ function openCreateModal() {
   approvedPendingPhotos = [];
   document.getElementById('accident-form').reset();
   document.getElementById('acc-incident-date').value = new Date().toISOString().slice(0, 10);
+  const reporter = db.getCachedUser()?.display_name || '';
+  const reporterSelect = document.getElementById('acc-reported-by');
+  if (reporter && reporterSelect) {
+    const match = Array.from(reporterSelect.options).find((opt) => opt.value === reporter || opt.textContent === reporter);
+    reporterSelect.value = match ? match.value : '';
+  }
   document.getElementById('acc-modal-eyebrow').textContent = 'Accident Report';
   document.getElementById('acc-modal-heading').textContent = 'Report Damage';
   document.getElementById('acc-save-btn').textContent = 'Save Report';
@@ -512,7 +518,7 @@ async function initAccidents() {
   document.getElementById('photo-deny-btn').addEventListener('click', denyPhoto);
 
   try {
-    await db.loadCartData();
+    await Promise.all([db.loadCartData(), db.loadCurrentUser()]);
     showDetailPlaceholder();
     setupLocationFilter();
     wireAccStatCards();

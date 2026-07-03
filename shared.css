@@ -393,6 +393,58 @@ a {
   flex-wrap: wrap;
 }
 
+.nav-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.nav-user-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.nav-user-role {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.nav-logout-btn {
+  padding: 6px 10px;
+  min-height: 0;
+  font-size: 0.82rem;
+}
+
+.admin-users-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.admin-user-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.admin-user-row strong {
+  display: block;
+}
+
+.admin-user-row .hero-sub {
+  margin-top: 4px;
+}
+
 .nav-links {
   display: flex;
   align-items: center;

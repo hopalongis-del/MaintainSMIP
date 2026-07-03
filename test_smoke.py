@@ -3,21 +3,46 @@ from fastapi.testclient import TestClient
 
 import server
 
+
 def main() -> None:
     with TestClient(server.app) as client:
         run_tests(client)
 
 
 def login(client: TestClient) -> None:
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "admin", "password": "WeLoveRacing!"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["ok"] is True
+    assert body["user"]["username"] == "admin"
+    assert body["user"]["role"] == "admin"
+
+    me = client.get("/api/auth/me")
+    assert me.status_code == 200, me.text
+    assert me.json()["display_name"] == "Master Admin"
+
+
+def test_legacy_password_login(client: TestClient) -> None:
+    client.post("/api/auth/logout")
     response = client.post("/api/auth/login", json={"password": "WeLoveRacing!"})
     assert response.status_code == 200, response.text
+    assert response.json()["user"]["username"] == "admin"
 
 
 def run_tests(client: TestClient) -> None:
     login(client)
+    test_legacy_password_login(client)
+    login(client)
 
     stats = client.get("/api/stats")
     assert stats.status_code == 200, stats.text
+
+    users = client.get("/api/users")
+    assert users.status_code == 200, users.text
+    assert any(user["username"] == "admin" for user in users.json())
 
     wo_templates = client.get("/api/wo/templates")
     assert wo_templates.status_code == 200, wo_templates.text
@@ -62,7 +87,7 @@ def run_tests(client: TestClient) -> None:
             "priority": "low",
             "status": "open",
             "type": "inspection",
-            "assigned_to": "Mike Casady",
+            "assigned_to": "",
             "location": "SMIP",
             "due_date": "2026-07-10T00:00:00",
             "labor_minutes": 15,
@@ -71,6 +96,7 @@ def run_tests(client: TestClient) -> None:
         },
     )
     assert create.status_code == 200, create.text
+    assert create.json()["assigned_to"] == "Master Admin"
     wo_id = create.json()["id"]
 
     update = client.put(f"/api/workorders/{wo_id}", json={"status": "in_progress"})
@@ -101,6 +127,7 @@ def run_tests(client: TestClient) -> None:
         },
     )
     assert accident.status_code == 200, accident.text
+    assert accident.json()["reported_by"] == "Master Admin"
     accident_id = accident.json()["id"]
     photo = client.post(
         f"/api/accidents/{accident_id}/photos",
@@ -113,6 +140,7 @@ def run_tests(client: TestClient) -> None:
 
     print("ALL TESTS PASSED")
     print("stats:", stats.json())
+    print("users:", len(users.json()))
     print("wo_templates:", len(wo_templates.json()))
     print("work_orders:", len(wos.json()))
     print("pm_templates:", len(templates.json()))
