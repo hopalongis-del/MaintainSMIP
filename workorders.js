@@ -10,6 +10,9 @@ const TECHNICIANS = [
 ];
 
 function formatDate(value) {
+  if (window.MaintainSMIPSettings?.formatDate) {
+    return window.MaintainSMIPSettings.formatDate(value);
+  }
   if (!value) return 'N/A';
   const date = new Date(value);
   return date.toLocaleDateString('en-US', {
@@ -17,6 +20,25 @@ function formatDate(value) {
     day: '2-digit',
     year: 'numeric'
   });
+}
+
+function applyUserSettingsToWoForm() {
+  const settingsApi = window.MaintainSMIPSettings;
+  if (!settingsApi) return;
+
+  const mechanic = settingsApi.getDefaultMechanic?.();
+  const location = settingsApi.getDefaultLocation?.();
+  const priority = settingsApi.getDefaultPriority?.();
+
+  if (mechanic) {
+    document.getElementById('wo-assigned-to').value = mechanic;
+  }
+  if (location) {
+    document.getElementById('wo-location').value = location;
+  }
+  if (priority) {
+    document.getElementById('wo-priority').value = priority;
+  }
 }
 
 function getDaysAge(dateValue) {
@@ -234,6 +256,7 @@ function openModal() {
   document.getElementById('wo-location').value = '';
   populateWoTemplateSelect(activeWoTemplate?.id);
   applyTemplateDefaultsToForm(getActiveWoTemplate());
+  applyUserSettingsToWoForm();
   document.getElementById('wo-modal').classList.remove('hidden');
 }
 
@@ -478,15 +501,18 @@ function populateWoTemplateSelect(selectedId) {
 
 function applyTemplateDefaultsToForm(template = getActiveWoTemplate()) {
   if (!template || editingWoId) return;
+  const settingsApi = window.MaintainSMIPSettings;
+  const defaultPriority = settingsApi?.getDefaultPriority?.() || template.default_priority || 'medium';
   document.getElementById('wo-title').value = template.default_title || 'Maintenance Service';
   document.getElementById('wo-type').value = template.default_type || 'repair';
-  document.getElementById('wo-priority').value = template.default_priority || 'medium';
+  document.getElementById('wo-priority').value = defaultPriority;
   document.getElementById('wo-description').value = template.description || '';
 }
 
 async function loadWoTemplates() {
   woTemplates = await db.getWoTemplates();
-  activeWoTemplate = woTemplates[0] || null;
+  const preferredId = window.MaintainSMIPSettings?.getDefaultWoTemplateId?.() || '';
+  activeWoTemplate = woTemplates.find((template) => template.id === preferredId) || woTemplates[0] || null;
   renderWoTemplateBar();
   populateWoTemplateSelect(activeWoTemplate?.id);
 }

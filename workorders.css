@@ -440,6 +440,19 @@
   }
 }
 
+html[data-layout='phone'] .sheet-sections {
+  grid-template-columns: 1fr;
+}
+
+html[data-layout='phone'] .form-grid,
+html[data-layout='phone'] .wo-filters {
+  grid-template-columns: 1fr;
+}
+
+html[data-layout='laptop'] .sheet-sections {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .priority-low {
   background: rgba(16, 185, 129, 0.14);
   color: #a7f3d0;

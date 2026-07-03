@@ -18,6 +18,9 @@ function getLocations() {
 }
 
 function formatPmDate(value) {
+  if (window.MaintainSMIPSettings?.formatDate) {
+    return window.MaintainSMIPSettings.formatDate(value);
+  }
   if (!value) return 'N/A';
   return new Date(value).toLocaleDateString('en-US', {
     month: 'short',
@@ -27,10 +30,19 @@ function formatPmDate(value) {
 }
 
 function isDueThisWeek(dateValue) {
+  if (window.MaintainSMIPSettings?.isPmDueSoon) {
+    return window.MaintainSMIPSettings.isPmDueSoon(dateValue);
+  }
   const date = new Date(dateValue);
   const now = new Date();
   const diffDays = Math.ceil((date - now) / (1000 * 60 * 60 * 24));
   return diffDays >= 0 && diffDays <= 7;
+}
+
+function updatePmPageLabels() {
+  const label = window.MaintainSMIPSettings?.getPmDueLabel?.() || 'Due This Week';
+  const dueLabel = document.getElementById('pm-due-window-label');
+  if (dueLabel) dueLabel.textContent = label;
 }
 
 function isOverdue(record) {
@@ -549,6 +561,13 @@ function showPmApiError(message) {
 }
 
 async function initPmModule() {
+  updatePmPageLabels();
+  window.addEventListener('maintainsmip-settings-changed', async () => {
+    updatePmPageLabels();
+    await renderPmSchedule();
+    await updatePmDashboard();
+  });
+
   try {
     updatePmFilters();
     wirePmStatCards();

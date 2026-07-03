@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dashboard | MaintainSMIP</title>
     <link rel="icon" href="logo1.png" type="image/png" />
-    <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('maintainsmip-theme') || 'smi-racing');</script>
+    <script>(function(){try{var s=JSON.parse(localStorage.getItem('maintainsmip-settings')||'{}');document.documentElement.setAttribute('data-theme',s.theme||localStorage.getItem('maintainsmip-theme')||'smi-racing');document.documentElement.setAttribute('data-layout',s.layout==='phone'?'phone':'laptop');}catch(e){document.documentElement.setAttribute('data-theme','smi-racing');document.documentElement.setAttribute('data-layout','laptop');}})();</script>
     <link rel="stylesheet" href="shared.css" />
     <script src="settings.js"></script>
     <style>
@@ -113,7 +113,7 @@
             <strong class="stat-num loading-pulse" id="stat-overdue">—</strong><span class="stat-label">Overdue Work Orders</span>
           </a>
           <a class="stat-card stat-card-link" href="pm.html?due=week" title="View PM due this week">
-            <strong class="stat-num loading-pulse" id="stat-pm-week">—</strong><span class="stat-label">PM Due This Week</span>
+            <strong class="stat-num loading-pulse" id="stat-pm-week">—</strong><span class="stat-label" id="stat-pm-week-label">PM Due This Week</span>
           </a>
           <a class="stat-card stat-card-link alert" href="pm.html?status=overdue" title="View overdue PM">
             <strong class="stat-num loading-pulse" id="stat-pm-overdue">—</strong><span class="stat-label">PM Overdue</span>
@@ -156,20 +156,36 @@
           <div class="empty-state loading-pulse">Loading work orders…</div>
         </div>
 
-        <h2 class="section-title"><a class="section-title-link" href="pm.html?due=week">PM Due This Week</a></h2>
+        <h2 class="section-title"><a class="section-title-link" href="pm.html?due=week" id="recent-pm-title">PM Due This Week</a></h2>
         <div class="recent-list" id="recent-pm-list">
           <div class="empty-state loading-pulse">Loading PM schedule…</div>
         </div>
       </section>
 
-      <footer class="page-footer">MaintainSMIP · SMI Properties Fleet Maintenance</footer>
+      <footer class="page-footer" data-settings-footer>MaintainSMIP · SMI Properties Fleet Maintenance</footer>
     </div>
 
     <script src="db.js"></script>
     <script>
       function formatDate(value) {
+        if (window.MaintainSMIPSettings?.formatDate) {
+          return window.MaintainSMIPSettings.formatDate(value);
+        }
         if (!value) return 'N/A';
         return new Date(value).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+      }
+
+      function getPmDueWindowMs() {
+        const days = window.MaintainSMIPSettings?.getPmDueWindowDays?.() || 7;
+        return days * 86400000;
+      }
+
+      function updatePmLabels() {
+        const label = window.MaintainSMIPSettings?.getPmDueLabel?.() || 'PM Due This Week';
+        const statLabel = document.getElementById('stat-pm-week-label');
+        const sectionTitle = document.getElementById('recent-pm-title');
+        if (statLabel) statLabel.textContent = label;
+        if (sectionTitle) sectionTitle.textContent = label;
       }
 
       function statusBadge(status) {
@@ -226,6 +242,11 @@
           locationSelect.appendChild(opt);
         });
 
+        const defaultFleetLocation = window.MaintainSMIPSettings?.getDefaultFleetLocation?.() || 'all';
+        if (defaultFleetLocation !== 'all') {
+          locationSelect.value = defaultFleetLocation;
+        }
+
         const modelSelect = document.getElementById('fleet-filter-model');
         getUniqueSorted(allCarts.map(c => c.model)).forEach(model => {
           const opt = document.createElement('option');
@@ -279,7 +300,9 @@
           const stats = await db.getStats();
           document.getElementById('stat-open').textContent = stats.open_work_orders ?? 0;
           document.getElementById('stat-overdue').textContent = stats.overdue_work_orders ?? 0;
-          document.getElementById('stat-pm-week').textContent = stats.pm_due_this_week ?? 0;
+          const pms = await db.getPmRecords();
+          const pmDueCount = pms.filter((p) => p.status === 'scheduled' && window.MaintainSMIPSettings?.isPmDueSoon?.(p.scheduled_date)).length;
+          document.getElementById('stat-pm-week').textContent = pmDueCount;
           document.getElementById('stat-pm-overdue').textContent = stats.pm_overdue ?? 0;
           document.getElementById('stat-accidents').textContent = stats.open_accidents ?? 0;
           document.querySelectorAll('.stat-num').forEach(el => el.classList.remove('loading-pulse'));
@@ -299,16 +322,15 @@
             `).join('');
           }
 
-          const pms = await db.getPmRecords();
-          const weekEnd = Date.now() + 7 * 86400000;
-          const thisWeek = pms
-            .filter(p => p.status === 'scheduled' && p.scheduled_date && new Date(p.scheduled_date) <= new Date(weekEnd))
+          const dueSoon = pms
+            .filter((p) => p.status === 'scheduled' && window.MaintainSMIPSettings?.isPmDueSoon?.(p.scheduled_date))
             .slice(0, 5);
           const pmList = document.getElementById('recent-pm-list');
-          if (!thisWeek.length) {
-            pmList.innerHTML = '<div class="empty-state"><h3>No PM due this week</h3><p><a class="section-title-link" href="pm.html?due=week">View the PM schedule</a> for upcoming maintenance.</p></div>';
+          const pmLabel = (window.MaintainSMIPSettings?.getPmDueLabel?.() || 'PM due soon').toLowerCase();
+          if (!dueSoon.length) {
+            pmList.innerHTML = `<div class="empty-state"><h3>No ${pmLabel}</h3><p><a class="section-title-link" href="pm.html?due=week">View the PM schedule</a> for upcoming maintenance.</p></div>`;
           } else {
-            pmList.innerHTML = thisWeek.map(p => `
+            pmList.innerHTML = dueSoon.map(p => `
               <a class="recent-row" href="pm.html?id=${p.id}">
                 <span class="recent-id">PM-${p.id}</span>
                 <span class="recent-title">${p.template_name}</span>
@@ -344,6 +366,12 @@
       });
       document.getElementById('fleet-filter-model').addEventListener('change', renderFleetTable);
       document.getElementById('fleet-filter-search').addEventListener('input', renderFleetTable);
+
+      updatePmLabels();
+      window.addEventListener('maintainsmip-settings-changed', () => {
+        updatePmLabels();
+        loadDashboard();
+      });
 
       loadDashboard();
     </script>

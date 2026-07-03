@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Work Orders | MaintainSMIP</title>
     <link rel="icon" href="logo1.png" type="image/png" />
-    <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('maintainsmip-theme') || 'smi-racing');</script>
+    <script>(function(){try{var s=JSON.parse(localStorage.getItem('maintainsmip-settings')||'{}');document.documentElement.setAttribute('data-theme',s.theme||localStorage.getItem('maintainsmip-theme')||'smi-racing');document.documentElement.setAttribute('data-layout',s.layout==='phone'?'phone':'laptop');}catch(e){document.documentElement.setAttribute('data-theme','smi-racing');document.documentElement.setAttribute('data-layout','laptop');}})();</script>
     <link rel="stylesheet" href="shared.css" />
     <link rel="stylesheet" href="workorders.css" />
     <script src="settings.js"></script>
@@ -120,7 +120,7 @@
           <div class="wo-detail card" id="wo-detail-panel"></div>
         </div>
       </section>
-      <footer class="page-footer">MaintainSMIP · SMI Properties Fleet Maintenance</footer>
+      <footer class="page-footer" data-settings-footer>MaintainSMIP · SMI Properties Fleet Maintenance</footer>
     </div>
 
     <div class="modal hidden" id="wo-modal">

@@ -123,13 +123,16 @@ function applyWoTemplate(template) {
   const base = defaultMaintenanceSheet();
   if (!template) return base;
   const sheet = template.maintenance_sheet || {};
+  const defaultServiceType = window.MaintainSMIPSettings?.getDefaultServiceType?.() || 'repair';
   return normalizeMaintenanceSheet({
     ...sheet,
+    service_type: sheet.service_type || defaultServiceType,
     start_date: sheet.start_date || new Date().toISOString().slice(0, 10),
   });
 }
 
 function defaultMaintenanceSheet() {
+  const defaultServiceType = window.MaintainSMIPSettings?.getDefaultServiceType?.() || 'repair';
   const checklist = [];
   MAINTENANCE_SHEET_SECTIONS.forEach((section) => {
     section.items.forEach((item) => {
@@ -143,7 +146,7 @@ function defaultMaintenanceSheet() {
     });
   });
   return {
-    service_type: 'repair',
+    service_type: defaultServiceType,
     start_date: new Date().toISOString().slice(0, 10),
     previous_service_date: '',
     total_labor_hours: 0,
@@ -227,7 +230,7 @@ function renderMaintenanceSheetHtml(wo, sheet, { editable = true } = {}) {
     <div class="maintenance-sheet">
       <div class="sheet-header">
         <div>
-          <span class="eyebrow">SMI Properties</span>
+          <span class="eyebrow" data-settings-shop-name>SMI Properties</span>
           <h3>Maintenance Sheet</h3>
         </div>
         <div class="sheet-service-no">Service No. <strong>WO-${wo.id}</strong></div>
@@ -235,7 +238,7 @@ function renderMaintenanceSheetHtml(wo, sheet, { editable = true } = {}) {
 
       <div class="sheet-meta-grid">
         <label>Mechanic
-          <input type="text" id="sheet-mechanic" value="${escapeHtml(wo.assigned_to || '')}" ${editable ? '' : 'disabled'} />
+          <input type="text" id="sheet-mechanic" value="${escapeHtml(wo.assigned_to || window.MaintainSMIPSettings?.getDefaultMechanic?.() || '')}" ${editable ? '' : 'disabled'} />
         </label>
         <label>Start Date
           <input type="date" id="sheet-start-date" value="${(normalized.start_date || '').slice(0, 10)}" ${editable ? '' : 'disabled'} />
