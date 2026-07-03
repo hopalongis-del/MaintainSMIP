@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reports | MaintainSMIP</title>
+    <link rel="icon" href="logo1.png" type="image/png" />
+    <script>(function(){try{var s=JSON.parse(localStorage.getItem('maintainsmip-settings')||'{}');document.documentElement.setAttribute('data-theme',s.theme||localStorage.getItem('maintainsmip-theme')||'smi-racing');document.documentElement.setAttribute('data-layout',s.layout==='phone'?'phone':'laptop');}catch(e){document.documentElement.setAttribute('data-theme','smi-racing');document.documentElement.setAttribute('data-layout','laptop');}})();</script>
+    <link rel="stylesheet" href="shared.css" />
+    <link rel="stylesheet" href="reports.css" />
+    <script src="settings.js"></script>
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="index.html">
+          <div class="brand-mark">
+            <img class="brand-logo" src="logo1.png" alt="MaintainSMIP" />
+          </div>
+          <span>MaintainSMIP</span>
+        </a>
+        <div class="nav-links">
+          <a href="index.html">Dashboard</a>
+          <a href="workorders.html">Work Orders</a>
+          <a href="pm.html">Preventive Maintenance</a>
+          <a href="index.html#fleet">Fleet</a>
+          <a href="accidents.html">Accident Damage</a>
+          <a href="activity.html">Activity</a>
+          <a class="active" href="reports.html">Reports</a>
+        </div>
+      </nav>
+
+      <section class="card page-section">
+        <div class="hero-strip">
+          <div>
+            <span class="eyebrow">Reports</span>
+            <h2>Preview, export, and print fleet maintenance reports.</h2>
+            <p class="hero-sub">Each report uses the same data for on-screen preview, CSV export, and print.</p>
+          </div>
+        </div>
+
+        <div class="reports-layout">
+          <aside class="report-catalog" id="report-catalog" aria-label="Report types"></aside>
+
+          <div class="report-runner">
+            <div class="report-print-header" id="report-print-header"></div>
+
+            <div id="report-runner-head">
+              <span class="eyebrow" id="report-eyebrow">Select a report</span>
+              <h2 id="report-title">Choose a report to run</h2>
+              <p class="hero-sub" id="report-description">Reports share filters, a live preview, and matching export/print output.</p>
+            </div>
+
+            <div class="report-filters" id="report-filters"></div>
+
+            <div class="report-toolbar no-print">
+              <p class="report-meta" id="report-meta"></p>
+              <div class="report-toolbar-actions">
+                <button type="button" class="btn secondary" id="report-run-btn">Run Report</button>
+                <button type="button" class="btn secondary" id="report-export-btn" disabled>Export CSV</button>
+                <button type="button" class="btn primary" id="report-print-btn" disabled>Print</button>
+              </div>
+            </div>
+
+            <div class="report-preview-wrap" id="report-preview-wrap">
+              <div class="empty-state" id="report-preview">
+                <h3>No report selected</h3>
+                <p>Pick a report from the list, adjust filters, then run it.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="report-recommended no-print">
+          <h3 class="section-title">Reports included in this build</h3>
+          <ul>
+            <li><strong>Open Work Orders</strong> — daily shop queue</li>
+            <li><strong>Overdue Work Orders</strong> — past-due jobs needing attention</li>
+            <li><strong>PM Due &amp; Overdue</strong> — scheduled maintenance coming up or late</li>
+            <li><strong>Open Accident Reports</strong> — unresolved damage reports</li>
+            <li><strong>Fleet Inventory</strong> — full cart roster with location filter</li>
+            <li><strong>Completed Work Summary</strong> — finished jobs in a date range</li>
+            <li><strong>Activity Log</strong> — who changed what (export/print friendly)</li>
+          </ul>
+          <p class="hero-sub" style="margin-top: 12px;">Maintenance sheets print individually from each work order&apos;s detail view.</p>
+        </div>
+      </section>
+
+      <footer class="page-footer" data-settings-footer>MaintainSMIP · SMI Properties Fleet Maintenance</footer>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="reports.js"></script>
+  </body>
+</html>

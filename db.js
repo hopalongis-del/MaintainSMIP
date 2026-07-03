@@ -128,6 +128,27 @@ const API_FIELD_LABELS = {
   cart_id: 'Cart',
 };
 
+function escapeCsvValue(value) {
+  const text = String(value ?? '');
+  if (/[",\n\r]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function downloadCsv(filename, columns, rows) {
+  const header = columns.map((col) => escapeCsvValue(col.label)).join(',');
+  const lines = rows.map((row) => (
+    columns.map((col) => escapeCsvValue(col.value(row))).join(',')
+  ));
+  const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
 function formatApiError(detail, fallback = "Can't save. Please try again.") {
   if (!detail) return fallback;
   if (typeof detail === 'string') {
@@ -300,6 +321,7 @@ const db = {
   },
   formatAuditTimestamp,
   formatApiError,
+  downloadCsv,
   renderAuditActivityHtml,
   renderGlobalActivityHtml,
   entityTypeLabel,

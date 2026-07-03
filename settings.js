@@ -658,6 +658,27 @@ function injectActivityNavLink() {
   }
 }
 
+function injectReportsNavLink() {
+  const navLinks = document.querySelector('.nav-links');
+  if (!navLinks || navLinks.querySelector('[data-nav-reports]')) return;
+
+  const link = document.createElement('a');
+  link.href = 'reports.html';
+  link.dataset.navReports = 'true';
+  link.textContent = 'Reports';
+  if (window.location.pathname.endsWith('reports.html')) {
+    link.classList.add('active');
+  }
+
+  const activityLink = navLinks.querySelector('[data-nav-activity]')
+    || [...navLinks.querySelectorAll('a')].find((anchor) => anchor.getAttribute('href')?.includes('activity'));
+  if (activityLink) {
+    activityLink.insertAdjacentElement('afterend', link);
+  } else {
+    navLinks.appendChild(link);
+  }
+}
+
 function injectSettingsButton() {
   if (document.getElementById('open-settings-btn')) return;
 
@@ -777,6 +798,7 @@ window.MaintainSMIPSettings = {
 function initSettings() {
   buildSettingsModal();
   injectActivityNavLink();
+  injectReportsNavLink();
   injectSettingsButton();
   wireAdminUserForm();
   wireChangePasswordForm();

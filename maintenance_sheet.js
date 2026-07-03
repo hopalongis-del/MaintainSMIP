@@ -368,3 +368,52 @@ function wireGlobalCheckAll() {
     input.addEventListener('change', updateSheetProgress);
   });
 }
+
+function printMaintenanceSheet(wo, sheetOverride) {
+  const sheet = sheetOverride || wo.maintenance_sheet || {};
+  const bodyHtml = renderMaintenanceSheetHtml(wo, sheet, { editable: false });
+  const shopName = window.MaintainSMIPSettings?.getShopName?.() || 'SMI Properties';
+  const printedAt = new Date().toLocaleString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=980,height=900');
+  if (!printWindow) {
+    alert('Pop-up blocked. Allow pop-ups to print the maintenance sheet.');
+    return;
+  }
+
+  printWindow.document.write(`<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>WO-${wo.id} Maintenance Sheet</title>
+    <link rel="stylesheet" href="${window.location.origin}/shared.css" />
+    <link rel="stylesheet" href="${window.location.origin}/workorders.css" />
+    <style>
+      body { background: #fff; color: #111; padding: 24px; }
+      .print-sheet-header { margin-bottom: 18px; }
+      .print-sheet-header h1 { margin: 0 0 6px; font-size: 1.2rem; }
+      .print-sheet-header p { margin: 0; color: #444; font-size: 0.9rem; }
+      .maintenance-sheet button, .sheet-save-btn, #sheet-add-part-row, #sheet-check-all-btn { display: none !important; }
+      .maintenance-sheet input, .maintenance-sheet textarea { border: 1px solid #bbb; background: #fff; color: #111; }
+      @media print { body { padding: 0; } }
+    </style>
+  </head>
+  <body>
+    <div class="print-sheet-header">
+      <h1>${shopName} · Maintenance Sheet</h1>
+      <p>WO-${wo.id} · Cart #${wo.cart_id} · Printed ${printedAt}</p>
+    </div>
+    ${bodyHtml}
+  </body>
+</html>`);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.onload = () => {
+    printWindow.print();
+  };
+}

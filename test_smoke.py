@@ -181,6 +181,9 @@ def run_tests(client: TestClient) -> None:
     activity_page = client.get("/activity.html")
     assert activity_page.status_code == 200, activity_page.text
 
+    reports_page = client.get("/reports.html")
+    assert reports_page.status_code == 200, reports_page.text
+
     activity_log = client.get("/api/audit?limit=50&days=30")
     assert activity_log.status_code == 200, activity_log.text
     assert isinstance(activity_log.json(), list)

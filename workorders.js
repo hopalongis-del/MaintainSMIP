@@ -346,6 +346,7 @@ async function openWoDetail(id) {
       <div class="wo-detail-actions">
         <span class="badge ${getPriorityClass(wo.priority)}">${wo.priority.replace('_', ' ')}</span>
         <button class="btn secondary" type="button" id="btn-edit">Edit Header</button>
+        <button class="btn secondary" type="button" id="btn-print-sheet">Print Sheet</button>
         <button class="btn secondary" type="button" id="btn-start">Start</button>
         <button class="btn secondary" type="button" id="btn-complete">Complete</button>
         <button class="btn ghost" type="button" id="btn-delete" style="color:#f87171;">Delete</button>
@@ -358,6 +359,9 @@ async function openWoDetail(id) {
 
   wireMaintenanceSheetPanel(wo);
   document.getElementById('btn-edit').addEventListener('click', () => openEditModal(wo));
+  document.getElementById('btn-print-sheet').addEventListener('click', () => {
+    printMaintenanceSheet(wo, wo.maintenance_sheet || applyWoTemplate(getActiveWoTemplate()));
+  });
   document.getElementById('btn-start').addEventListener('click', () => updateWoStatus(wo.id, 'in_progress'));
   document.getElementById('btn-complete').addEventListener('click', () => updateWoStatus(wo.id, 'completed'));
   document.getElementById('btn-delete').addEventListener('click', () => deleteWo(wo.id));
