@@ -8,6 +8,7 @@ __pycache__/
 # Local DB — Render creates a fresh one; PM templates auto-seed on startup
 maintainsmip.db
 uploads/
+imports/*.png
 
 # IDE / agent tooling
 .vscode/

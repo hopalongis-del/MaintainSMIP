@@ -120,6 +120,7 @@ class WorkOrderBase(BaseModel):
     labor_minutes: int = 0
     parts_used: List[Any] = Field(default_factory=list)
     comments: List[Any] = Field(default_factory=list)
+    maintenance_sheet: dict = Field(default_factory=dict)
 
 
 class WorkOrderCreate(WorkOrderBase):
@@ -136,9 +137,11 @@ class WorkOrderUpdate(BaseModel):
     assigned_to: Optional[str] = None
     location: Optional[str] = None
     due_date: Optional[str] = None
+    completed_date: Optional[str] = None
     labor_minutes: Optional[int] = None
     parts_used: Optional[List[Any]] = None
     comments: Optional[List[Any]] = None
+    maintenance_sheet: Optional[dict] = None
 
 
 class WorkOrder(WorkOrderBase):
@@ -248,9 +251,27 @@ def parse_cart_data() -> List[CartItem]:
         return []
 
 
+def parse_work_order_row(row: aiosqlite.Row) -> WorkOrder:
+    data = dict(row)
+    data['parts_used'] = json.loads(data.get('parts_used') or '[]')
+    data['comments'] = json.loads(data.get('comments') or '[]')
+    data['maintenance_sheet'] = json.loads(data.get('maintenance_sheet') or '{}')
+    return WorkOrder(**data)
+
+
 async def migrate_schema() -> None:
     """Recreate tables that used an older integer-id schema."""
     async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='work_orders'"
+        )
+        if await cursor.fetchone():
+            cursor = await connection.execute('PRAGMA table_info(work_orders)')
+            wo_columns = [col[1] for col in await cursor.fetchall()]
+            if 'maintenance_sheet' not in wo_columns:
+                await connection.execute('ALTER TABLE work_orders ADD COLUMN maintenance_sheet TEXT')
+                await connection.commit()
+
         cursor = await connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='pm_templates'"
         )
@@ -285,7 +306,8 @@ async def create_tables() -> None:
                 completed_date TEXT,
                 labor_minutes INTEGER,
                 parts_used TEXT,
-                comments TEXT
+                comments TEXT,
+                maintenance_sheet TEXT
             )
             '''
         )
@@ -410,6 +432,18 @@ DEMO_WORK_ORDERS = [
         'labor_minutes': 45,
         'parts_used': ['Brake pad set'],
         'comments': [{'author': 'Mike Casady', 'text': 'Pads at 20%, ordering replacements.', 'date': _iso_days_from_now(-1)}],
+        'maintenance_sheet': {
+            'service_type': 'repair',
+            'start_date': _iso_days_from_now(-2),
+            'total_labor_hours': 0.75,
+            'sheet_comments': 'Grinding noise under load on hills.',
+            'parts_lines': [{'qty': '1', 'part_number': 'BRK-204', 'description': 'Brake pad set'}],
+            'checklist': [
+                {'id': 'brake_shoes_clean', 'checked': True},
+                {'id': 'brake_pedal_travel', 'checked': True},
+                {'id': 'brake_cables', 'checked': True},
+            ],
+        },
     },
     {
         'cart_id': 2000,
@@ -579,8 +613,8 @@ async def seed_demo_data() -> None:
                     INSERT INTO work_orders (
                         cart_id, cart_serial, title, description, priority, status, type,
                         assigned_to, location, created_date, due_date, completed_date,
-                        labor_minutes, parts_used, comments
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        labor_minutes, parts_used, comments, maintenance_sheet
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''',
                     (
                         wo['cart_id'],
@@ -598,6 +632,7 @@ async def seed_demo_data() -> None:
                         wo['labor_minutes'],
                         json.dumps(wo['parts_used']),
                         json.dumps(wo['comments']),
+                        json.dumps(wo.get('maintenance_sheet', {})),
                     ),
                 )
 
@@ -720,7 +755,7 @@ async def list_work_orders(
         cursor = await connection.execute(query, params)
         rows = await cursor.fetchall()
 
-    return [WorkOrder(**{**dict(row), 'parts_used': json.loads(row['parts_used'] or '[]'), 'comments': json.loads(row['comments'] or '[]')}) for row in rows]
+    return [parse_work_order_row(row) for row in rows]
 
 
 @app.post('/api/workorders', response_model=WorkOrder)
@@ -732,8 +767,8 @@ async def create_work_order(item: WorkOrderCreate) -> WorkOrder:
             INSERT INTO work_orders (
                 cart_id, cart_serial, title, description, priority, status, type,
                 assigned_to, location, created_date, due_date, completed_date,
-                labor_minutes, parts_used, comments
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                labor_minutes, parts_used, comments, maintenance_sheet
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
             (
                 item.cart_id,
@@ -751,6 +786,7 @@ async def create_work_order(item: WorkOrderCreate) -> WorkOrder:
                 item.labor_minutes,
                 json.dumps(item.parts_used or []),
                 json.dumps(item.comments or []),
+                json.dumps(item.maintenance_sheet or {}),
             ),
         )
         await connection.commit()
@@ -773,6 +809,7 @@ async def create_work_order(item: WorkOrderCreate) -> WorkOrder:
         'labor_minutes': item.labor_minutes,
         'parts_used': item.parts_used,
         'comments': item.comments,
+        'maintenance_sheet': item.maintenance_sheet or {},
     })
 
 
@@ -813,12 +850,16 @@ async def update_work_order(workorder_id: int, item: WorkOrderUpdate) -> WorkOrd
             updated['location'] = item.location
         if item.due_date is not None:
             updated['due_date'] = item.due_date if item.due_date else None
+        if item.completed_date is not None:
+            updated['completed_date'] = item.completed_date if item.completed_date else None
         if item.labor_minutes is not None:
             updated['labor_minutes'] = item.labor_minutes
         if item.parts_used is not None:
             updated['parts_used'] = json.dumps(item.parts_used)
         if item.comments is not None:
             updated['comments'] = json.dumps(item.comments)
+        if item.maintenance_sheet is not None:
+            updated['maintenance_sheet'] = json.dumps(item.maintenance_sheet)
 
         await connection.execute(
             '''
@@ -836,7 +877,8 @@ async def update_work_order(workorder_id: int, item: WorkOrderUpdate) -> WorkOrd
                 completed_date = ?,
                 labor_minutes = ?,
                 parts_used = ?,
-                comments = ?
+                comments = ?,
+                maintenance_sheet = ?
             WHERE id = ?
             ''',
             (
@@ -854,12 +896,16 @@ async def update_work_order(workorder_id: int, item: WorkOrderUpdate) -> WorkOrd
                 updated['labor_minutes'],
                 updated['parts_used'],
                 updated['comments'],
+                updated.get('maintenance_sheet') or '{}',
                 workorder_id,
             ),
         )
         await connection.commit()
 
-    return WorkOrder(**{**updated, 'parts_used': json.loads(updated['parts_used'] or '[]'), 'comments': json.loads(updated['comments'] or '[]')})
+    updated['parts_used'] = json.loads(updated['parts_used'] or '[]')
+    updated['comments'] = json.loads(updated['comments'] or '[]')
+    updated['maintenance_sheet'] = json.loads(updated.get('maintenance_sheet') or '{}')
+    return WorkOrder(**updated)
 
 
 @app.get('/api/pm/templates', response_model=List[PMTemplate])

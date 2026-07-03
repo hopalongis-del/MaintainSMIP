@@ -88,21 +88,22 @@ function wireWoStatCards() {
 }
 
 function buildWoCard(wo) {
+  const progress = countCheckedItems(wo.maintenance_sheet || {});
   const card = document.createElement('button');
   card.type = 'button';
   card.className = 'wo-item';
   card.innerHTML = `
     <div class="wo-item-title">
       <div>
-        <h3>${wo.id} — ${wo.title}</h3>
+        <h3>WO-${wo.id} — ${wo.title}</h3>
       </div>
       <span class="badge ${getPriorityClass(wo.priority)}">${wo.priority.replace('_', ' ')}</span>
     </div>
     <div class="wo-item-meta">
       <span>Cart #${wo.cart_id}</span>
       <span>${wo.assigned_to || 'Unassigned'}</span>
+      <span>Sheet ${progress.done}/${progress.total}</span>
       <span>${formatDate(wo.due_date)}</span>
-      <span>${getDaysAge(wo.created_date)} days old</span>
       <span class="badge ${getStatusClass(wo.status)}">${wo.status.replace('_', ' ')}</span>
     </div>
   `;
@@ -266,6 +267,41 @@ function closeModal() {
   document.getElementById('wo-modal').classList.add('hidden');
 }
 
+function wireMaintenanceSheetPanel(wo) {
+  document.getElementById('sheet-add-part-row')?.addEventListener('click', () => {
+    const body = document.getElementById('sheet-parts-body');
+    const index = body.querySelectorAll('tr').length;
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td><input type="text" data-part-row="${index}" data-part-field="qty" /></td>
+      <td><input type="text" data-part-row="${index}" data-part-field="part_number" /></td>
+      <td><input type="text" data-part-row="${index}" data-part-field="description" /></td>
+    `;
+    body.appendChild(row);
+  });
+
+  document.getElementById('sheet-save-btn')?.addEventListener('click', async () => {
+    const sheet = collectMaintenanceSheetFromDom(wo.maintenance_sheet);
+    const mechanic = document.getElementById('sheet-mechanic')?.value?.trim() || '';
+    const laborHours = Number(sheet.total_labor_hours || 0);
+    const completionDate = document.getElementById('sheet-completion-date')?.value;
+    const fields = {
+      maintenance_sheet: sheet,
+      assigned_to: mechanic,
+      labor_minutes: Math.round(laborHours * 60),
+      description: wo.description || sheet.sheet_comments || 'Maintenance sheet service',
+    };
+    if (completionDate) {
+      fields.completed_date = `${completionDate}T12:00:00`;
+      fields.status = 'completed';
+    }
+    await db.updateWorkOrder(wo.id, fields);
+    await renderWoList();
+    await updateDashboard();
+    await openWoDetail(wo.id);
+  });
+}
+
 async function openWoDetail(id) {
   const workOrders = await db.getWorkOrders();
   const wo = workOrders.find(item => String(item.id) === String(id));
@@ -274,80 +310,30 @@ async function openWoDetail(id) {
   const panel = document.getElementById('wo-detail-panel');
   panel.classList.add('slide-in');
   panel.innerHTML = `
-    <div class="detail-row">
+    <div class="detail-row wo-detail-toolbar">
       <div>
         <span class="eyebrow">${wo.status.replace('_', ' ')}</span>
-        <h2>${wo.id}</h2>
-        <p>${wo.title}</p>
+        <h2>${wo.title}</h2>
+        <p class="hero-sub">${wo.description}</p>
       </div>
-      <div style="text-align:right; display:grid; gap:10px; justify-items:end;">
+      <div class="wo-detail-actions">
         <span class="badge ${getPriorityClass(wo.priority)}">${wo.priority.replace('_', ' ')}</span>
-        <button class="btn primary" type="button" id="btn-edit">Edit Work Order</button>
-      </div>
-    </div>
-    <div class="detail-card">
-      <h3>Cart Details</h3>
-      <p>Cart #${wo.cart_id} · ${wo.cart_serial}</p>
-      <p>${wo.location}</p>
-      <label style="margin-top:10px;">Assigned To
-        <select id="wo-reassign" style="margin-top:6px;">
-          <option value="">— Unassigned —</option>
-          ${TECHNICIANS.map(t => `<option${wo.assigned_to === t ? ' selected' : ''}>${t}</option>`).join('')}
-        </select>
-      </label>
-      <button class="btn secondary" type="button" id="btn-reassign" style="margin-top:8px;">Save Assignment</button>
-    </div>
-    <div class="detail-card">
-      <h3>Description</h3>
-      <p>${wo.description}</p>
-    </div>
-    <div class="detail-row">
-      <div class="detail-card">
-        <h3>Dates</h3>
-        <p>Created: ${formatDate(wo.created_date)}</p>
-        <p>Due: ${formatDate(wo.due_date)}</p>
-        <p>Completed: ${wo.completed_date ? formatDate(wo.completed_date) : 'N/A'}</p>
-      </div>
-      <div class="detail-card">
-        <h3>Work log</h3>
-        <p>Labor: ${wo.labor_minutes} minutes</p>
-        <p>Parts used: ${(wo.parts_used || []).length}</p>
-        <p>Comments: ${(wo.comments || []).length}</p>
-      </div>
-    </div>
-    <div class="detail-card">
-      <h3>Comments</h3>
-      ${(wo.comments || []).length === 0 ? '<p>No comments yet.</p>' : wo.comments.map(c => `<p><strong>${c.author}</strong>: ${c.text}</p>`).join('')}
-      <div style="margin-top:12px; display:grid; gap:8px;">
-        <textarea id="wo-new-comment" rows="3" placeholder="Add a comment..."></textarea>
-        <button class="btn secondary" type="button" id="btn-add-comment">Add Comment</button>
-      </div>
-    </div>
-    <div class="detail-card">
-      <h3>Actions</h3>
-      <div style="display:grid; gap:10px;">
-        <button class="btn secondary" type="button" id="btn-start">Start Work</button>
-        <button class="btn secondary" type="button" id="btn-hold">Put On Hold</button>
+        <button class="btn secondary" type="button" id="btn-edit">Edit Header</button>
+        <button class="btn secondary" type="button" id="btn-start">Start</button>
         <button class="btn secondary" type="button" id="btn-complete">Complete</button>
-        <button class="btn secondary" type="button" id="btn-close">Close</button>
         <button class="btn ghost" type="button" id="btn-delete" style="color:#f87171;">Delete</button>
       </div>
     </div>
+    <div class="detail-card">
+      ${renderMaintenanceSheetHtml(wo, wo.maintenance_sheet || defaultMaintenanceSheet())}
+    </div>
   `;
 
+  wireMaintenanceSheetPanel(wo);
   document.getElementById('btn-edit').addEventListener('click', () => openEditModal(wo));
   document.getElementById('btn-start').addEventListener('click', () => updateWoStatus(wo.id, 'in_progress'));
-  document.getElementById('btn-hold').addEventListener('click', () => updateWoStatus(wo.id, 'on_hold'));
   document.getElementById('btn-complete').addEventListener('click', () => updateWoStatus(wo.id, 'completed'));
-  document.getElementById('btn-close').addEventListener('click', () => updateWoStatus(wo.id, 'closed'));
-  document.getElementById('btn-reassign').addEventListener('click', async () => {
-    const tech = document.getElementById('wo-reassign').value;
-    await db.updateWorkOrder(wo.id, { assigned_to: tech });
-    await renderWoList();
-    await openWoDetail(wo.id);
-  });
   document.getElementById('btn-delete').addEventListener('click', () => deleteWo(wo.id));
-  document.getElementById('btn-add-comment').addEventListener('click', () => addWoComment(wo.id, wo.comments || []));
 }
 
 async function addWoComment(id, existingComments) {
@@ -404,6 +390,7 @@ function serializeForm(forEdit = false) {
   if (!forEdit) {
     payload.parts_used = [];
     payload.comments = [];
+    payload.maintenance_sheet = defaultMaintenanceSheet();
   }
 
   return payload;
