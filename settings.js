@@ -111,15 +111,7 @@ function createSettingsButton({ floating = false } = {}) {
   button.className = floating ? 'nav-settings-btn nav-settings-btn--floating' : 'nav-settings-btn';
   button.id = 'open-settings-btn';
   button.setAttribute('aria-label', 'Open settings');
-  button.innerHTML = `
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-      <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/>
-      <circle cx="4" cy="14" r="2" fill="currentColor" stroke="none"/>
-      <circle cx="12" cy="6" r="2" fill="currentColor" stroke="none"/>
-      <circle cx="20" cy="10" r="2" fill="currentColor" stroke="none"/>
-    </svg>
-    <span>Settings</span>
-  `;
+  button.innerHTML = `<img src="img.icons8.png" alt="" class="nav-settings-icon" width="22" height="22" />`;
   return button;
 }
 

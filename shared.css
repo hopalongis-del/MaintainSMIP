@@ -164,26 +164,30 @@ a {
 .nav-settings-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 999px;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 14px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  font-size: 0.9rem;
-  font-weight: 600;
   cursor: pointer;
-  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
 
-.nav-settings-btn svg {
-  flex-shrink: 0;
+.nav-settings-icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+  object-fit: contain;
+  filter: brightness(0) invert(0.92);
 }
 
 .nav-settings-btn:hover {
   background: var(--accent-soft);
   border-color: var(--accent-border);
-  color: var(--text);
+  transform: rotate(18deg);
 }
 
 .nav-settings-btn--floating {
