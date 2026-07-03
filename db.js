@@ -116,6 +116,49 @@ function userCanWrite() {
   return Boolean(role && role !== 'readonly');
 }
 
+const API_FIELD_LABELS = {
+  id: 'Cart ID',
+  serial: 'Serial',
+  model: 'Model',
+  year: 'Year',
+  location: 'Location',
+  status: 'Status',
+  title: 'Title',
+  description: 'Description',
+  cart_id: 'Cart',
+};
+
+function formatApiError(detail, fallback = "Can't save. Please try again.") {
+  if (!detail) return fallback;
+  if (typeof detail === 'string') {
+    if (/^can'?t save/i.test(detail)) return detail;
+    if (/^missing required fields:/i.test(detail)) {
+      return `Can't save — ${detail.charAt(0).toLowerCase()}${detail.slice(1)}`;
+    }
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    const fields = [];
+    for (const item of detail) {
+      if (!item || typeof item !== 'object') continue;
+      const loc = Array.isArray(item.loc) ? item.loc : [];
+      const fieldKey = loc[loc.length - 1];
+      const label = API_FIELD_LABELS[fieldKey]
+        || (typeof fieldKey === 'string' ? fieldKey.replace(/_/g, ' ') : 'Field');
+      if (!fields.includes(label)) fields.push(label);
+    }
+    if (fields.length) {
+      return `Can't save — required field missing: ${fields.join(', ')}`;
+    }
+    const messages = detail.map((item) => item?.msg).filter(Boolean);
+    if (messages.length) return `Can't save — ${messages.join('; ')}`;
+  }
+  if (typeof detail === 'object' && detail.msg) {
+    return `Can't save — ${detail.msg}`;
+  }
+  return fallback;
+}
+
 function parseDeepLinkId(value) {
   if (!value) return null;
   return String(value).replace(/^(WO-|PM-|ACC-)/i, '');
@@ -190,6 +233,7 @@ const db = {
     return currentUser;
   },
   formatAuditTimestamp,
+  formatApiError,
   renderAuditActivityHtml,
   async getAuditLog(filters = {}) {
     const p = new URLSearchParams(filters);
@@ -211,14 +255,14 @@ const db = {
       body: JSON.stringify(cart),
     });
     if (!r.ok) {
-      let detail = `Save failed (${r.status})`;
+      let message = `Can't save cart (${r.status})`;
       try {
         const body = await r.json();
-        detail = body.detail || detail;
+        message = formatApiError(body.detail, message);
       } catch (err) {
         /* ignore */
       }
-      return { error: detail };
+      return { error: message };
     }
     resetCartCache();
     return r.json();
@@ -230,14 +274,14 @@ const db = {
       body: JSON.stringify(fields),
     });
     if (!r.ok) {
-      let detail = `Update failed (${r.status})`;
+      let message = `Can't save cart (${r.status})`;
       try {
         const body = await r.json();
-        detail = body.detail || detail;
+        message = formatApiError(body.detail, message);
       } catch (err) {
         /* ignore */
       }
-      return { error: detail };
+      return { error: message };
     }
     resetCartCache();
     return r.json();

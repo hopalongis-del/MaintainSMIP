@@ -560,7 +560,7 @@ def validate_required_cart_fields(data: dict[str, Any]) -> None:
     if missing:
         raise HTTPException(
             status_code=400,
-            detail=f'Missing required fields: {", ".join(missing)}',
+            detail=f"Can't save — required field missing: {', '.join(missing)}",
         )
 
 

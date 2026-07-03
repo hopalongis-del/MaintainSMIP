@@ -566,7 +566,7 @@
         event.preventDefault();
         const { payload, missing } = readCartFormPayload();
         if (missing.length) {
-          alert(`Please fill in required fields: ${missing.join(', ')}`);
+          alert(`Can't save — required field missing: ${missing.join(', ')}`);
           return;
         }
         const saveBtn = document.getElementById('cart-save-btn');
@@ -577,7 +577,7 @@
         } else {
           const cartId = document.getElementById('cart-id').value.trim();
           if (!cartId) {
-            alert('Cart ID is required.');
+            alert("Can't save — required field missing: Cart ID");
             saveBtn.disabled = false;
             return;
           }
