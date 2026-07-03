@@ -8,8 +8,16 @@ services:
     buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
+    disk:
+      name: maintainsmip-data
+      mountPath: /var/data
+      sizeGB: 5
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.8"
+      - key: DATA_DIR
+        value: /var/data
       - key: APP_PASSWORD
-        value: "WeLoveRacing!"
+        sync: false
+      - key: APP_SECRET
+        sync: false

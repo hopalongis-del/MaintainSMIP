@@ -36,7 +36,13 @@ def run_tests(client: TestClient) -> None:
     assert carts.status_code == 200, carts.text
     assert len(carts.json()) > 0
 
-    assert client.get("/api/health").status_code == 200
+    health = client.get("/api/health")
+    assert health.status_code == 200, health.text
+    health_data = health.json()
+    assert health_data["status"] == "ok"
+    assert health_data["db_exists"] is True
+    assert str(server.DB_PATH).endswith("maintainsmip.db")
+    assert str(server.DATA_DIR) in health_data["data_dir"]
     assert client.get("/").status_code == 200
     assert client.get("/login.html").status_code == 200
     assert client.get("/logo1.png").status_code == 200

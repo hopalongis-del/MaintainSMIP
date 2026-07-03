@@ -4,6 +4,7 @@ import hmac
 import json
 import os
 import re
+import shutil
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -21,9 +22,12 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 ROOT_DIR = Path(__file__).parent.resolve()
-DB_PATH = ROOT_DIR / 'maintainsmip.db'
+DATA_DIR = Path(os.environ.get('DATA_DIR', str(ROOT_DIR))).resolve()
+DB_PATH = DATA_DIR / 'maintainsmip.db'
 CART_DATA_PATH = ROOT_DIR / 'cart_data.js'
-UPLOADS_DIR = ROOT_DIR / 'uploads' / 'accidents'
+UPLOADS_DIR = DATA_DIR / 'uploads' / 'accidents'
+LEGACY_DB_PATH = ROOT_DIR / 'maintainsmip.db'
+LEGACY_UPLOADS_DIR = ROOT_DIR / 'uploads'
 APP_PASSWORD = os.environ.get('APP_PASSWORD', 'WeLoveRacing!')
 APP_SECRET = os.environ.get('APP_SECRET', 'maintainsmip-session-secret')
 SESSION_COOKIE = 'ms_session'
@@ -75,10 +79,54 @@ class AuthMiddleware(BaseHTTPMiddleware):
         next_path = path if path != '/' else '/index.html'
         return RedirectResponse(f'/login.html?next={quote(next_path)}', status_code=302)
 
+
+def ensure_persistent_storage() -> None:
+    """Prepare DATA_DIR and migrate legacy local files on first boot."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+    if DATA_DIR.resolve() == ROOT_DIR.resolve():
+        return
+
+    if LEGACY_DB_PATH.exists() and not DB_PATH.exists():
+        shutil.copy2(LEGACY_DB_PATH, DB_PATH)
+
+    if LEGACY_UPLOADS_DIR.exists():
+        for src in LEGACY_UPLOADS_DIR.rglob('*'):
+            if not src.is_file():
+                continue
+            rel = src.relative_to(LEGACY_UPLOADS_DIR)
+            dest = DATA_DIR / 'uploads' / rel
+            if dest.exists():
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+
+
+def resolve_data_path(rel_path: str) -> Path:
+    normalized = Path(rel_path)
+    data_target = (DATA_DIR / normalized).resolve()
+    if data_target.exists():
+        return data_target
+    return (ROOT_DIR / normalized).resolve()
+
+
+def resolve_static_file(path: str) -> Optional[Path]:
+    for base in (DATA_DIR, ROOT_DIR):
+        base_resolved = base.resolve()
+        target = (base_resolved / path).resolve()
+        try:
+            target.relative_to(base_resolved)
+        except ValueError:
+            continue
+        if target.exists() and target.is_file():
+            return target
+    return None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    os.makedirs(ROOT_DIR, exist_ok=True)
-    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    ensure_persistent_storage()
     await migrate_schema()
     await create_tables()
     app.state.carts = parse_cart_data()
@@ -810,7 +858,7 @@ async def get_accident_row(accident_id: int) -> dict:
 
 def delete_photo_files(photo_paths: List[str]) -> None:
     for rel_path in photo_paths:
-        target = ROOT_DIR / rel_path
+        target = resolve_data_path(rel_path)
         if target.exists() and target.is_file():
             target.unlink()
 
@@ -1473,8 +1521,15 @@ class LoginRequest(BaseModel):
 
 
 @app.get('/api/health')
-def health() -> dict[str, str]:
-    return {'status': 'ok'}
+def health() -> dict[str, Any]:
+    return {
+        'status': 'ok',
+        'data_dir': str(DATA_DIR),
+        'db_path': str(DB_PATH),
+        'db_exists': DB_PATH.exists(),
+        'uploads_dir': str(UPLOADS_DIR),
+        'persistent_storage': DATA_DIR.resolve() != ROOT_DIR.resolve(),
+    }
 
 
 @app.post('/api/auth/login')
@@ -1512,8 +1567,8 @@ def root() -> FileResponse:
 
 @app.get('/{path:path}')
 def serve_file(path: str) -> FileResponse:
-    target = ROOT_DIR / path
-    if target.exists() and target.is_file():
+    target = resolve_static_file(path)
+    if target:
         return FileResponse(target)
     raise HTTPException(status_code=404, detail='File not found')
 

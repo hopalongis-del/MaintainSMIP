@@ -26,9 +26,31 @@ git push origin main
 2. **New** → **Blueprint** → connect your GitHub repo.
 3. Render reads `render.yaml` automatically.
 4. Confirm the **Starter** plan (~$7/mo, always on — no cold starts).
-5. Click **Apply** and wait ~2–3 minutes for the build.
+5. In the Blueprint review screen, set these **secret** environment variables (they are not stored in git):
+   - `APP_PASSWORD` — demo sign-in password (e.g. `WeLoveRacing!`)
+   - `APP_SECRET` — long random string for session cookies
+6. Click **Apply** and wait ~2–3 minutes for the build.
 
 Your URL will look like: `https://maintainsmip.onrender.com`
+
+### Persistent data (Phase 0)
+
+`render.yaml` attaches a **5 GB disk** at `/var/data`. The app stores:
+
+- SQLite database: `/var/data/maintainsmip.db`
+- Accident photo uploads: `/var/data/uploads/accidents/`
+
+Work orders, PM records, accidents, and uploaded photos **survive redeploys** as long as you do not delete the disk.
+
+Verify after deploy:
+
+```text
+GET https://maintainsmip.onrender.com/api/health
+```
+
+Look for `"persistent_storage": true` and `"db_exists": true`.
+
+**Do not delete** the `maintainsmip-data` disk in Render unless you intend to wipe all live data.
 
 ## 3. Before the management demo
 
