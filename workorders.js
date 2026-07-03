@@ -270,12 +270,11 @@ function closeModal() {
 function wireMaintenanceSheetPanel(wo) {
   document.getElementById('sheet-add-part-row')?.addEventListener('click', () => {
     const body = document.getElementById('sheet-parts-body');
-    const index = body.querySelectorAll('tr').length;
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td><input type="text" data-part-row="${index}" data-part-field="qty" /></td>
-      <td><input type="text" data-part-row="${index}" data-part-field="part_number" /></td>
-      <td><input type="text" data-part-row="${index}" data-part-field="description" /></td>
+      <td><input type="text" data-part-field="qty" /></td>
+      <td><input type="text" data-part-field="part_number" /></td>
+      <td><input type="text" data-part-field="description" /></td>
     `;
     body.appendChild(row);
   });
@@ -289,11 +288,19 @@ function wireMaintenanceSheetPanel(wo) {
       maintenance_sheet: sheet,
       assigned_to: mechanic,
       labor_minutes: Math.round(laborHours * 60),
-      description: wo.description || sheet.sheet_comments || 'Maintenance sheet service',
+      type: sheet.service_type === 'full' ? 'inspection' : 'repair',
     };
+    if (sheet.sheet_comments?.trim()) {
+      fields.description = sheet.sheet_comments.trim();
+    }
+    if (sheet.start_date) {
+      fields.maintenance_sheet.start_date = sheet.start_date;
+    }
     if (completionDate) {
       fields.completed_date = `${completionDate}T12:00:00`;
       fields.status = 'completed';
+    } else if (wo.status === 'open' && sheet.checklist.some((item) => item.checked)) {
+      fields.status = 'in_progress';
     }
     await db.updateWorkOrder(wo.id, fields);
     await renderWoList();
@@ -313,8 +320,8 @@ async function openWoDetail(id) {
     <div class="detail-row wo-detail-toolbar">
       <div>
         <span class="eyebrow">${wo.status.replace('_', ' ')}</span>
-        <h2>${wo.title}</h2>
-        <p class="hero-sub">${wo.description}</p>
+        <h2>${escapeHtml(wo.title)}</h2>
+        <p class="hero-sub">${escapeHtml(wo.description)}</p>
       </div>
       <div class="wo-detail-actions">
         <span class="badge ${getPriorityClass(wo.priority)}">${wo.priority.replace('_', ' ')}</span>
@@ -390,7 +397,11 @@ function serializeForm(forEdit = false) {
   if (!forEdit) {
     payload.parts_used = [];
     payload.comments = [];
-    payload.maintenance_sheet = defaultMaintenanceSheet();
+    const sheet = defaultMaintenanceSheet();
+    if (payload.assigned_to) {
+      sheet.start_date = new Date().toISOString().slice(0, 10);
+    }
+    payload.maintenance_sheet = sheet;
   }
 
   return payload;
@@ -422,10 +433,11 @@ async function handleWoSave(event) {
     return;
   }
 
-  await db.saveWorkOrder(serializeForm(false));
+  const created = await db.saveWorkOrder(serializeForm(false));
   closeModal();
   await renderWoList();
   await updateDashboard();
+  if (created?.id) await openWoDetail(created.id);
 }
 
 let selectedWoCart = null;
@@ -436,7 +448,7 @@ function showDetailPlaceholder() {
   panel.innerHTML = `
     <div class="empty-state">
       <h3>Select a work order</h3>
-      <p>Choose one from the list to view details, then click <strong>Edit Work Order</strong> to change title, priority, due date, and more.</p>
+      <p>Choose one from the list to view the maintenance sheet, check off items, and save.</p>
     </div>
   `;
 }

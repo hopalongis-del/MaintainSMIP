@@ -271,6 +271,7 @@ async def migrate_schema() -> None:
             if 'maintenance_sheet' not in wo_columns:
                 await connection.execute('ALTER TABLE work_orders ADD COLUMN maintenance_sheet TEXT')
                 await connection.commit()
+            await backfill_demo_maintenance_sheets(connection)
 
         cursor = await connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='pm_templates'"
@@ -595,6 +596,30 @@ DEMO_ACCIDENTS = [
         'created_days_ago': -4,
     },
 ]
+
+
+async def backfill_demo_maintenance_sheets(connection: aiosqlite.Connection) -> None:
+    demo_sheets = {
+        wo['title']: wo['maintenance_sheet']
+        for wo in DEMO_WORK_ORDERS
+        if wo.get('maintenance_sheet')
+    }
+    connection.row_factory = aiosqlite.Row
+    cursor = await connection.execute(
+        """
+        SELECT id, title, maintenance_sheet FROM work_orders
+        WHERE maintenance_sheet IS NULL OR maintenance_sheet = '' OR maintenance_sheet = '{}'
+        """
+    )
+    rows = await cursor.fetchall()
+    for row in rows:
+        sheet = demo_sheets.get(row['title'])
+        if sheet:
+            await connection.execute(
+                'UPDATE work_orders SET maintenance_sheet = ? WHERE id = ?',
+                (json.dumps(sheet), row['id']),
+            )
+    await connection.commit()
 
 
 async def seed_demo_data() -> None:

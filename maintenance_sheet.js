@@ -1,4 +1,12 @@
 // SMI Properties paper maintenance sheet — digitized from scanned work order form.
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 const MAINTENANCE_SHEET_SECTIONS = [
   {
     title: 'Engine / Differential',
@@ -126,7 +134,7 @@ function defaultMaintenanceSheet() {
   });
   return {
     service_type: 'repair',
-    start_date: '',
+    start_date: new Date().toISOString().slice(0, 10),
     previous_service_date: '',
     total_labor_hours: 0,
     rpm_reading: '',
@@ -196,9 +204,9 @@ function renderMaintenanceSheetHtml(wo, sheet, { editable = true } = {}) {
 
   const partsRows = normalized.parts_lines.map((line, index) => `
     <tr>
-      <td><input type="text" data-part-row="${index}" data-part-field="qty" value="${line.qty ?? ''}" ${editable ? '' : 'disabled'} /></td>
-      <td><input type="text" data-part-row="${index}" data-part-field="part_number" value="${line.part_number ?? ''}" ${editable ? '' : 'disabled'} /></td>
-      <td><input type="text" data-part-row="${index}" data-part-field="description" value="${line.description ?? ''}" ${editable ? '' : 'disabled'} /></td>
+      <td><input type="text" data-part-field="qty" value="${escapeHtml(line.qty ?? '')}" ${editable ? '' : 'disabled'} /></td>
+      <td><input type="text" data-part-field="part_number" value="${escapeHtml(line.part_number ?? '')}" ${editable ? '' : 'disabled'} /></td>
+      <td><input type="text" data-part-field="description" value="${escapeHtml(line.description ?? '')}" ${editable ? '' : 'disabled'} /></td>
     </tr>
   `).join('');
 
@@ -214,7 +222,7 @@ function renderMaintenanceSheetHtml(wo, sheet, { editable = true } = {}) {
 
       <div class="sheet-meta-grid">
         <label>Mechanic
-          <input type="text" id="sheet-mechanic" value="${wo.assigned_to || ''}" ${editable ? '' : 'disabled'} />
+          <input type="text" id="sheet-mechanic" value="${escapeHtml(wo.assigned_to || '')}" ${editable ? '' : 'disabled'} />
         </label>
         <label>Start Date
           <input type="date" id="sheet-start-date" value="${(normalized.start_date || '').slice(0, 10)}" ${editable ? '' : 'disabled'} />
@@ -231,12 +239,12 @@ function renderMaintenanceSheetHtml(wo, sheet, { editable = true } = {}) {
       </div>
 
       <div class="sheet-vehicle-grid">
-        <label>Car Number<input type="text" value="${wo.cart_id || ''}" disabled /></label>
-        <label>Serial Number<input type="text" value="${wo.cart_serial || cart?.serial || ''}" disabled /></label>
-        <label>Car Type<input type="text" value="${cart?.model || ''}" disabled /></label>
-        <label>Car Model<input type="text" value="${cart?.model || ''}" disabled /></label>
-        <label>Location<input type="text" value="${wo.location || cart?.location || ''}" disabled /></label>
-        <label>Status<input type="text" value="${wo.status.replace('_', ' ')}" disabled /></label>
+        <label>Car Number<input type="text" value="${escapeHtml(wo.cart_id || '')}" disabled /></label>
+        <label>Serial Number<input type="text" value="${escapeHtml(wo.cart_serial || cart?.serial || '')}" disabled /></label>
+        <label>Car Type<input type="text" value="${escapeHtml(cart?.model || '')}" disabled /></label>
+        <label>Car Model<input type="text" value="${escapeHtml(cart?.model || '')}" disabled /></label>
+        <label>Location<input type="text" value="${escapeHtml(wo.location || cart?.location || '')}" disabled /></label>
+        <label>Status<input type="text" value="${escapeHtml(wo.status.replace('_', ' '))}" disabled /></label>
       </div>
 
       <div class="sheet-progress">Checklist ${progress.done} / ${progress.total} complete</div>
@@ -272,7 +280,7 @@ function renderMaintenanceSheetHtml(wo, sheet, { editable = true } = {}) {
       </div>
 
       <label class="sheet-comments-label">Comments
-        <textarea id="sheet-comments" rows="4" ${editable ? '' : 'disabled'}>${normalized.sheet_comments || ''}</textarea>
+        <textarea id="sheet-comments" rows="4" ${editable ? '' : 'disabled'}>${escapeHtml(normalized.sheet_comments || '')}</textarea>
       </label>
 
       <p class="sheet-release-note">Must be completed before the car is released from service.</p>
@@ -303,10 +311,10 @@ function collectMaintenanceSheetFromDom(existingSheet) {
   const partsBody = document.getElementById('sheet-parts-body');
   if (partsBody) {
     const rows = Array.from(partsBody.querySelectorAll('tr'));
-    normalized.parts_lines = rows.map((row, index) => ({
-      qty: row.querySelector(`[data-part-row="${index}"][data-part-field="qty"]`)?.value || '',
-      part_number: row.querySelector(`[data-part-row="${index}"][data-part-field="part_number"]`)?.value || '',
-      description: row.querySelector(`[data-part-row="${index}"][data-part-field="description"]`)?.value || '',
+    normalized.parts_lines = rows.map((row) => ({
+      qty: row.querySelector('[data-part-field="qty"]')?.value || '',
+      part_number: row.querySelector('[data-part-field="part_number"]')?.value || '',
+      description: row.querySelector('[data-part-field="description"]')?.value || '',
     })).filter((line) => line.qty || line.part_number || line.description);
     if (!normalized.parts_lines.length) {
       normalized.parts_lines = [{ qty: '', part_number: '', description: '' }];
