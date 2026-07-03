@@ -18,7 +18,7 @@ import uuid
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from starlette.middleware.base import BaseHTTPMiddleware
 
 ROOT_DIR = Path(__file__).parent.resolve()
@@ -541,14 +541,37 @@ class CartItem(BaseModel):
     notes: Optional[str]
 
 
+REQUIRED_CART_FIELDS = ('serial', 'model', 'year', 'location', 'status')
+CART_FIELD_LABELS = {
+    'serial': 'Serial',
+    'model': 'Model',
+    'year': 'Year',
+    'location': 'Location',
+    'status': 'Status',
+}
+
+
+def validate_required_cart_fields(data: dict[str, Any]) -> None:
+    missing = [
+        CART_FIELD_LABELS[field]
+        for field in REQUIRED_CART_FIELDS
+        if not str(data.get(field, '')).strip()
+    ]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Missing required fields: {", ".join(missing)}',
+        )
+
+
 class CartCreate(BaseModel):
     id: Any
-    serial: Optional[str] = ''
-    model: Optional[str] = ''
-    year: Optional[str] = ''
-    location: Optional[str] = ''
-    status: str = 'active'
-    notes: Optional[str] = ''
+    serial: str = Field(min_length=1)
+    model: str = Field(min_length=1)
+    year: str = Field(min_length=1)
+    location: str = Field(min_length=1)
+    status: str = Field(min_length=1, default='active')
+    notes: str = ''
 
 
 class CartUpdate(BaseModel):
@@ -558,6 +581,13 @@ class CartUpdate(BaseModel):
     location: Optional[str] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator('serial', 'model', 'year', 'location', 'status')
+    @classmethod
+    def reject_blank_values(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not str(value).strip():
+            raise ValueError('cannot be empty')
+        return value
 
 
 class WorkOrderBase(BaseModel):
@@ -1450,6 +1480,16 @@ async def create_cart(request: Request, item: CartCreate) -> CartItem:
     if await fetch_cart_row(normalized_id):
         raise HTTPException(status_code=409, detail=f'Cart #{normalized_id} already exists')
 
+    cart_values = {
+        'serial': item.serial.strip(),
+        'model': item.model.strip(),
+        'year': item.year.strip(),
+        'location': item.location.strip(),
+        'status': item.status.strip(),
+        'notes': (item.notes or '').strip(),
+    }
+    validate_required_cart_fields(cart_values)
+
     async with aiosqlite.connect(DB_PATH) as connection:
         await connection.execute(
             '''
@@ -1458,12 +1498,12 @@ async def create_cart(request: Request, item: CartCreate) -> CartItem:
             ''',
             (
                 normalized_id,
-                item.serial or '',
-                item.model or '',
-                item.year or '',
-                item.location or '',
-                item.status or 'active',
-                item.notes or '',
+                cart_values['serial'],
+                cart_values['model'],
+                cart_values['year'],
+                cart_values['location'],
+                cart_values['status'],
+                cart_values['notes'],
             ),
         )
         await connection.commit()
@@ -1490,6 +1530,10 @@ async def update_cart(request: Request, cart_id: str, item: CartUpdate) -> CartI
 
     payload = item.model_dump(exclude_unset=True)
     updated = {**existing, **payload}
+    for field in (*REQUIRED_CART_FIELDS, 'notes'):
+        if field in updated and isinstance(updated[field], str):
+            updated[field] = updated[field].strip()
+    validate_required_cart_fields(updated)
 
     async with aiosqlite.connect(DB_PATH) as connection:
         await connection.execute(

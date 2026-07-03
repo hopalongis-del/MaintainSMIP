@@ -1,4 +1,6 @@
 """Quick smoke tests for MaintainSMIP API."""
+import time
+
 from fastapi.testclient import TestClient
 
 import server
@@ -113,10 +115,12 @@ def run_tests(client: TestClient) -> None:
     assert carts.status_code == 200, carts.text
     assert len(carts.json()) > 0
 
+    smoke_cart_id = f"SMOKE-TEST-{int(time.time())}"
+
     create_cart = client.post(
         "/api/carts",
         json={
-            "id": "SMOKE-TEST-1",
+            "id": smoke_cart_id,
             "serial": "SMOKE-123",
             "model": "Carryall 1",
             "year": "2024",
@@ -128,27 +132,46 @@ def run_tests(client: TestClient) -> None:
     assert create_cart.status_code == 200, create_cart.text
     assert create_cart.json()["serial"] == "SMOKE-123"
 
+    missing_fields = client.post(
+        "/api/carts",
+        json={"id": "SMOKE-TEST-2", "serial": "ONLY-SERIAL"},
+    )
+    assert missing_fields.status_code == 422, missing_fields.text
+
     duplicate_cart = client.post(
         "/api/carts",
-        json={"id": "SMOKE-TEST-1", "model": "Duplicate"},
+        json={
+            "id": smoke_cart_id,
+            "serial": "SMOKE-123",
+            "model": "Carryall 1",
+            "year": "2024",
+            "location": "SMIP",
+            "status": "active",
+        },
     )
     assert duplicate_cart.status_code == 409, duplicate_cart.text
 
+    blank_serial = client.put(
+        f"/api/carts/{smoke_cart_id}",
+        json={"serial": ""},
+    )
+    assert blank_serial.status_code == 422, blank_serial.text
+
     update_cart = client.put(
-        "/api/carts/SMOKE-TEST-1",
+        f"/api/carts/{smoke_cart_id}",
         json={"location": "Charlotte", "notes": "Updated smoke cart"},
     )
     assert update_cart.status_code == 200, update_cart.text
     assert update_cart.json()["location"] == "Charlotte"
 
     retire_cart = client.put(
-        "/api/carts/SMOKE-TEST-1",
+        f"/api/carts/{smoke_cart_id}",
         json={"status": "retired"},
     )
     assert retire_cart.status_code == 200, retire_cart.text
     assert retire_cart.json()["status"] == "retired"
 
-    cart_audit = client.get("/api/audit?entity_type=cart&entity_id=SMOKE-TEST-1")
+    cart_audit = client.get(f"/api/audit?entity_type=cart&entity_id={smoke_cart_id}")
     assert cart_audit.status_code == 200, cart_audit.text
     cart_audit_entries = cart_audit.json()
     assert len(cart_audit_entries) >= 2, cart_audit.text

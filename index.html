@@ -208,25 +208,25 @@
             </div>
             <div>
               <label for="cart-serial">Serial</label>
-              <input id="cart-serial" placeholder="Manufacturer serial number" />
+              <input id="cart-serial" required placeholder="Manufacturer serial number" />
             </div>
             <div>
               <label for="cart-model">Model</label>
-              <input id="cart-model" list="cart-model-options" placeholder="Carryall 1, Villager 8, etc." />
+              <input id="cart-model" list="cart-model-options" required placeholder="Carryall 1, Villager 8, etc." />
               <datalist id="cart-model-options"></datalist>
             </div>
             <div>
               <label for="cart-year">Year</label>
-              <input id="cart-year" placeholder="Year" />
+              <input id="cart-year" required placeholder="Year" />
             </div>
             <div>
               <label for="cart-location">Location</label>
-              <input id="cart-location" list="cart-location-options" placeholder="Venue or warehouse" />
+              <input id="cart-location" list="cart-location-options" required placeholder="Venue or warehouse" />
               <datalist id="cart-location-options"></datalist>
             </div>
             <div>
               <label for="cart-status">Status</label>
-              <input id="cart-status" list="cart-status-options" value="active" />
+              <input id="cart-status" list="cart-status-options" required value="active" />
               <datalist id="cart-status-options">
                 <option value="active"></option>
                 <option value="retired"></option>
@@ -544,16 +544,31 @@
         await loadFleetSummary();
       });
 
-      document.getElementById('cart-form')?.addEventListener('submit', async (event) => {
-        event.preventDefault();
+      function readCartFormPayload() {
         const payload = {
           serial: document.getElementById('cart-serial').value.trim(),
           model: document.getElementById('cart-model').value.trim(),
           year: document.getElementById('cart-year').value.trim(),
           location: document.getElementById('cart-location').value.trim(),
-          status: document.getElementById('cart-status').value.trim() || 'active',
+          status: document.getElementById('cart-status').value.trim(),
           notes: document.getElementById('cart-notes').value.trim(),
         };
+        const missing = [];
+        if (!payload.serial) missing.push('Serial');
+        if (!payload.model) missing.push('Model');
+        if (!payload.year) missing.push('Year');
+        if (!payload.location) missing.push('Location');
+        if (!payload.status) missing.push('Status');
+        return { payload, missing };
+      }
+
+      document.getElementById('cart-form')?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const { payload, missing } = readCartFormPayload();
+        if (missing.length) {
+          alert(`Please fill in required fields: ${missing.join(', ')}`);
+          return;
+        }
         const saveBtn = document.getElementById('cart-save-btn');
         saveBtn.disabled = true;
         let result;
