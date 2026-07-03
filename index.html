@@ -296,10 +296,15 @@
 
           await loadFleetSummary();
         } catch (err) {
-          document.getElementById('hero-sub').textContent = 'Could not reach the API. Start the server with start.bat.';
+          const help = db.getOfflineHelp();
+          document.getElementById('hero-sub').textContent = help.title;
           document.getElementById('recent-wo-list').innerHTML =
-            '<div class="empty-state"><h3>Server offline</h3><p>Run start.bat, then refresh this page.</p></div>';
+            `<div class="empty-state"><h3>${help.title}</h3><p>${help.detail}</p></div>`;
           document.getElementById('recent-pm-list').innerHTML = '';
+          if (help.retryable && !window.__dashboardRetried) {
+            window.__dashboardRetried = true;
+            setTimeout(loadDashboard, 8000);
+          }
         }
       }
 

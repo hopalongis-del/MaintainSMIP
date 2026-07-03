@@ -498,7 +498,8 @@ async function initPmModule() {
     await renderTemplateList();
     await updatePmDashboard();
   } catch (err) {
-    showPmApiError('Start the server with start.bat, then refresh this page.');
+    const help = db.getOfflineHelp();
+    showPmApiError(`<strong>${help.title}</strong><br>${help.detail}`);
     return;
   }
 

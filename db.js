@@ -1,80 +1,141 @@
 // Same origin in production (Render); works locally at http://localhost:8000 too.
 const API = '';
+const LIVE_URL = 'https://maintainsmip.onrender.com';
+
+function isLocalFile() {
+  return window.location.protocol === 'file:';
+}
+
+function isLocalhost() {
+  const h = window.location.hostname;
+  return h === 'localhost' || h === '127.0.0.1';
+}
+
+function isRenderHost() {
+  return window.location.hostname.includes('onrender.com');
+}
+
+function getOfflineHelp() {
+  if (isLocalFile()) {
+    return {
+      title: 'Open through the web server',
+      detail: `This page was opened as a file on your computer, so it cannot reach the API. Open <a href="${LIVE_URL}">${LIVE_URL}</a> instead, or run start.bat and use <a href="http://localhost:8000">http://localhost:8000</a>.`,
+      retryable: false,
+    };
+  }
+  if (isLocalhost()) {
+    return {
+      title: 'Server offline',
+      detail: 'Run <strong>start.bat</strong> in the project folder, then refresh this page.',
+      retryable: true,
+    };
+  }
+  if (isRenderHost()) {
+    return {
+      title: 'Server waking up',
+      detail: 'The live app can take up to a minute to start after being idle. This page will retry automatically — or <a href="#" onclick="location.reload();return false;">refresh now</a>.',
+      retryable: true,
+    };
+  }
+  return {
+    title: 'Could not reach the API',
+    detail: 'Check your connection and refresh the page.',
+    retryable: true,
+  };
+}
+
+async function fetchApi(path, options = {}) {
+  const retries = isRenderHost() || isLocalhost() ? 6 : 1;
+  const delays = [0, 1500, 2500, 4000, 6000, 10000];
+  let lastErr;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt] || 5000));
+    }
+    try {
+      return await fetch(`${API}${path}`, options);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
 
 const db = {
+  getOfflineHelp,
   async getCarts() {
-    const r = await fetch(`${API}/api/carts`);
+    const r = await fetchApi('/api/carts');
     return r.ok ? r.json() : [];
   },
   async getWorkOrders(filters = {}) {
     const p = new URLSearchParams(filters);
-    const r = await fetch(`${API}/api/workorders?${p}`);
+    const r = await fetchApi(`/api/workorders?${p}`);
     return r.ok ? r.json() : [];
   },
   async saveWorkOrder(wo) {
-    const r = await fetch(`${API}/api/workorders`, {
+    const r = await fetchApi('/api/workorders', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(wo)
     });
     return r.ok ? r.json() : null;
   },
   async updateWorkOrder(id, fields) {
-    const r = await fetch(`${API}/api/workorders/${id}`, {
+    const r = await fetchApi(`/api/workorders/${id}`, {
       method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(fields)
     });
     return r.ok ? r.json() : null;
   },
   async getPmTemplates() {
-    const r = await fetch(`${API}/api/pm/templates`);
+    const r = await fetchApi('/api/pm/templates');
     return r.ok ? r.json() : [];
   },
   async savePmTemplate(t) {
-    const r = await fetch(`${API}/api/pm/templates`, {
+    const r = await fetchApi('/api/pm/templates', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(t)
     });
     return r.ok ? r.json() : null;
   },
   async updatePmTemplate(id, fields) {
-    const r = await fetch(`${API}/api/pm/templates/${id}`, {
+    const r = await fetchApi(`/api/pm/templates/${id}`, {
       method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(fields)
     });
     return r.ok ? r.json() : null;
   },
   async getPmRecords(filters = {}) {
     const p = new URLSearchParams(filters);
-    const r = await fetch(`${API}/api/pm/records?${p}`);
+    const r = await fetchApi(`/api/pm/records?${p}`);
     return r.ok ? r.json() : [];
   },
   async savePmRecord(rec) {
-    const r = await fetch(`${API}/api/pm/records`, {
+    const r = await fetchApi('/api/pm/records', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(rec)
     });
     return r.ok ? r.json() : null;
   },
   async updatePmRecord(id, fields) {
-    const r = await fetch(`${API}/api/pm/records/${id}`, {
+    const r = await fetchApi(`/api/pm/records/${id}`, {
       method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(fields)
     });
     return r.ok ? r.json() : null;
   },
   async deleteWorkOrder(id) {
-    const r = await fetch(`${API}/api/workorders/${id}`, { method: 'DELETE' });
+    const r = await fetchApi(`/api/workorders/${id}`, { method: 'DELETE' });
     return r.ok;
   },
   async deletePmRecord(id) {
-    const r = await fetch(`${API}/api/pm/records/${id}`, { method: 'DELETE' });
+    const r = await fetchApi(`/api/pm/records/${id}`, { method: 'DELETE' });
     return r.ok;
   },
   async getStats() {
-    const r = await fetch(`${API}/api/stats`);
+    const r = await fetchApi('/api/stats');
     return r.ok ? r.json() : {};
   },
   async getAccidents(filters = {}) {
     const p = new URLSearchParams(filters);
-    const r = await fetch(`${API}/api/accidents?${p}`);
+    const r = await fetchApi(`/api/accidents?${p}`);
     return r.ok ? r.json() : [];
   },
   async saveAccident(report) {
-    const r = await fetch(`${API}/api/accidents`, {
+    const r = await fetchApi('/api/accidents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(report),
@@ -82,7 +143,7 @@ const db = {
     return r.ok ? r.json() : null;
   },
   async updateAccident(id, fields) {
-    const r = await fetch(`${API}/api/accidents/${id}`, {
+    const r = await fetchApi(`/api/accidents/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(fields),
@@ -90,21 +151,21 @@ const db = {
     return r.ok ? r.json() : null;
   },
   async deleteAccident(id) {
-    const r = await fetch(`${API}/api/accidents/${id}`, { method: 'DELETE' });
+    const r = await fetchApi(`/api/accidents/${id}`, { method: 'DELETE' });
     return r.ok;
   },
   async uploadAccidentPhoto(id, file) {
     const form = new FormData();
     form.append('file', file);
-    const r = await fetch(`${API}/api/accidents/${id}/photos`, {
+    const r = await fetchApi(`/api/accidents/${id}/photos`, {
       method: 'POST',
       body: form,
     });
     return r.ok ? r.json() : null;
   },
   async deleteAccidentPhoto(id, path) {
-    const r = await fetch(
-      `${API}/api/accidents/${id}/photos?path=${encodeURIComponent(path)}`,
+    const r = await fetchApi(
+      `/api/accidents/${id}/photos?path=${encodeURIComponent(path)}`,
       { method: 'DELETE' },
     );
     return r.ok ? r.json() : null;

@@ -447,8 +447,9 @@ async function initAccidents() {
     setupLocationFilter();
     await renderAccidentList();
   } catch (err) {
+    const help = db.getOfflineHelp();
     document.getElementById('accident-list').innerHTML =
-      '<div class="empty-state"><h3>Server offline</h3><p>Run start.bat, then refresh.</p></div>';
+      `<div class="empty-state"><h3>${help.title}</h3><p>${help.detail}</p></div>`;
   }
 }
 

@@ -437,7 +437,8 @@ async function initWorkOrders() {
     await renderWoList();
     await updateDashboard();
   } catch (err) {
-    showApiError('wo-list', 'Start the server with start.bat, then refresh this page.');
+    const help = db.getOfflineHelp();
+    showApiError('wo-list', `<strong>${help.title}</strong><br>${help.detail}`);
   }
 }
 
