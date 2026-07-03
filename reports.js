@@ -71,6 +71,85 @@ function matchesLocation(recordLocation, filterLocation) {
   return (recordLocation || '') === filterLocation;
 }
 
+const PERIOD_FILTER_OPTIONS = [
+  { value: '7', label: 'Last 7 days' },
+  { value: '30', label: 'Last 30 days' },
+  { value: '90', label: 'Last 90 days' },
+  { value: '365', label: 'Last year' },
+];
+
+function periodCutoffMs(days) {
+  return Date.now() - Number(days || 30) * 86400000;
+}
+
+function inPeriod(dateValue, cutoffMs) {
+  if (!dateValue) return false;
+  return new Date(dateValue).getTime() >= cutoffMs;
+}
+
+function pct(numerator, denominator) {
+  if (!denominator) return '0%';
+  return `${Math.round((numerator / denominator) * 100)}%`;
+}
+
+function extractPartsUsageRows(workOrders, filters) {
+  const cutoff = periodCutoffMs(filters.days);
+  const rows = [];
+
+  workOrders.forEach((wo) => {
+    if (!matchesLocation(wo.location, filters.location)) return;
+    const stamp = wo.completed_date || wo.created_date;
+    if (!inPeriod(stamp, cutoff)) return;
+
+    const sheet = wo.maintenance_sheet || {};
+    (sheet.parts_lines || []).forEach((line) => {
+      if (!line?.qty && !line?.part_number && !line?.description) return;
+      rows.push({
+        wo_id: wo.id,
+        cart_id: wo.cart_id,
+        qty: line.qty || '',
+        part_number: line.part_number || '',
+        description: line.description || '',
+        source: 'Maintenance sheet',
+        assigned_to: wo.assigned_to || '',
+        location: wo.location || '',
+        used_date: stamp,
+      });
+    });
+
+    (wo.parts_used || []).forEach((part) => {
+      if (!part) return;
+      if (typeof part === 'string') {
+        rows.push({
+          wo_id: wo.id,
+          cart_id: wo.cart_id,
+          qty: '1',
+          part_number: '',
+          description: part,
+          source: 'Work order',
+          assigned_to: wo.assigned_to || '',
+          location: wo.location || '',
+          used_date: stamp,
+        });
+        return;
+      }
+      rows.push({
+        wo_id: wo.id,
+        cart_id: wo.cart_id,
+        qty: part.qty || part.quantity || '1',
+        part_number: part.part_number || part.number || '',
+        description: part.description || part.name || '',
+        source: 'Work order',
+        assigned_to: wo.assigned_to || '',
+        location: wo.location || '',
+        used_date: stamp,
+      });
+    });
+  });
+
+  return rows.sort((a, b) => String(b.used_date || '').localeCompare(String(a.used_date || '')));
+}
+
 const REPORTS = [
   {
     id: 'open-work-orders',
@@ -249,16 +328,11 @@ const REPORTS = [
     title: 'Completed Work Summary',
     description: 'Finished work orders in a selected period — useful for labor and throughput review.',
     filters: [
-      { id: 'days', label: 'Period', type: 'select', options: [
-        { value: '7', label: 'Last 7 days' },
-        { value: '30', label: 'Last 30 days' },
-        { value: '90', label: 'Last 90 days' },
-        { value: '365', label: 'Last year' },
-      ], defaultValue: '30' },
+      { id: 'days', label: 'Period', type: 'select', options: PERIOD_FILTER_OPTIONS, defaultValue: '30' },
       { id: 'location', label: 'Location', type: 'select', optionsKey: 'locations', defaultValue: 'all' },
     ],
     async load(filters) {
-      const cutoff = Date.now() - Number(filters.days || 30) * 86400000;
+      const cutoff = periodCutoffMs(filters.days);
       const rows = (await db.getWorkOrders())
         .filter((wo) => CLOSED_WO_STATUSES.has(wo.status))
         .filter((wo) => matchesLocation(wo.location, filters.location))
@@ -289,12 +363,7 @@ const REPORTS = [
     title: 'Activity Log',
     description: 'Tabular audit trail for compliance and manager review.',
     filters: [
-      { id: 'days', label: 'Period', type: 'select', options: [
-        { value: '7', label: 'Last 7 days' },
-        { value: '30', label: 'Last 30 days' },
-        { value: '90', label: 'Last 90 days' },
-        { value: '365', label: 'Last year' },
-      ], defaultValue: '30' },
+      { id: 'days', label: 'Period', type: 'select', options: PERIOD_FILTER_OPTIONS, defaultValue: '30' },
       { id: 'entity_type', label: 'Record type', type: 'select', options: [
         { value: 'all', label: 'All types' },
         { value: 'work_order', label: 'Work orders' },
@@ -319,6 +388,322 @@ const REPORTS = [
       { label: 'Type', value: (r) => db.entityTypeLabel(r.entity_type) },
       { label: 'Record #', value: (r) => r.entity_id },
       { label: 'Summary', value: (r) => r.summary },
+    ],
+  },
+  {
+    id: 'wo-by-technician',
+    title: 'Work Orders by Technician',
+    description: 'Open workload broken down by assigned technician.',
+    filters: [
+      { id: 'location', label: 'Location', type: 'select', optionsKey: 'locations', defaultValue: 'all' },
+    ],
+    async load(filters) {
+      const buckets = new Map();
+      (await db.getWorkOrders())
+        .filter((wo) => OPEN_WO_STATUSES.has(wo.status))
+        .filter((wo) => matchesLocation(wo.location, filters.location))
+        .forEach((wo) => {
+          const tech = wo.assigned_to?.trim() || 'Unassigned';
+          if (!buckets.has(tech)) {
+            buckets.set(tech, {
+              technician: tech,
+              open_count: 0,
+              overdue_count: 0,
+              high_priority: 0,
+              critical_priority: 0,
+            });
+          }
+          const row = buckets.get(tech);
+          row.open_count += 1;
+          if (isOverdueDate(wo.due_date)) row.overdue_count += 1;
+          if (wo.priority === 'high') row.high_priority += 1;
+          if (wo.priority === 'critical') row.critical_priority += 1;
+        });
+
+      const rows = [...buckets.values()].sort((a, b) => b.open_count - a.open_count);
+      return {
+        subtitle: filters.location === 'all' ? 'Open work orders by technician' : `Location: ${filters.location}`,
+        rows,
+      };
+    },
+    columns: [
+      { label: 'Technician', value: (r) => r.technician },
+      { label: 'Open WOs', value: (r) => r.open_count },
+      { label: 'Overdue', value: (r) => r.overdue_count },
+      { label: 'High Priority', value: (r) => r.high_priority },
+      { label: 'Critical', value: (r) => r.critical_priority },
+    ],
+  },
+  {
+    id: 'wo-by-location',
+    title: 'Work Orders by Location',
+    description: 'Venue-level rollup of open and overdue maintenance work.',
+    filters: [],
+    async load() {
+      const buckets = new Map();
+      (await db.getWorkOrders())
+        .filter((wo) => OPEN_WO_STATUSES.has(wo.status))
+        .forEach((wo) => {
+          const loc = wo.location?.trim() || 'Unknown';
+          if (!buckets.has(loc)) {
+            buckets.set(loc, {
+              location: loc,
+              open_count: 0,
+              overdue_count: 0,
+              high_priority: 0,
+              in_progress: 0,
+            });
+          }
+          const row = buckets.get(loc);
+          row.open_count += 1;
+          if (isOverdueDate(wo.due_date)) row.overdue_count += 1;
+          if (wo.priority === 'high' || wo.priority === 'critical') row.high_priority += 1;
+          if (wo.status === 'in_progress') row.in_progress += 1;
+        });
+
+      const rows = [...buckets.values()].sort((a, b) => b.open_count - a.open_count);
+      return { subtitle: 'Open work orders grouped by venue', rows };
+    },
+    columns: [
+      { label: 'Location', value: (r) => r.location },
+      { label: 'Open WOs', value: (r) => r.open_count },
+      { label: 'Overdue', value: (r) => r.overdue_count },
+      { label: 'In Progress', value: (r) => r.in_progress },
+      { label: 'High/Critical', value: (r) => r.high_priority },
+    ],
+  },
+  {
+    id: 'pm-completion-rate',
+    title: 'PM Completion Rate',
+    description: 'How preventive maintenance is completing by template over a selected period.',
+    filters: [
+      { id: 'days', label: 'Period', type: 'select', options: PERIOD_FILTER_OPTIONS, defaultValue: '30' },
+      { id: 'location', label: 'Location', type: 'select', optionsKey: 'locations', defaultValue: 'all' },
+    ],
+    async load(filters) {
+      const cutoff = periodCutoffMs(filters.days);
+      const buckets = new Map();
+
+      (await db.getPmRecords())
+        .filter((rec) => matchesLocation(rec.location, filters.location))
+        .forEach((rec) => {
+          const name = rec.template_name || 'Unknown template';
+          if (!buckets.has(name)) {
+            buckets.set(name, {
+              template: name,
+              completed: 0,
+              scheduled: 0,
+              overdue: 0,
+              skipped: 0,
+            });
+          }
+          const row = buckets.get(name);
+
+          if (rec.status === 'completed' && inPeriod(rec.completed_date || rec.scheduled_date, cutoff)) {
+            row.completed += 1;
+            return;
+          }
+          if (rec.status === 'skipped' && inPeriod(rec.scheduled_date, cutoff)) {
+            row.skipped += 1;
+            return;
+          }
+          if (rec.status === 'scheduled') {
+            if (isOverdueDate(rec.scheduled_date)) row.overdue += 1;
+            else if (inPeriod(rec.scheduled_date, cutoff) || isPmDueSoon(rec.scheduled_date)) row.scheduled += 1;
+          }
+        });
+
+      const rows = [...buckets.values()]
+        .map((row) => {
+          const total = row.completed + row.scheduled + row.overdue + row.skipped;
+          return { ...row, total, completion_rate: pct(row.completed, total) };
+        })
+        .filter((row) => row.total > 0)
+        .sort((a, b) => b.total - a.total);
+
+      return { subtitle: `Last ${filters.days} days`, rows };
+    },
+    columns: [
+      { label: 'PM Template', value: (r) => r.template },
+      { label: 'Completed', value: (r) => r.completed },
+      { label: 'Scheduled', value: (r) => r.scheduled },
+      { label: 'Overdue', value: (r) => r.overdue },
+      { label: 'Skipped', value: (r) => r.skipped },
+      { label: 'Total', value: (r) => r.total },
+      { label: 'Completion Rate', value: (r) => r.completion_rate },
+    ],
+  },
+  {
+    id: 'accident-severity-summary',
+    title: 'Accident Severity Summary',
+    description: 'Damage report counts by venue and severity.',
+    filters: [
+      { id: 'openOnly', label: 'Open reports only', type: 'checkbox', defaultValue: false },
+    ],
+    async load(filters) {
+      const buckets = new Map();
+      (await db.getAccidents())
+        .filter((acc) => !filters.openOnly || acc.status !== 'resolved')
+        .forEach((acc) => {
+          const location = acc.location?.trim() || 'Unknown';
+          const severity = acc.severity || 'unknown';
+          const key = `${location}||${severity}`;
+          if (!buckets.has(key)) {
+            buckets.set(key, {
+              location,
+              severity,
+              count: 0,
+              open_count: 0,
+            });
+          }
+          const row = buckets.get(key);
+          row.count += 1;
+          if (acc.status !== 'resolved') row.open_count += 1;
+        });
+
+      const rows = [...buckets.values()].sort((a, b) => (
+        a.location.localeCompare(b.location) || a.severity.localeCompare(b.severity)
+      ));
+      return {
+        subtitle: filters.openOnly ? 'Open accidents only' : 'All accident reports',
+        rows,
+      };
+    },
+    columns: [
+      { label: 'Location', value: (r) => r.location },
+      { label: 'Severity', value: (r) => r.severity },
+      { label: 'Total Reports', value: (r) => r.count },
+      { label: 'Open', value: (r) => r.open_count },
+    ],
+  },
+  {
+    id: 'fleet-model-year',
+    title: 'Fleet by Model & Year',
+    description: 'Aging and composition analysis of the golf cart fleet.',
+    filters: [
+      { id: 'location', label: 'Location', type: 'select', optionsKey: 'locations', defaultValue: 'all' },
+      { id: 'hideRetired', label: 'Hide retired carts', type: 'checkbox', defaultValue: true },
+    ],
+    async load(filters) {
+      const buckets = new Map();
+      (await db.getCarts())
+        .filter((cart) => matchesLocation(cart.location, filters.location))
+        .filter((cart) => !filters.hideRetired || String(cart.status || '').toLowerCase() !== 'retired')
+        .forEach((cart) => {
+          const model = cart.model?.trim() || 'Unknown model';
+          const year = cart.year?.trim() || 'Unknown year';
+          const key = `${model}||${year}`;
+          if (!buckets.has(key)) {
+            buckets.set(key, {
+              model,
+              year,
+              count: 0,
+              locations: new Set(),
+            });
+          }
+          const row = buckets.get(key);
+          row.count += 1;
+          if (cart.location) row.locations.add(cart.location);
+        });
+
+      const rows = [...buckets.values()]
+        .map((row) => ({
+          model: row.model,
+          year: row.year,
+          count: row.count,
+          locations: [...row.locations].sort().join(', '),
+        }))
+        .sort((a, b) => b.count - a.count || a.model.localeCompare(b.model));
+
+      return {
+        subtitle: filters.hideRetired ? 'Active fleet composition' : 'Including retired carts',
+        rows,
+      };
+    },
+    columns: [
+      { label: 'Model', value: (r) => r.model },
+      { label: 'Year', value: (r) => r.year },
+      { label: 'Count', value: (r) => r.count },
+      { label: 'Locations', value: (r) => r.locations },
+    ],
+  },
+  {
+    id: 'parts-usage',
+    title: 'Parts Usage',
+    description: 'Parts and service lines captured on work orders and maintenance sheets.',
+    filters: [
+      { id: 'days', label: 'Period', type: 'select', options: PERIOD_FILTER_OPTIONS, defaultValue: '30' },
+      { id: 'location', label: 'Location', type: 'select', optionsKey: 'locations', defaultValue: 'all' },
+    ],
+    async load(filters) {
+      const rows = extractPartsUsageRows(await db.getWorkOrders(), filters);
+      return { subtitle: `Last ${filters.days} days`, rows };
+    },
+    columns: [
+      { label: 'WO #', value: (r) => r.wo_id },
+      { label: 'Cart', value: (r) => r.cart_id },
+      { label: 'Qty', value: (r) => r.qty },
+      { label: 'Part Number', value: (r) => r.part_number },
+      { label: 'Description', value: (r) => r.description },
+      { label: 'Source', value: (r) => r.source },
+      { label: 'Technician', value: (r) => r.assigned_to },
+      { label: 'Location', value: (r) => r.location },
+      { label: 'Date', value: (r) => formatReportDate(r.used_date) },
+    ],
+  },
+  {
+    id: 'executive-summary',
+    title: 'Executive Summary',
+    description: 'One-page snapshot for management: fleet health, open work, PM, and accidents.',
+    filters: [
+      { id: 'days', label: 'Period', type: 'select', options: PERIOD_FILTER_OPTIONS, defaultValue: '30' },
+    ],
+    async load(filters) {
+      const cutoff = periodCutoffMs(filters.days);
+      const [stats, workOrders, pmRecords, accidents, carts] = await Promise.all([
+        db.getStats(),
+        db.getWorkOrders(),
+        db.getPmRecords(),
+        db.getAccidents(),
+        db.getCarts(),
+      ]);
+
+      const completedWos = workOrders.filter(
+        (wo) => CLOSED_WO_STATUSES.has(wo.status) && inPeriod(wo.completed_date || wo.created_date, cutoff),
+      ).length;
+      const pmCompleted = pmRecords.filter(
+        (rec) => rec.status === 'completed' && inPeriod(rec.completed_date || rec.scheduled_date, cutoff),
+      ).length;
+      const pmDueSoon = pmRecords.filter(
+        (rec) => rec.status === 'scheduled' && isPmDueSoon(rec.scheduled_date),
+      ).length;
+      const activeFleet = carts.filter((cart) => String(cart.status || '').toLowerCase() !== 'retired').length;
+      const openAccidents = accidents.filter((acc) => acc.status !== 'resolved').length;
+      const laborMinutes = workOrders
+        .filter((wo) => CLOSED_WO_STATUSES.has(wo.status) && inPeriod(wo.completed_date || wo.created_date, cutoff))
+        .reduce((sum, wo) => sum + Number(wo.labor_minutes || 0), 0);
+
+      const rows = [
+        { metric: 'Active Fleet Carts', value: activeFleet },
+        { metric: 'Total Fleet Carts', value: carts.length },
+        { metric: 'Open Work Orders', value: stats.open_work_orders ?? 0 },
+        { metric: 'Overdue Work Orders', value: stats.overdue_work_orders ?? 0 },
+        { metric: `Work Orders Completed (${filters.days}d)`, value: completedWos },
+        { metric: 'PM Due Soon', value: pmDueSoon },
+        { metric: 'PM Overdue', value: stats.pm_overdue ?? 0 },
+        { metric: `PM Completed (${filters.days}d)`, value: pmCompleted },
+        { metric: 'Open Accident Reports', value: openAccidents },
+        { metric: `Labor Minutes Logged (${filters.days}d)`, value: laborMinutes },
+      ];
+
+      return {
+        subtitle: `Management snapshot · last ${filters.days} days`,
+        rows,
+      };
+    },
+    columns: [
+      { label: 'Metric', value: (r) => r.metric },
+      { label: 'Value', value: (r) => r.value },
     ],
   },
 ];

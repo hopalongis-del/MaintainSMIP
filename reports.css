@@ -8,6 +8,9 @@
 .report-catalog {
   display: grid;
   gap: 10px;
+  max-height: 72vh;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .report-card {
