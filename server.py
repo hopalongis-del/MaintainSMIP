@@ -140,7 +140,7 @@ async def fetch_user_auth_record(user_id: int) -> Optional[dict[str, Any]]:
     async with aiosqlite.connect(DB_PATH) as connection:
         connection.row_factory = aiosqlite.Row
         cursor = await connection.execute(
-            'SELECT id, username, display_name, role, active, password_hash FROM users WHERE id = ?',
+            'SELECT id, username, display_name, role, active, password_hash, password_changed FROM users WHERE id = ?',
             (user_id,),
         )
         row = await cursor.fetchone()
@@ -151,7 +151,7 @@ async def fetch_user_by_username(username: str) -> Optional[dict[str, Any]]:
     async with aiosqlite.connect(DB_PATH) as connection:
         connection.row_factory = aiosqlite.Row
         cursor = await connection.execute(
-            'SELECT id, username, display_name, role, active, password_hash FROM users WHERE username = ?',
+            'SELECT id, username, display_name, role, active, password_hash, password_changed FROM users WHERE username = ?',
             (username,),
         )
         row = await cursor.fetchone()
@@ -168,7 +168,7 @@ async def authenticate_user(username: str, password: str) -> Optional[dict[str, 
 
 
 async def resync_seeded_user_password(username: str, password: str) -> Optional[dict[str, Any]]:
-    """Let seeded team accounts sign in with the current APP_PASSWORD env value."""
+    """Let seeded team accounts sign in with APP_PASSWORD until they choose a new password."""
     normalized = username.strip().lower()
     if normalized not in SEEDED_USERNAMES or not APP_PASSWORD:
         return None
@@ -176,7 +176,7 @@ async def resync_seeded_user_password(username: str, password: str) -> Optional[
         return None
 
     user = await fetch_user_by_username(normalized)
-    if not user or not user.get('active'):
+    if not user or not user.get('active') or user.get('password_changed'):
         return None
 
     async with aiosqlite.connect(DB_PATH) as connection:
@@ -721,10 +721,17 @@ async def create_tables() -> None:
                 role TEXT NOT NULL,
                 password_hash TEXT NOT NULL,
                 active INTEGER NOT NULL DEFAULT 1,
+                password_changed INTEGER NOT NULL DEFAULT 0,
                 created_date TEXT
             )
             '''
         )
+        cursor = await connection.execute('PRAGMA table_info(users)')
+        user_columns = [col[1] for col in await cursor.fetchall()]
+        if 'password_changed' not in user_columns:
+            await connection.execute(
+                'ALTER TABLE users ADD COLUMN password_changed INTEGER NOT NULL DEFAULT 0',
+            )
         await connection.commit()
 
 
@@ -1936,7 +1943,7 @@ async def change_password(request: Request, body: ChangePasswordRequest) -> dict
 
     async with aiosqlite.connect(DB_PATH) as connection:
         await connection.execute(
-            'UPDATE users SET password_hash = ? WHERE id = ?',
+            'UPDATE users SET password_hash = ?, password_changed = 1 WHERE id = ?',
             (hash_password(body.new_password), user['id']),
         )
         await connection.commit()
