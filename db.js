@@ -182,6 +182,41 @@ function formatAuditTimestamp(value) {
   });
 }
 
+function entityTypeLabel(type) {
+  return {
+    work_order: 'Work Order',
+    pm_record: 'PM',
+    accident: 'Accident',
+    cart: 'Fleet',
+  }[type] || type;
+}
+
+function actionLabel(action) {
+  return {
+    created: 'Created',
+    updated: 'Updated',
+    deleted: 'Deleted',
+    photo_added: 'Photo added',
+    photo_removed: 'Photo removed',
+  }[action] || (action || '').replace(/_/g, ' ');
+}
+
+function entityRecordHref(entry) {
+  const id = entry.entity_id;
+  switch (entry.entity_type) {
+    case 'work_order':
+      return `workorders.html?id=${id}`;
+    case 'pm_record':
+      return `pm.html?id=${id}`;
+    case 'accident':
+      return `accidents.html?id=${id}`;
+    case 'cart':
+      return `index.html?fleet_search=${encodeURIComponent(id)}#fleet`;
+    default:
+      return null;
+  }
+}
+
 function renderAuditActivityHtml(entries) {
   if (!entries?.length) {
     return '<p class="hero-sub">No activity recorded yet.</p>';
@@ -197,6 +232,37 @@ function renderAuditActivityHtml(entries) {
           <p class="audit-item-summary">${entry.summary}</p>
         </li>
       `).join('')}
+    </ul>
+  `;
+}
+
+function renderGlobalActivityHtml(entries) {
+  if (!entries?.length) {
+    return '<div class="empty-state"><h3>No activity found</h3><p>Try widening your filters or make a change to a work order, PM record, accident, or cart.</p></div>';
+  }
+  return `
+    <ul class="audit-list activity-feed">
+      ${entries.map((entry) => {
+        const href = entityRecordHref(entry);
+        const typeLabel = entityTypeLabel(entry.entity_type);
+        const recordLink = href
+          ? `<a class="activity-entity-link" href="${href}">${typeLabel} #${entry.entity_id}</a>`
+          : `<span class="activity-entity-link">${typeLabel} #${entry.entity_id}</span>`;
+        return `
+          <li class="audit-item activity-row">
+            <div class="audit-item-head">
+              <strong>${entry.display_name || 'System'}</strong>
+              <span class="audit-item-time">${formatAuditTimestamp(entry.created_at)}</span>
+            </div>
+            <div class="activity-meta">
+              <span class="badge activity-type-badge">${typeLabel}</span>
+              <span class="badge activity-action-badge">${actionLabel(entry.action)}</span>
+              ${recordLink}
+            </div>
+            <p class="audit-item-summary">${entry.summary}</p>
+          </li>
+        `;
+      }).join('')}
     </ul>
   `;
 }
@@ -235,6 +301,9 @@ const db = {
   formatAuditTimestamp,
   formatApiError,
   renderAuditActivityHtml,
+  renderGlobalActivityHtml,
+  entityTypeLabel,
+  actionLabel,
   async getAuditLog(filters = {}) {
     const p = new URLSearchParams(filters);
     const r = await fetchApi(`/api/audit?${p}`);

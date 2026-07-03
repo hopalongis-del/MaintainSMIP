@@ -636,6 +636,28 @@ function wireAdminUserForm() {
   });
 }
 
+function injectActivityNavLink() {
+  const navLinks = document.querySelector('.nav-links');
+  if (!navLinks || navLinks.querySelector('[data-nav-activity]')) return;
+
+  const link = document.createElement('a');
+  link.href = 'activity.html';
+  link.dataset.navActivity = 'true';
+  link.textContent = 'Activity';
+  if (window.location.pathname.endsWith('activity.html')) {
+    link.classList.add('active');
+  }
+
+  const accidentLink = [...navLinks.querySelectorAll('a')].find((anchor) => (
+    anchor.getAttribute('href')?.includes('accidents')
+  ));
+  if (accidentLink) {
+    accidentLink.insertAdjacentElement('afterend', link);
+  } else {
+    navLinks.appendChild(link);
+  }
+}
+
 function injectSettingsButton() {
   if (document.getElementById('open-settings-btn')) return;
 
@@ -754,6 +776,7 @@ window.MaintainSMIPSettings = {
 
 function initSettings() {
   buildSettingsModal();
+  injectActivityNavLink();
   injectSettingsButton();
   wireAdminUserForm();
   wireChangePasswordForm();

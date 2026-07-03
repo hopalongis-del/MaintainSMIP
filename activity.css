@@ -1,0 +1,60 @@
+.activity-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.activity-feed {
+  margin-top: 8px;
+}
+
+.activity-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.activity-type-badge,
+.activity-action-badge {
+  text-transform: capitalize;
+  font-size: 0.78rem;
+}
+
+.activity-entity-link {
+  color: var(--accent-2);
+  font-size: 0.86rem;
+  text-decoration: none;
+}
+
+.activity-entity-link:hover {
+  text-decoration: underline;
+}
+
+.activity-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.activity-count {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 900px) {
+  .activity-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .activity-filters {
+    grid-template-columns: 1fr;
+  }
+}

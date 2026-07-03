@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Activity | MaintainSMIP</title>
+    <link rel="icon" href="logo1.png" type="image/png" />
+    <script>(function(){try{var s=JSON.parse(localStorage.getItem('maintainsmip-settings')||'{}');document.documentElement.setAttribute('data-theme',s.theme||localStorage.getItem('maintainsmip-theme')||'smi-racing');document.documentElement.setAttribute('data-layout',s.layout==='phone'?'phone':'laptop');}catch(e){document.documentElement.setAttribute('data-theme','smi-racing');document.documentElement.setAttribute('data-layout','laptop');}})();</script>
+    <link rel="stylesheet" href="shared.css" />
+    <link rel="stylesheet" href="activity.css" />
+    <script src="settings.js"></script>
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="index.html">
+          <div class="brand-mark">
+            <img class="brand-logo" src="logo1.png" alt="MaintainSMIP" />
+          </div>
+          <span>MaintainSMIP</span>
+        </a>
+        <div class="nav-links">
+          <a href="index.html">Dashboard</a>
+          <a href="workorders.html">Work Orders</a>
+          <a href="pm.html">Preventive Maintenance</a>
+          <a href="index.html#fleet">Fleet</a>
+          <a href="accidents.html">Accident Damage</a>
+          <a class="active" href="activity.html">Activity</a>
+        </div>
+      </nav>
+
+      <section class="card page-section">
+        <div class="hero-strip">
+          <div>
+            <span class="eyebrow">Activity Log</span>
+            <h2>See what changed across work orders, PM, accidents, and fleet.</h2>
+            <p class="hero-sub" id="activity-sub">Loading recent activity…</p>
+          </div>
+        </div>
+
+        <div class="activity-filters">
+          <div class="filter-group">
+            <label for="activity-filter-type">Record type</label>
+            <select id="activity-filter-type">
+              <option value="all">All types</option>
+              <option value="work_order">Work orders</option>
+              <option value="pm_record">PM</option>
+              <option value="accident">Accidents</option>
+              <option value="cart">Fleet</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="activity-filter-action">Action</label>
+            <select id="activity-filter-action">
+              <option value="all">All actions</option>
+              <option value="created">Created</option>
+              <option value="updated">Updated</option>
+              <option value="deleted">Deleted</option>
+              <option value="photo_added">Photo added</option>
+              <option value="photo_removed">Photo removed</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="activity-filter-user">User</label>
+            <select id="activity-filter-user">
+              <option value="all">All users</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="activity-filter-days">Time range</label>
+            <select id="activity-filter-days">
+              <option value="7">Last 7 days</option>
+              <option value="30" selected>Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="365">Last year</option>
+              <option value="all">All time</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="activity-toolbar">
+          <p class="activity-count" id="activity-count"></p>
+          <button type="button" class="btn secondary" id="activity-refresh-btn">Refresh</button>
+        </div>
+
+        <div id="activity-list">
+          <div class="empty-state loading-pulse">Loading activity…</div>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 16px;">
+          <button type="button" class="btn ghost hidden" id="activity-load-more">Load more</button>
+        </div>
+      </section>
+
+      <footer class="page-footer" data-settings-footer>MaintainSMIP · SMI Properties Fleet Maintenance</footer>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="activity.js"></script>
+  </body>
+</html>

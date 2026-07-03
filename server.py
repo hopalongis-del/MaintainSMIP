@@ -2215,7 +2215,10 @@ async def list_audit_entries(
     request: Request,
     entity_type: Optional[str] = Query(None),
     entity_id: Optional[str] = Query(None),
-    limit: int = Query(25, ge=1, le=100),
+    action: Optional[str] = Query(None),
+    username: Optional[str] = Query(None),
+    days: Optional[int] = Query(None, ge=1, le=365),
+    limit: int = Query(25, ge=1, le=200),
 ) -> List[dict[str, Any]]:
     require_authenticated_user(request)
     query = 'SELECT * FROM audit_log'
@@ -2227,6 +2230,16 @@ async def list_audit_entries(
     if entity_id is not None:
         conditions.append('entity_id = ?')
         params.append(str(entity_id))
+    if action:
+        conditions.append('action = ?')
+        params.append(action)
+    if username:
+        conditions.append('username = ?')
+        params.append(username)
+    if days is not None:
+        since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        conditions.append('created_at >= ?')
+        params.append(since)
     if conditions:
         query += ' WHERE ' + ' AND '.join(conditions)
     query += ' ORDER BY id DESC LIMIT ?'

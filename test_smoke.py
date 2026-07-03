@@ -178,6 +178,13 @@ def run_tests(client: TestClient) -> None:
     assert any("Added cart" in entry["summary"] for entry in cart_audit_entries)
     assert any("Retired cart" in entry["summary"] for entry in cart_audit_entries)
 
+    activity_page = client.get("/activity.html")
+    assert activity_page.status_code == 200, activity_page.text
+
+    activity_log = client.get("/api/audit?limit=50&days=30")
+    assert activity_log.status_code == 200, activity_log.text
+    assert isinstance(activity_log.json(), list)
+
     health = client.get("/api/health")
     assert health.status_code == 200, health.text
     health_data = health.json()

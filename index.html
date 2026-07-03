@@ -403,6 +403,12 @@
         });
 
         populateCartDatalists();
+
+        const fleetSearch = db.readUrlParams().get('fleet_search');
+        if (fleetSearch) {
+          document.getElementById('fleet-filter-search').value = fleetSearch;
+        }
+
         renderFleetTable();
       }
 
