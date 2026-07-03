@@ -47,7 +47,7 @@ TECHNICIAN_ACCOUNTS = [
     ('gavin.weinmeister', 'Gavin Weinmeister', 'technician'),
     ('kevin.stellman', 'Kevin Stellman', 'technician'),
     ('cory.yeager', 'Cory Yeager', 'technician'),
-    ('mike.casady', 'Mike Casady', 'technician'),
+    ('mike.casady', 'Mike Casady', 'manager'),
     ('dusty.hixson', 'Dusty Hixson', 'technician'),
     ('brian.lachance', 'Brian Lachance', 'technician'),
     ('stephen.hering', 'Stephen Hering', 'technician'),
@@ -213,6 +213,12 @@ async def ensure_users_seeded() -> None:
     if active_admins == 0:
         master_password = APP_PASSWORD or 'WeLoveRacing!'
         await upsert_master_admin(master_password)
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            "UPDATE users SET role = 'manager' WHERE username = 'mike.casady' AND role = 'technician'",
+        )
+        await connection.commit()
 
 
 def get_request_user(request: Request) -> Optional[dict[str, Any]]:
