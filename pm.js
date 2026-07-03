@@ -212,7 +212,7 @@ async function renderPmDetail(record) {
           <label>Technician
             <select id="pm-tech-select" style="margin-top:6px;">
               <option value="">— Select tech —</option>
-              ${['Gavin Weinmeister','Kevin Stellman','Cory Yeager','Mike Casady','Dusty Hixson','Brian Lachance','Stephen Hering','Mark Hixson'].map(t => `<option${(record.tech_name||'')===t?' selected':''}>${t}</option>`).join('')}
+              ${['Gavin Weinmeister','Kevin Stellman','Cory Yeager','Mike Casady','Dusty Hixson','Brian Lachance','Chelsie','Stephen Hering','Mark Hixson'].map(t => `<option${(record.tech_name||'')===t?' selected':''}>${t}</option>`).join('')}
             </select>
           </label>
         </div>

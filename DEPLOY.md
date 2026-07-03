@@ -61,6 +61,7 @@ On first boot the app seeds individual accounts:
 | `admin` | Master admin (full access) | Your `APP_PASSWORD` value |
 | `gavin.weinmeister`, `kevin.stellman`, etc. | Technician | Same `APP_PASSWORD` until changed |
 | `mike.casady` | Manager (elevated access) | Same `APP_PASSWORD` until changed |
+| `dusty.hixson`, `brian.lachance`, `chelsie` | Admin (full access + user management) | Same `APP_PASSWORD` until changed |
 
 **Lockout safeguards**
 

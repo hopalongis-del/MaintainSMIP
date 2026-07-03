@@ -42,6 +42,7 @@ const TECHNICIANS = [
   'Mike Casady',
   'Dusty Hixson',
   'Brian Lachance',
+  'Chelsie',
   'Stephen Hering',
   'Mark Hixson',
 ];

@@ -48,11 +48,19 @@ TECHNICIAN_ACCOUNTS = [
     ('kevin.stellman', 'Kevin Stellman', 'technician'),
     ('cory.yeager', 'Cory Yeager', 'technician'),
     ('mike.casady', 'Mike Casady', 'manager'),
-    ('dusty.hixson', 'Dusty Hixson', 'technician'),
-    ('brian.lachance', 'Brian Lachance', 'technician'),
+    ('dusty.hixson', 'Dusty Hixson', 'admin'),
+    ('brian.lachance', 'Brian Lachance', 'admin'),
+    ('chelsie', 'Chelsie', 'admin'),
     ('stephen.hering', 'Stephen Hering', 'technician'),
     ('mark.hixson', 'Mark Hixson', 'technician'),
 ]
+
+PRIVILEGED_ROLE_OVERRIDES = {
+    'mike.casady': 'manager',
+    'dusty.hixson': 'admin',
+    'brian.lachance': 'admin',
+    'chelsie': 'admin',
+}
 
 
 def hash_password(password: str) -> str:
@@ -214,10 +222,33 @@ async def ensure_users_seeded() -> None:
         master_password = APP_PASSWORD or 'WeLoveRacing!'
         await upsert_master_admin(master_password)
 
+    await apply_privileged_role_overrides()
+
+
+async def apply_privileged_role_overrides() -> None:
+    """Keep leadership accounts at the right privilege level; add Chelsie if missing."""
+    master_password = APP_PASSWORD or 'WeLoveRacing!'
+    now = datetime.utcnow().isoformat()
     async with aiosqlite.connect(DB_PATH) as connection:
-        await connection.execute(
-            "UPDATE users SET role = 'manager' WHERE username = 'mike.casady' AND role = 'technician'",
+        for username, role in PRIVILEGED_ROLE_OVERRIDES.items():
+            await connection.execute(
+                'UPDATE users SET role = ? WHERE username = ?',
+                (role, username),
+            )
+
+        cursor = await connection.execute(
+            'SELECT id FROM users WHERE username = ?',
+            ('chelsie',),
         )
+        if not await cursor.fetchone():
+            await connection.execute(
+                '''
+                INSERT INTO users (username, display_name, role, password_hash, active, created_date)
+                VALUES (?, ?, 'admin', ?, 1, ?)
+                ''',
+                ('chelsie', 'Chelsie', hash_password(master_password), now),
+            )
+
         await connection.commit()
 
 
