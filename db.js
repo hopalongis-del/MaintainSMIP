@@ -2,6 +2,15 @@
 const API = '';
 const LIVE_URL = 'https://maintainsmip.onrender.com';
 
+(function redirectIfLocalFile() {
+  if (window.location.protocol !== 'file:') return;
+  const page = window.location.pathname.split(/[/\\]/).pop() || 'index.html';
+  const path = page === 'index.html' ? '' : `/${page}`;
+  const useLocal = new URLSearchParams(window.location.search).get('local') === '1';
+  const target = useLocal ? `http://localhost:8000${path || '/'}` : `${LIVE_URL}${path}`;
+  window.location.replace(target);
+})();
+
 function isLocalFile() {
   return window.location.protocol === 'file:';
 }
@@ -19,7 +28,7 @@ function getOfflineHelp() {
   if (isLocalFile()) {
     return {
       title: 'Open through the web server',
-      detail: `This page was opened as a file on your computer, so it cannot reach the API. Open <a href="${LIVE_URL}">${LIVE_URL}</a> instead, or run start.bat and use <a href="http://localhost:8000">http://localhost:8000</a>.`,
+      detail: `Double-click <strong>open-app.bat</strong> for local use, or open <a href="${LIVE_URL}">${LIVE_URL}</a> for the live demo.`,
       retryable: false,
     };
   }
