@@ -545,6 +545,110 @@ const db = {
     }
     return r.json();
   },
+  isPushSupported() {
+    return 'serviceWorker' in navigator && 'PushManager' in window && window.isSecureContext;
+  },
+  urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData], (char) => char.charCodeAt(0));
+  },
+  async ensureServiceWorker() {
+    if (!this.isPushSupported()) return null;
+    return navigator.serviceWorker.register('/service-worker.js');
+  },
+  async getPushPublicKey() {
+    const r = await fetchApi('/api/push/vapid-public-key');
+    return r.ok ? r.json() : null;
+  },
+  async getPushStatus() {
+    const r = await fetchApi('/api/push/status');
+    return r.ok ? r.json() : { subscribed: false, subscription_count: 0 };
+  },
+  async getNotificationPrefs() {
+    const r = await fetchApi('/api/notifications/preferences');
+    return r.ok ? r.json() : null;
+  },
+  async syncNotificationPrefs(prefs) {
+    const r = await fetchApi('/api/notifications/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        notify_overdue_wo: Boolean(prefs.notifyOverdueWo),
+        notify_pm_due: Boolean(prefs.notifyPmDue),
+        notify_accidents: Boolean(prefs.notifyAccidents),
+      }),
+    });
+    return r.ok ? r.json() : null;
+  },
+  async subscribePush() {
+    if (!this.isPushSupported()) {
+      return { error: 'Push notifications require HTTPS and a supported browser.' };
+    }
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      return { error: 'Notification permission was blocked. Enable it in browser settings.' };
+    }
+    const registration = await this.ensureServiceWorker();
+    await navigator.serviceWorker.ready;
+    const keyData = await this.getPushPublicKey();
+    if (!keyData?.public_key) {
+      return { error: 'Could not load push configuration from the server.' };
+    }
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: this.urlBase64ToUint8Array(keyData.public_key),
+      });
+    }
+    const body = subscription.toJSON();
+    const r = await fetchApi('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      let detail = 'Could not save push subscription.';
+      try {
+        const payload = await r.json();
+        detail = payload.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+  async unsubscribePush() {
+    if (!this.isPushSupported()) return { unsubscribed: true };
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    if (!subscription) return { unsubscribed: true };
+    const endpoint = subscription.endpoint;
+    await fetchApi('/api/push/subscribe', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint }),
+    });
+    await subscription.unsubscribe();
+    return { unsubscribed: true };
+  },
+  async sendTestPush() {
+    const r = await fetchApi('/api/push/test', { method: 'POST' });
+    if (!r.ok) {
+      let detail = 'Test push failed.';
+      try {
+        const payload = await r.json();
+        detail = payload.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
   async createUser(user) {
     const r = await fetchApi('/api/users', {
       method: 'POST',

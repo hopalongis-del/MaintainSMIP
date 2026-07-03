@@ -21,3 +21,5 @@ services:
         sync: false
       - key: APP_SECRET
         sync: false
+      - key: VAPID_EMAIL
+        value: mailto:support@smiproperties.com

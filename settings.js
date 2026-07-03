@@ -1,4 +1,4 @@
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
 
@@ -305,7 +305,7 @@ function buildSettingsModal() {
 
         <section class="settings-section">
           <h3>Notifications</h3>
-          <p class="hero-sub">Alert preferences are saved now. Delivery is coming soon.</p>
+          <p class="hero-sub" id="push-status-copy">Checking push notification status…</p>
           <div class="settings-checklist">
             <label class="settings-check-row">
               <input type="checkbox" id="settings-notify-overdue-wo" />
@@ -319,6 +319,12 @@ function buildSettingsModal() {
               <input type="checkbox" id="settings-notify-accidents" />
               <span>New accident damage reports</span>
             </label>
+          </div>
+          <div class="settings-form" style="margin-top: 12px;">
+            <button type="button" class="btn primary" id="enable-push-btn">Enable Push Notifications</button>
+            <button type="button" class="btn secondary hidden" id="disable-push-btn">Turn Off Push</button>
+            <button type="button" class="btn ghost hidden" id="test-push-btn">Send Test Alert</button>
+            <p class="hero-sub" id="push-action-status"></p>
           </div>
         </section>
 
@@ -485,9 +491,81 @@ function flashSettingsSaved() {
   }, 1600);
 }
 
+async function syncNotificationPrefsToServer() {
+  if (typeof db === 'undefined') return;
+  const prefs = collectSettingsFromForm();
+  try {
+    await db.syncNotificationPrefs(prefs);
+  } catch (err) {
+    /* server sync is best-effort while offline */
+  }
+}
+
+async function refreshPushStatusUi() {
+  const statusCopy = document.getElementById('push-status-copy');
+  const enableBtn = document.getElementById('enable-push-btn');
+  const disableBtn = document.getElementById('disable-push-btn');
+  const testBtn = document.getElementById('test-push-btn');
+  if (!statusCopy || typeof db === 'undefined') return;
+
+  if (!db.isPushSupported()) {
+    statusCopy.textContent = 'Push requires HTTPS in Chrome, Edge, or Firefox. On iPhone, add the app to your Home Screen first.';
+    enableBtn?.classList.add('hidden');
+    disableBtn?.classList.add('hidden');
+    testBtn?.classList.add('hidden');
+    return;
+  }
+
+  const status = await db.getPushStatus();
+  if (status.subscribed) {
+    statusCopy.textContent = 'Push notifications are on for this device. You will receive alerts based on the options below.';
+    enableBtn?.classList.add('hidden');
+    disableBtn?.classList.remove('hidden');
+    testBtn?.classList.remove('hidden');
+  } else {
+    statusCopy.textContent = 'Turn on push to get overdue work order, PM, and accident alerts on this device.';
+    enableBtn?.classList.remove('hidden');
+    disableBtn?.classList.add('hidden');
+    testBtn?.classList.add('hidden');
+  }
+}
+
+function wirePushNotifications() {
+  document.getElementById('enable-push-btn')?.addEventListener('click', async () => {
+    const statusEl = document.getElementById('push-action-status');
+    if (typeof db === 'undefined') return;
+    statusEl.textContent = 'Enabling push…';
+    await syncNotificationPrefsToServer();
+    const result = await db.subscribePush();
+    if (result?.error) {
+      statusEl.textContent = result.error;
+      return;
+    }
+    statusEl.textContent = 'Push notifications enabled on this device.';
+    await refreshPushStatusUi();
+  });
+
+  document.getElementById('disable-push-btn')?.addEventListener('click', async () => {
+    const statusEl = document.getElementById('push-action-status');
+    if (typeof db === 'undefined') return;
+    await db.unsubscribePush();
+    statusEl.textContent = 'Push notifications turned off for this device.';
+    await refreshPushStatusUi();
+  });
+
+  document.getElementById('test-push-btn')?.addEventListener('click', async () => {
+    const statusEl = document.getElementById('push-action-status');
+    if (typeof db === 'undefined') return;
+    statusEl.textContent = 'Sending test alert…';
+    const result = await db.sendTestPush();
+    statusEl.textContent = result?.error || 'Test alert sent — check your device notifications.';
+  });
+}
+
 function wireSettingsForm() {
   const persistFromForm = () => {
     saveSettings(collectSettingsFromForm());
+    syncNotificationPrefsToServer();
     flashSettingsSaved();
     wireSessionTimeout();
   };
@@ -709,6 +787,7 @@ function openSettings() {
   const modal = document.getElementById('settings-modal');
   if (!modal) return;
   populateSettingsDynamicOptions().then(() => syncSettingsForm());
+  refreshPushStatusUi();
   modal.classList.remove('hidden');
   modal.setAttribute('aria-hidden', 'false');
 }
@@ -795,6 +874,23 @@ window.MaintainSMIPSettings = {
   getShopName: () => getSettings().shopName || DEFAULT_SETTINGS.shopName,
 };
 
+async function initPushBackground() {
+  if (typeof db === 'undefined' || !db.isPushSupported()) return;
+  try {
+    await db.ensureServiceWorker();
+    const serverPrefs = await db.getNotificationPrefs();
+    if (serverPrefs) {
+      saveSettings({
+        notifyOverdueWo: serverPrefs.notify_overdue_wo,
+        notifyPmDue: serverPrefs.notify_pm_due,
+        notifyAccidents: serverPrefs.notify_accidents,
+      });
+    }
+  } catch (err) {
+    /* push warms up when user opens settings */
+  }
+}
+
 function initSettings() {
   buildSettingsModal();
   injectActivityNavLink();
@@ -802,12 +898,16 @@ function initSettings() {
   injectSettingsButton();
   wireAdminUserForm();
   wireChangePasswordForm();
+  wirePushNotifications();
   applySettings();
   syncSettingsForm();
   wireSettingsForm();
   wireSessionTimeout();
   maybeRedirectLandingPage();
   injectUserBadge();
+  window.addEventListener('load', () => {
+    if (typeof db !== 'undefined') initPushBackground();
+  });
 
   document.getElementById('open-settings-btn')?.addEventListener('click', openSettings);
   document.getElementById('settings-close')?.addEventListener('click', closeSettings);

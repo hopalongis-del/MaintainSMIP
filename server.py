@@ -1,4 +1,6 @@
 from __future__ import annotations
+import asyncio
+import base64
 import hashlib
 import hmac
 import json
@@ -39,9 +41,15 @@ PUBLIC_PATHS = {
     '/login.html',
     '/api/auth/login',
     '/api/health',
+    '/api/push/vapid-public-key',
     '/shared.css',
     '/logo1.png',
+    '/service-worker.js',
 }
+
+VAPID_EMAIL = os.environ.get('VAPID_EMAIL', 'mailto:support@smiproperties.com')
+VAPID_KEYS_PATH = DATA_DIR / 'vapid_keys.json'
+NOTIFICATION_CHECK_INTERVAL_SEC = int(os.environ.get('NOTIFICATION_CHECK_INTERVAL_SEC', '1800'))
 
 TECHNICIAN_ACCOUNTS = [
     ('gavin.weinmeister', 'Gavin Weinmeister', 'technician'),
@@ -518,7 +526,13 @@ async def lifespan(app: FastAPI):
     await ensure_wo_templates_seeded()
     await ensure_users_seeded()
     await seed_demo_data()
+    notification_task = asyncio.create_task(notification_loop())
     yield
+    notification_task.cancel()
+    try:
+        await notification_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(title='MaintainSMIP API', version='1.0', lifespan=lifespan)
@@ -744,6 +758,21 @@ class AuditEntry(BaseModel):
     details: Optional[dict[str, Any]] = None
 
 
+class NotificationPrefsUpdate(BaseModel):
+    notify_overdue_wo: bool = True
+    notify_pm_due: bool = True
+    notify_accidents: bool = True
+
+
+class PushSubscriptionCreate(BaseModel):
+    endpoint: str
+    keys: dict[str, str] = Field(default_factory=dict)
+
+
+class PushUnsubscribeRequest(BaseModel):
+    endpoint: str
+
+
 async def get_database() -> aiosqlite.Connection:
     return await aiosqlite.connect(DB_PATH)
 
@@ -841,6 +870,327 @@ async def seed_carts_from_file() -> None:
 
 async def refresh_carts_cache() -> None:
     app.state.carts = await fetch_all_carts()
+
+
+DEFAULT_NOTIFICATION_PREFS = {
+    'notify_overdue_wo': True,
+    'notify_pm_due': True,
+    'notify_accidents': True,
+}
+
+
+def _load_vapid_keys() -> tuple[str, str]:
+    public = os.environ.get('VAPID_PUBLIC_KEY', '').strip()
+    private = os.environ.get('VAPID_PRIVATE_KEY', '').strip()
+    if public and private:
+        return public, private
+
+    if VAPID_KEYS_PATH.exists():
+        data = json.loads(VAPID_KEYS_PATH.read_text(encoding='utf-8'))
+        return data['public_key'], data['private_key']
+
+    from py_vapid import Vapid01, b64urlencode
+    from cryptography.hazmat.primitives import serialization
+
+    vapid = Vapid01()
+    vapid.generate_keys()
+    private_key = vapid.private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    public_key = vapid.public_key.public_bytes(
+        encoding=serialization.Encoding.X962,
+        format=serialization.PublicFormat.UncompressedPoint,
+    )
+    keys = {
+        'public_key': b64urlencode(public_key),
+        'private_key': b64urlencode(private_key),
+    }
+    VAPID_KEYS_PATH.write_text(json.dumps(keys), encoding='utf-8')
+    return keys['public_key'], keys['private_key']
+
+
+VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY = _load_vapid_keys()
+
+
+def parse_notification_prefs(raw: Optional[str]) -> dict[str, bool]:
+    if not raw:
+        return dict(DEFAULT_NOTIFICATION_PREFS)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return dict(DEFAULT_NOTIFICATION_PREFS)
+    return {
+        'notify_overdue_wo': bool(data.get('notify_overdue_wo', True)),
+        'notify_pm_due': bool(data.get('notify_pm_due', True)),
+        'notify_accidents': bool(data.get('notify_accidents', True)),
+    }
+
+
+async def fetch_notification_prefs(user_id: int) -> dict[str, bool]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT notification_prefs FROM users WHERE id = ?',
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+    if not row:
+        return dict(DEFAULT_NOTIFICATION_PREFS)
+    return parse_notification_prefs(row['notification_prefs'])
+
+
+async def save_notification_prefs(user_id: int, prefs: dict[str, bool]) -> dict[str, bool]:
+    normalized = {
+        'notify_overdue_wo': bool(prefs.get('notify_overdue_wo', True)),
+        'notify_pm_due': bool(prefs.get('notify_pm_due', True)),
+        'notify_accidents': bool(prefs.get('notify_accidents', True)),
+    }
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            'UPDATE users SET notification_prefs = ? WHERE id = ?',
+            (json.dumps(normalized), user_id),
+        )
+        await connection.commit()
+    return normalized
+
+
+async def upsert_push_subscription(
+    user_id: int,
+    endpoint: str,
+    p256dh: str,
+    auth_key: str,
+    user_agent: str = '',
+) -> None:
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            '''
+            INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(endpoint) DO UPDATE SET
+                user_id = excluded.user_id,
+                p256dh = excluded.p256dh,
+                auth = excluded.auth,
+                user_agent = excluded.user_agent,
+                created_at = excluded.created_at
+            ''',
+            (user_id, endpoint, p256dh, auth_key, user_agent, now),
+        )
+        await connection.commit()
+
+
+async def delete_push_subscription(endpoint: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute('DELETE FROM push_subscriptions WHERE endpoint = ?', (endpoint,))
+        await connection.commit()
+
+
+async def fetch_push_subscriptions_for_user(user_id: int) -> list[dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?',
+            (user_id,),
+        )
+        rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+async def count_push_subscriptions_for_user(user_id: int) -> int:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute(
+            'SELECT COUNT(*) FROM push_subscriptions WHERE user_id = ?',
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+    return int(row[0]) if row else 0
+
+
+def _send_push_sync(subscription: dict[str, str], payload: dict[str, Any]) -> None:
+    from pywebpush import WebPushException, webpush
+
+    subscription_info = {
+        'endpoint': subscription['endpoint'],
+        'keys': {
+            'p256dh': subscription['p256dh'],
+            'auth': subscription['auth'],
+        },
+    }
+    webpush(
+        subscription_info=subscription_info,
+        data=json.dumps(payload),
+        vapid_private_key=VAPID_PRIVATE_KEY,
+        vapid_claims={'sub': VAPID_EMAIL},
+    )
+
+
+async def send_push_to_user(user_id: int, payload: dict[str, Any]) -> int:
+    from pywebpush import WebPushException
+
+    subscriptions = await fetch_push_subscriptions_for_user(user_id)
+    sent = 0
+    for subscription in subscriptions:
+        try:
+            await asyncio.to_thread(_send_push_sync, subscription, payload)
+            sent += 1
+        except WebPushException as exc:
+            if exc.response is not None and exc.response.status_code in (404, 410):
+                await delete_push_subscription(subscription['endpoint'])
+        except Exception:
+            pass
+    return sent
+
+
+async def should_send_digest(user_id: int, alert_key: str) -> bool:
+    today = datetime.utcnow().strftime('%Y-%m-%d')
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute(
+            '''
+            SELECT 1 FROM notification_dedup
+            WHERE user_id = ? AND alert_key = ? AND sent_date = ?
+            ''',
+            (user_id, alert_key, today),
+        )
+        if await cursor.fetchone():
+            return False
+        await connection.execute(
+            '''
+            INSERT INTO notification_dedup (user_id, alert_key, sent_date)
+            VALUES (?, ?, ?)
+            ''',
+            (user_id, alert_key, today),
+        )
+        await connection.commit()
+    return True
+
+
+async def fetch_push_enabled_users() -> list[dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            '''
+            SELECT DISTINCT u.id, u.username, u.display_name, u.notification_prefs
+            FROM users u
+            INNER JOIN push_subscriptions ps ON ps.user_id = u.id
+            WHERE u.active = 1
+            '''
+        )
+        rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+async def compute_alert_counts() -> dict[str, int]:
+    now = datetime.utcnow().isoformat()
+    week_end = datetime.utcnow().timestamp() + 7 * 86400
+    week_end_iso = datetime.utcfromtimestamp(week_end).isoformat()
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            '''
+            SELECT COUNT(*) as total FROM work_orders
+            WHERE due_date IS NOT NULL
+              AND due_date < ?
+              AND status NOT IN ('completed', 'closed')
+            ''',
+            (now,),
+        )
+        overdue_wo = (await cursor.fetchone())['total']
+
+        cursor = await connection.execute(
+            '''
+            SELECT COUNT(*) as total FROM pm_records
+            WHERE status = 'scheduled'
+              AND scheduled_date IS NOT NULL
+              AND scheduled_date <= ?
+            ''',
+            (week_end_iso,),
+        )
+        pm_due = (await cursor.fetchone())['total']
+
+        cursor = await connection.execute(
+            '''
+            SELECT COUNT(*) as total FROM pm_records
+            WHERE scheduled_date IS NOT NULL
+              AND scheduled_date < ?
+              AND status NOT IN ('completed', 'skipped')
+            ''',
+            (now,),
+        )
+        pm_overdue = (await cursor.fetchone())['total']
+
+        cursor = await connection.execute(
+            '''
+            SELECT COUNT(*) as total FROM accident_reports
+            WHERE status NOT IN ('resolved')
+            '''
+        )
+        open_accidents = (await cursor.fetchone())['total']
+
+    return {
+        'overdue_wo': overdue_wo,
+        'pm_due': pm_due,
+        'pm_overdue': pm_overdue,
+        'open_accidents': open_accidents,
+    }
+
+
+async def run_scheduled_notifications() -> None:
+    counts = await compute_alert_counts()
+    users = await fetch_push_enabled_users()
+
+    for user in users:
+        prefs = parse_notification_prefs(user.get('notification_prefs'))
+        user_id = user['id']
+
+        if prefs['notify_overdue_wo'] and counts['overdue_wo'] > 0:
+            if await should_send_digest(user_id, 'overdue_wo'):
+                await send_push_to_user(user_id, {
+                    'title': 'Overdue Work Orders',
+                    'body': f'{counts["overdue_wo"]} work order(s) are past due.',
+                    'url': '/workorders.html?overdue=1',
+                    'tag': 'overdue-wo',
+                })
+
+        if prefs['notify_pm_due'] and (counts['pm_due'] > 0 or counts['pm_overdue'] > 0):
+            if await should_send_digest(user_id, 'pm_due'):
+                parts = []
+                if counts['pm_overdue'] > 0:
+                    parts.append(f'{counts["pm_overdue"]} overdue')
+                if counts['pm_due'] > 0:
+                    parts.append(f'{counts["pm_due"]} due soon')
+                await send_push_to_user(user_id, {
+                    'title': 'PM Reminder',
+                    'body': 'PM schedule: ' + ', '.join(parts) + '.',
+                    'url': '/pm.html?due=week',
+                    'tag': 'pm-due',
+                })
+
+
+async def broadcast_accident_push(accident_id: int, cart_id: int, reported_by: str) -> None:
+    users = await fetch_push_enabled_users()
+    for user in users:
+        prefs = parse_notification_prefs(user.get('notification_prefs'))
+        if not prefs['notify_accidents']:
+            continue
+        await send_push_to_user(user['id'], {
+            'title': 'New Accident Report',
+            'body': f'ACC-{accident_id} reported for cart #{cart_id} by {reported_by}.',
+            'url': f'/accidents.html?id={accident_id}',
+            'tag': f'accident-{accident_id}',
+        })
+
+
+async def notification_loop() -> None:
+    await asyncio.sleep(30)
+    while True:
+        try:
+            await run_scheduled_notifications()
+        except Exception:
+            pass
+        await asyncio.sleep(NOTIFICATION_CHECK_INTERVAL_SEC)
 
 
 def parse_work_order_row(row: aiosqlite.Row) -> WorkOrder:
@@ -992,6 +1342,35 @@ async def create_tables() -> None:
             await connection.execute(
                 'ALTER TABLE users ADD COLUMN password_changed INTEGER NOT NULL DEFAULT 0',
             )
+        cursor = await connection.execute('PRAGMA table_info(users)')
+        user_columns = [col[1] for col in await cursor.fetchall()]
+        if 'notification_prefs' not in user_columns:
+            await connection.execute(
+                'ALTER TABLE users ADD COLUMN notification_prefs TEXT',
+            )
+        await connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                endpoint TEXT NOT NULL UNIQUE,
+                p256dh TEXT NOT NULL,
+                auth TEXT NOT NULL,
+                user_agent TEXT,
+                created_at TEXT
+            )
+            '''
+        )
+        await connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS notification_dedup (
+                user_id INTEGER NOT NULL,
+                alert_key TEXT NOT NULL,
+                sent_date TEXT NOT NULL,
+                PRIMARY KEY (user_id, alert_key, sent_date)
+            )
+            '''
+        )
         await connection.execute(
             '''
             CREATE TABLE IF NOT EXISTS audit_log (
@@ -2049,6 +2428,7 @@ async def create_accident(request: Request, item: AccidentReportCreate) -> Accid
         f'Reported ACC-{row_id} for cart #{item.cart_id}',
         {'severity': item.severity, 'status': item.status},
     )
+    await broadcast_accident_push(row_id, item.cart_id, item.reported_by or user['display_name'])
 
     return AccidentReport(**{
         'id': row_id,
@@ -2257,6 +2637,76 @@ async def list_audit_entries(
         data['details'] = json.loads(details_raw) if details_raw else None
         entries.append(data)
     return entries
+
+
+@app.get('/api/push/vapid-public-key')
+async def get_vapid_public_key() -> dict[str, str]:
+    return {'public_key': VAPID_PUBLIC_KEY}
+
+
+@app.get('/api/push/status')
+async def get_push_status(request: Request) -> dict[str, Any]:
+    user = require_authenticated_user(request)
+    count = await count_push_subscriptions_for_user(user['id'])
+    return {
+        'subscribed': count > 0,
+        'subscription_count': count,
+        'push_supported': True,
+    }
+
+
+@app.post('/api/push/subscribe')
+async def subscribe_push(request: Request, item: PushSubscriptionCreate) -> dict[str, Any]:
+    user = require_authenticated_user(request)
+    p256dh = item.keys.get('p256dh', '').strip()
+    auth_key = item.keys.get('auth', '').strip()
+    if not item.endpoint or not p256dh or not auth_key:
+        raise HTTPException(status_code=400, detail='Invalid push subscription payload')
+
+    user_agent = request.headers.get('user-agent', '')
+    await upsert_push_subscription(user['id'], item.endpoint, p256dh, auth_key, user_agent)
+    return {'subscribed': True}
+
+
+@app.delete('/api/push/subscribe')
+async def unsubscribe_push(request: Request, item: PushUnsubscribeRequest) -> dict[str, Any]:
+    user = require_authenticated_user(request)
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            'DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?',
+            (item.endpoint, user['id']),
+        )
+        await connection.commit()
+    return {'subscribed': False}
+
+
+@app.post('/api/push/test')
+async def send_test_push(request: Request) -> dict[str, Any]:
+    user = require_authenticated_user(request)
+    sent = await send_push_to_user(user['id'], {
+        'title': 'MaintainSMIP Test Alert',
+        'body': 'Push notifications are working on this device.',
+        'url': '/index.html',
+        'tag': 'push-test',
+    })
+    if sent == 0:
+        raise HTTPException(status_code=400, detail='No active push subscription found for your account')
+    return {'sent': sent}
+
+
+@app.get('/api/notifications/preferences')
+async def get_notification_preferences(request: Request) -> dict[str, bool]:
+    user = require_authenticated_user(request)
+    return await fetch_notification_prefs(user['id'])
+
+
+@app.put('/api/notifications/preferences')
+async def update_notification_preferences(
+    request: Request,
+    item: NotificationPrefsUpdate,
+) -> dict[str, bool]:
+    user = require_authenticated_user(request)
+    return await save_notification_prefs(user['id'], item.model_dump())
 
 
 @app.get('/api/stats')

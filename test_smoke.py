@@ -184,6 +184,28 @@ def run_tests(client: TestClient) -> None:
     reports_page = client.get("/reports.html")
     assert reports_page.status_code == 200, reports_page.text
 
+    vapid = client.get("/api/push/vapid-public-key")
+    assert vapid.status_code == 200, vapid.text
+    assert vapid.json().get("public_key")
+
+    prefs = client.put(
+        "/api/notifications/preferences",
+        json={
+            "notify_overdue_wo": True,
+            "notify_pm_due": True,
+            "notify_accidents": False,
+        },
+    )
+    assert prefs.status_code == 200, prefs.text
+    assert prefs.json()["notify_accidents"] is False
+
+    push_status = client.get("/api/push/status")
+    assert push_status.status_code == 200, push_status.text
+    assert push_status.json()["subscribed"] is False
+
+    service_worker = client.get("/service-worker.js")
+    assert service_worker.status_code == 200, service_worker.text
+
     activity_log = client.get("/api/audit?limit=50&days=30")
     assert activity_log.status_code == 200, activity_log.text
     assert isinstance(activity_log.json(), list)
