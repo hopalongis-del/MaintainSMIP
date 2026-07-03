@@ -62,7 +62,13 @@ async function fetchApi(path, options = {}) {
       await new Promise((resolve) => setTimeout(resolve, delays[attempt] || 5000));
     }
     try {
-      return await fetch(`${API}${path}`, options);
+      const response = await fetch(`${API}${path}`, options);
+      if (response.status === 401) {
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `/login.html?next=${next}`;
+        throw new Error('Authentication required');
+      }
+      return response;
     } catch (err) {
       lastErr = err;
     }

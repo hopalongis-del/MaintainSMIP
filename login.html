@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign In | MaintainSMIP</title>
+    <link rel="icon" href="logo1.png" type="image/png" />
+    <link rel="stylesheet" href="shared.css" />
+    <style>
+      .login-shell {
+        min-height: calc(100vh - 48px);
+        display: grid;
+        place-items: center;
+        padding: 24px 0;
+      }
+
+      .login-card {
+        width: min(420px, 100%);
+        padding: 32px;
+      }
+
+      .login-brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 24px;
+      }
+
+      .login-brand img {
+        width: 48px;
+        height: 48px;
+        object-fit: contain;
+      }
+
+      .login-form {
+        display: grid;
+        gap: 16px;
+        margin-top: 20px;
+      }
+
+      .login-error {
+        color: #fca5a5;
+        font-size: 0.9rem;
+        min-height: 1.2em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page login-shell">
+      <section class="card login-card">
+        <div class="login-brand">
+          <img src="logo1.png" alt="MaintainSMIP" />
+          <div>
+            <span class="eyebrow">Secure Access</span>
+            <h2 style="margin: 6px 0 0;">MaintainSMIP</h2>
+          </div>
+        </div>
+        <p class="hero-sub">Enter the demo password to view fleet maintenance data.</p>
+        <form class="login-form" id="login-form">
+          <div class="filter-group">
+            <label for="password">Password</label>
+            <input id="password" type="password" autocomplete="current-password" required autofocus />
+          </div>
+          <p class="login-error" id="login-error" aria-live="polite"></p>
+          <button class="btn primary" type="submit" id="login-btn">Sign In</button>
+        </form>
+      </section>
+    </div>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const nextUrl = params.get('next') || '/index.html';
+
+      document.getElementById('login-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const btn = document.getElementById('login-btn');
+        const errorEl = document.getElementById('login-error');
+        const password = document.getElementById('password').value;
+        btn.disabled = true;
+        errorEl.textContent = '';
+
+        try {
+          const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password }),
+          });
+          if (!response.ok) {
+            errorEl.textContent = 'Incorrect password. Try again.';
+            btn.disabled = false;
+            return;
+          }
+          window.location.href = nextUrl;
+        } catch (err) {
+          errorEl.textContent = 'Could not reach the server. Check your connection.';
+          btn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -8,7 +8,14 @@ def main() -> None:
         run_tests(client)
 
 
+def login(client: TestClient) -> None:
+    response = client.post("/api/auth/login", json={"password": "WeLoveRacing!"})
+    assert response.status_code == 200, response.text
+
+
 def run_tests(client: TestClient) -> None:
+    login(client)
+
     stats = client.get("/api/stats")
     assert stats.status_code == 200, stats.text
 
@@ -25,7 +32,9 @@ def run_tests(client: TestClient) -> None:
     assert carts.status_code == 200, carts.text
     assert len(carts.json()) > 0
 
+    assert client.get("/api/health").status_code == 200
     assert client.get("/").status_code == 200
+    assert client.get("/login.html").status_code == 200
     assert client.get("/logo1.png").status_code == 200
     assert client.get("/shared.css").status_code == 200
     assert client.get("/accidents.html").status_code == 200

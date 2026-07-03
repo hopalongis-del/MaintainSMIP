@@ -1,24 +1,79 @@
 from __future__ import annotations
+import hashlib
+import hmac
 import json
 import os
 import re
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, List, Optional
+from urllib.parse import quote
 
 import aiosqlite
 import uuid
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
 
 ROOT_DIR = Path(__file__).parent.resolve()
 DB_PATH = ROOT_DIR / 'maintainsmip.db'
 CART_DATA_PATH = ROOT_DIR / 'cart_data.js'
 UPLOADS_DIR = ROOT_DIR / 'uploads' / 'accidents'
+APP_PASSWORD = os.environ.get('APP_PASSWORD', 'WeLoveRacing!')
+APP_SECRET = os.environ.get('APP_SECRET', 'maintainsmip-session-secret')
+SESSION_COOKIE = 'ms_session'
+SESSION_MAX_AGE = 7 * 24 * 3600
+PUBLIC_PATHS = {
+    '/login.html',
+    '/api/auth/login',
+    '/api/health',
+    '/shared.css',
+    '/logo1.png',
+}
+
+
+def create_session_token() -> str:
+    expires = int(time.time()) + SESSION_MAX_AGE
+    payload = str(expires).encode()
+    signature = hmac.new(APP_SECRET.encode(), payload, hashlib.sha256).hexdigest()
+    return f'{expires}.{signature}'
+
+
+def verify_session_token(token: str) -> bool:
+    try:
+        expires_str, signature = token.split('.', 1)
+        expires = int(expires_str)
+        if expires < time.time():
+            return False
+        expected = hmac.new(APP_SECRET.encode(), expires_str.encode(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(signature, expected)
+    except (ValueError, TypeError):
+        return False
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if not APP_PASSWORD:
+            return await call_next(request)
+
+        path = request.url.path
+        if path in PUBLIC_PATHS:
+            return await call_next(request)
+
+        token = request.cookies.get(SESSION_COOKIE)
+        if token and verify_session_token(token):
+            return await call_next(request)
+
+        if path.startswith('/api/'):
+            return JSONResponse(status_code=401, content={'detail': 'Authentication required'})
+
+        next_path = path if path != '/' else '/index.html'
+        return RedirectResponse(f'/login.html?next={quote(next_path)}', status_code=302)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -39,6 +94,7 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+app.add_middleware(AuthMiddleware)
 
 
 class CartItem(BaseModel):
@@ -1228,6 +1284,40 @@ async def get_stats() -> dict:
         'pm_overdue': pm_overdue,
         'open_accidents': open_accidents,
     }
+
+
+class LoginRequest(BaseModel):
+    password: str
+
+
+@app.get('/api/health')
+def health() -> dict[str, str]:
+    return {'status': 'ok'}
+
+
+@app.post('/api/auth/login')
+def login(body: LoginRequest, request: Request, response: Response) -> dict[str, bool]:
+    if not APP_PASSWORD:
+        return {'ok': True}
+    if not hmac.compare_digest(body.password, APP_PASSWORD):
+        raise HTTPException(status_code=401, detail='Incorrect password')
+
+    token = create_session_token()
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        httponly=True,
+        samesite='lax',
+        max_age=SESSION_MAX_AGE,
+        secure=request.url.scheme == 'https',
+    )
+    return {'ok': True}
+
+
+@app.post('/api/auth/logout')
+def logout(response: Response) -> dict[str, bool]:
+    response.delete_cookie(SESSION_COOKIE)
+    return {'ok': True}
 
 
 @app.get('/')
