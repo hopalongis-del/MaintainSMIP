@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Work Orders | MaintainSMIP</title>
+    <link rel="icon" href="logo1.png" type="image/png" />
+    <link rel="stylesheet" href="shared.css" />
+    <link rel="stylesheet" href="workorders.css" />
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="index.html">
+          <div class="brand-mark">
+            <img class="brand-logo" src="logo1.png" alt="MaintainSMIP" />
+          </div>
+          <span>MaintainSMIP</span>
+        </a>
+        <div class="nav-links">
+          <a href="index.html">Dashboard</a>
+          <a class="active" href="workorders.html">Work Orders</a>
+          <a href="pm.html">Preventive Maintenance</a>
+          <a href="index.html#fleet">Fleet</a>
+        </div>
+      </nav>
+
+      <section class="card">
+        <div class="top-strip">
+          <div>
+            <span class="eyebrow">Work Orders</span>
+            <h2>Manage all fleet maintenance jobs in one place.</h2>
+          </div>
+          <button class="btn primary" id="new-wo-btn">New Work Order</button>
+        </div>
+
+        <div class="dash-strip" id="wo-dashboard-strip">
+          <div class="stat-card">
+            <span>Open</span>
+            <strong id="count-open">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>In Progress</span>
+            <strong id="count-in-progress">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>On Hold</span>
+            <strong id="count-on-hold">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>Overdue</span>
+            <strong id="count-overdue">0</strong>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label for="filter-status">Status</label>
+            <select id="filter-status">
+              <option value="all">All</option>
+              <option value="open">Open</option>
+              <option value="in_progress">In Progress</option>
+              <option value="on_hold">On Hold</option>
+              <option value="completed">Completed</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="filter-priority">Priority</label>
+            <select id="filter-priority">
+              <option value="all">All</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="filter-location">Location</label>
+            <select id="filter-location">
+              <option value="all">All</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="filter-type">Type</label>
+            <select id="filter-type">
+              <option value="all">All</option>
+              <option value="repair">Repair</option>
+              <option value="inspection">Inspection</option>
+              <option value="cleaning">Cleaning</option>
+              <option value="tire">Tire</option>
+              <option value="battery">Battery</option>
+              <option value="electrical">Electrical</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="filter-group search-group">
+            <label for="filter-search">Search</label>
+            <input id="filter-search" type="search" placeholder="Cart ID or WO number" />
+          </div>
+        </div>
+
+        <div class="grid wo-grid">
+          <div class="wo-list card" id="wo-list"></div>
+          <div class="wo-detail card hidden" id="wo-detail-panel"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal hidden" id="wo-modal">
+      <div class="modal-panel card">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">New Work Order</span>
+            <h2>Create Work Order</h2>
+          </div>
+          <button class="btn ghost" id="modal-close">Close</button>
+        </div>
+
+        <form id="wo-form">
+          <div class="form-grid">
+            <div>
+              <label for="wo-cart-search">Cart</label>
+              <input id="wo-cart-search" type="search" placeholder="Search cart by ID, serial, or location" />
+              <div class="cart-picker" id="wo-cart-list"></div>
+              <div class="selected-cart-summary" id="wo-selected-cart">Select a cart to populate work order fields.</div>
+            </div>
+            <div>
+              <label for="wo-title">Title</label>
+              <input id="wo-title" required placeholder="Short work order title" />
+            </div>
+            <div>
+              <label for="wo-type">Type</label>
+              <select id="wo-type">
+                <option value="repair">Repair</option>
+                <option value="inspection">Inspection</option>
+                <option value="cleaning">Cleaning</option>
+                <option value="tire">Tire</option>
+                <option value="battery">Battery</option>
+                <option value="electrical">Electrical</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label for="wo-priority">Priority</label>
+              <select id="wo-priority">
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+            <div>
+              <label for="wo-status">Status</label>
+              <select id="wo-status">
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="on_hold">On Hold</option>
+                <option value="completed">Completed</option>
+                <option value="closed">Closed</option>
+              </select>
+            </div>
+            <div>
+              <label for="wo-assigned-to">Assigned To</label>
+              <select id="wo-assigned-to">
+                <option value="">— Unassigned —</option>
+                <option>Gavin Weinmeister</option>
+                <option>Kevin Stellman</option>
+                <option>Cory Yeager</option>
+                <option>Mike Casady</option>
+                <option>Dusty Hixson</option>
+                <option>Brian Lachance</option>
+                <option>Stephen Hering</option>
+                <option>Mark Hixson</option>
+              </select>
+            </div>
+            <div>
+              <label for="wo-location">Location</label>
+              <input id="wo-location" placeholder="Location" />
+            </div>
+            <div>
+              <label for="wo-due-date">Due Date</label>
+              <input id="wo-due-date" type="date" />
+            </div>
+            <div>
+              <label for="wo-labor-minutes">Labor Minutes</label>
+              <input id="wo-labor-minutes" type="number" min="0" value="0" />
+            </div>
+          </div>
+
+          <div>
+            <label for="wo-description">Description</label>
+            <textarea id="wo-description" required placeholder="Describe the issue..."></textarea>
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn secondary" type="button" id="modal-cancel">Cancel</button>
+            <button class="btn primary" type="submit">Save Work Order</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="cart_data.js"></script>
+    <script src="workorders.js"></script>
+  </body>
+</html>

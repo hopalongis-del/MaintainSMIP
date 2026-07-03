@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Local DB — Render creates a fresh one; PM templates auto-seed on startup
+maintainsmip.db
+
+# IDE / agent tooling
+.vscode/
+.continue/
+.claude/
+*.code-workspace
+
+# OS junk
+.DS_Store
+Thumbs.db

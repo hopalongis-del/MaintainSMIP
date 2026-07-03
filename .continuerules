@@ -1,0 +1,6 @@
+MaintainSMIP project at C:\Claude Code.
+
+Architecture: vanilla HTML/CSS/JS frontend + FastAPI/SQLite backend (server.py).
+Keep modules small — separate .html, .js, .css per feature.
+Field techs need data density, not marketing fluff.
+Prefer editing existing files over creating new standalone scripts.

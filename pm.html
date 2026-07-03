@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Preventive Maintenance | MaintainSMIP</title>
+    <link rel="icon" href="logo1.png" type="image/png" />
+    <link rel="stylesheet" href="shared.css" />
+    <link rel="stylesheet" href="pm.css" />
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="index.html">
+          <div class="brand-mark">
+            <img class="brand-logo" src="logo1.png" alt="MaintainSMIP" />
+          </div>
+          <span>MaintainSMIP</span>
+        </a>
+        <div class="nav-links">
+          <a href="index.html">Dashboard</a>
+          <a href="workorders.html">Work Orders</a>
+          <a class="active" href="pm.html">Preventive Maintenance</a>
+          <a href="index.html#fleet">Fleet</a>
+        </div>
+      </nav>
+
+      <section class="card">
+        <div class="top-strip">
+          <div>
+            <span class="eyebrow">Preventive Maintenance</span>
+            <h2>Schedule, track, and apply maintenance across the fleet.</h2>
+          </div>
+          <div class="tab-controls">
+            <button class="btn secondary active" id="tab-schedule">Schedule</button>
+            <button class="btn secondary" id="tab-templates">Templates</button>
+          </div>
+        </div>
+
+        <div class="dash-strip" id="pm-dashboard-strip">
+          <div class="stat-card">
+            <span>Scheduled</span>
+            <strong id="count-scheduled">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>Due This Week</span>
+            <strong id="count-due-week">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>Overdue</span>
+            <strong id="count-overdue">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>Completed This Month</span>
+            <strong id="count-completed-month">0</strong>
+          </div>
+        </div>
+
+        <div id="schedule-view">
+          <div class="filter-bar">
+            <div class="filter-group">
+              <label for="pm-filter-status">Status</label>
+              <select id="pm-filter-status">
+                <option value="all">All</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="overdue">Overdue</option>
+                <option value="skipped">Skipped</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="pm-filter-location">Location</label>
+              <select id="pm-filter-location">
+                <option value="all">All</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="pm-filter-search">Search</label>
+              <input id="pm-filter-search" type="search" placeholder="Cart ID or template name" />
+            </div>
+          </div>
+
+          <div class="grid pm-grid">
+            <div class="pm-list card" id="pm-list"></div>
+            <div class="pm-detail card hidden" id="pm-detail-panel"></div>
+          </div>
+        </div>
+
+        <div id="templates-view" class="hidden">
+          <div class="template-actions">
+            <button class="btn primary" id="new-template-btn">New PM Template</button>
+          </div>
+          <div class="template-list" id="template-list"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal hidden" id="pm-modal">
+      <div class="modal-panel card">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">PM Template</span>
+            <h2 id="pm-modal-title">Create Template</h2>
+          </div>
+          <button class="btn ghost" id="pm-modal-close">Close</button>
+        </div>
+
+        <form id="pm-form">
+          <div class="form-grid">
+            <div>
+              <label for="pm-name">Name</label>
+              <input id="pm-name" required placeholder="Template name" />
+            </div>
+            <div>
+              <label for="pm-description">Description</label>
+              <input id="pm-description" placeholder="Template description" />
+            </div>
+            <div>
+              <label for="pm-trigger">Trigger Type</label>
+              <select id="pm-trigger">
+                <option value="interval_days">Interval (days)</option>
+              </select>
+            </div>
+            <div>
+              <label for="pm-interval">Interval Value</label>
+              <input id="pm-interval" type="number" min="1" value="90" />
+            </div>
+            <div>
+              <label>Applies To</label>
+              <div class="applies-row">
+                <label><input type="checkbox" id="pm-applies-all" /> All carts</label>
+              </div>
+            </div>
+            <div>
+              <label for="pm-models">Model filter (comma-separated)</label>
+              <input id="pm-models" placeholder="Carryall 1, DS" />
+            </div>
+            <div>
+              <label for="pm-locations">Location filter (comma-separated)</label>
+              <input id="pm-locations" placeholder="SMIP, Charlotte" />
+            </div>
+          </div>
+
+          <div class="detail-card">
+            <h3>Checklist</h3>
+            <div class="checklist" id="pm-checklist"></div>
+            <button class="btn secondary" type="button" id="add-check-item">Add task</button>
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn secondary" type="button" id="pm-modal-cancel">Cancel</button>
+            <button class="btn primary" type="submit">Save Template</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+
+<script src="db.js"></script>
+    <script src="cart_data.js"></script>
+    <script src="pm.js"></script>
+  </body>
+</html>

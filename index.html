@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard | MaintainSMIP</title>
+    <link rel="icon" href="logo1.png" type="image/png" />
+    <link rel="stylesheet" href="shared.css" />
+    <style>
+      .dash-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 24px;
+      }
+
+      .stat-card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 20px;
+        text-align: center;
+      }
+
+      .stat-num {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.2;
+      }
+
+      .stat-label {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .recent-section h2 {
+        margin: 24px 0 12px;
+        font-size: 1.1rem;
+      }
+
+      .recent-section .wo-item {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 8px 16px;
+        align-items: center;
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border);
+        margin-bottom: 8px;
+      }
+
+      .recent-section .wo-id {
+        font-weight: 600;
+        color: var(--accent);
+      }
+
+      .recent-section .wo-title {
+        font-weight: 500;
+      }
+
+      .recent-section .wo-meta {
+        grid-column: 1 / -1;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      @media (max-width: 900px) {
+        .dash-strip {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="index.html">
+          <div class="brand-mark">
+            <img class="brand-logo" src="logo1.png" alt="MaintainSMIP" />
+          </div>
+          <span>MaintainSMIP</span>
+        </a>
+        <div class="nav-links">
+          <a class="active" href="index.html">Dashboard</a>
+          <a href="workorders.html">Work Orders</a>
+          <a href="pm.html">Preventive Maintenance</a>
+        </div>
+      </nav>
+
+      <section class="card">
+        <div class="top-strip">
+          <div>
+            <span class="eyebrow">Fleet Dashboard</span>
+            <h2>SMI Properties — 839 golf carts across NASCAR venues.</h2>
+          </div>
+        </div>
+
+        <div class="dash-strip">
+          <div class="stat-card"><div class="stat-num" id="stat-open">—</div><div class="stat-label">Open Work Orders</div></div>
+          <div class="stat-card"><div class="stat-num" id="stat-overdue">—</div><div class="stat-label">Overdue</div></div>
+          <div class="stat-card"><div class="stat-num" id="stat-pm-week">—</div><div class="stat-label">PM Due This Week</div></div>
+          <div class="stat-card"><div class="stat-num" id="stat-pm-overdue">—</div><div class="stat-label">PM Overdue</div></div>
+        </div>
+
+        <div class="recent-section">
+          <h2>Recent Work Orders</h2>
+          <div id="recent-wo-list"></div>
+          <h2>PM Due This Week</h2>
+          <div id="recent-pm-list"></div>
+        </div>
+      </section>
+    </div>
+
+    <script src="db.js"></script>
+    <script>
+      async function loadDashboard() {
+        const stats = await db.getStats();
+        document.getElementById('stat-open').textContent = stats.open_work_orders ?? 0;
+        document.getElementById('stat-overdue').textContent = stats.overdue_work_orders ?? 0;
+        document.getElementById('stat-pm-week').textContent = stats.pm_due_this_week ?? 0;
+        document.getElementById('stat-pm-overdue').textContent = stats.pm_overdue ?? 0;
+
+        const wos = await db.getWorkOrders({limit: 5, status: 'open'});
+        document.getElementById('recent-wo-list').innerHTML = wos.length
+          ? wos.map(wo => `<div class="wo-item"><span class="wo-id">${wo.id}</span><span class="wo-title">${wo.title}</span><span class="badge status-${wo.status}">${wo.status.replace('_',' ')}</span><span class="wo-meta">Cart #${wo.cart_id} · ${wo.location}</span></div>`).join('')
+          : '<p class="empty-state">No open work orders.</p>';
+
+        const pms = await db.getPmRecords({status: 'scheduled'});
+        const thisWeek = pms.filter(p => new Date(p.scheduled_date) <= new Date(Date.now() + 7*86400000));
+        document.getElementById('recent-pm-list').innerHTML = thisWeek.length
+          ? thisWeek.map(p => `<div class="wo-item"><span class="wo-id">${p.id}</span><span class="wo-title">${p.template_name}</span><span class="wo-meta">Cart #${p.cart_id} · Due ${new Date(p.scheduled_date).toLocaleDateString()}</span></div>`).join('')
+          : '<p class="empty-state">No PM due this week.</p>';
+      }
+      loadDashboard();
+    </script>
+  </body>
+</html>
