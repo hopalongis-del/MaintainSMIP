@@ -2,6 +2,10 @@
 const API = '';
 
 const db = {
+  async getCarts() {
+    const r = await fetch(`${API}/api/carts`);
+    return r.ok ? r.json() : [];
+  },
   async getWorkOrders(filters = {}) {
     const p = new URLSearchParams(filters);
     const r = await fetch(`${API}/api/workorders?${p}`);
@@ -63,5 +67,46 @@ const db = {
   async getStats() {
     const r = await fetch(`${API}/api/stats`);
     return r.ok ? r.json() : {};
-  }
+  },
+  async getAccidents(filters = {}) {
+    const p = new URLSearchParams(filters);
+    const r = await fetch(`${API}/api/accidents?${p}`);
+    return r.ok ? r.json() : [];
+  },
+  async saveAccident(report) {
+    const r = await fetch(`${API}/api/accidents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(report),
+    });
+    return r.ok ? r.json() : null;
+  },
+  async updateAccident(id, fields) {
+    const r = await fetch(`${API}/api/accidents/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+    return r.ok ? r.json() : null;
+  },
+  async deleteAccident(id) {
+    const r = await fetch(`${API}/api/accidents/${id}`, { method: 'DELETE' });
+    return r.ok;
+  },
+  async uploadAccidentPhoto(id, file) {
+    const form = new FormData();
+    form.append('file', file);
+    const r = await fetch(`${API}/api/accidents/${id}/photos`, {
+      method: 'POST',
+      body: form,
+    });
+    return r.ok ? r.json() : null;
+  },
+  async deleteAccidentPhoto(id, path) {
+    const r = await fetch(
+      `${API}/api/accidents/${id}/photos?path=${encodeURIComponent(path)}`,
+      { method: 'DELETE' },
+    );
+    return r.ok ? r.json() : null;
+  },
 };

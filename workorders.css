@@ -223,17 +223,7 @@
 }
 
 .empty-state {
-  display: grid;
-  place-items: center;
   min-height: 320px;
-  border-radius: 22px;
-  border: 1px dashed rgba(255, 255, 255, 0.18);
-  color: var(--muted);
-  text-align: center;
-}
-
-.empty-state h3 {
-  margin-bottom: 14px;
 }
 
 .priority-low {

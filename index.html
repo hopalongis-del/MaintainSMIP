@@ -7,69 +7,65 @@
     <link rel="icon" href="logo1.png" type="image/png" />
     <link rel="stylesheet" href="shared.css" />
     <style>
-      .dash-strip {
+      .filter-bar {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(160px, 1fr));
         gap: 14px;
-        margin-bottom: 24px;
+        margin-bottom: 14px;
       }
 
-      .stat-card {
-        background: var(--panel);
+      .filter-group {
+        display: grid;
+        gap: 8px;
+      }
+
+      .fleet-table-wrap {
         border: 1px solid var(--border);
         border-radius: 18px;
-        padding: 20px;
-        text-align: center;
-      }
-
-      .stat-num {
-        font-size: 2rem;
-        font-weight: 700;
-        color: var(--text);
-        line-height: 1.2;
-      }
-
-      .stat-label {
-        margin-top: 6px;
-        color: var(--muted);
-        font-size: 0.9rem;
-      }
-
-      .recent-section h2 {
-        margin: 24px 0 12px;
-        font-size: 1.1rem;
-      }
-
-      .recent-section .wo-item {
-        display: grid;
-        grid-template-columns: auto 1fr auto;
-        gap: 8px 16px;
-        align-items: center;
-        padding: 14px 16px;
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid var(--border);
+        overflow: auto;
+        max-height: 420px;
         margin-bottom: 8px;
       }
 
-      .recent-section .wo-id {
+      .fleet-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.92rem;
+      }
+
+      .fleet-table th {
+        position: sticky;
+        top: 0;
+        background: var(--panel-strong);
+        text-align: left;
+        padding: 12px 14px;
+        color: var(--muted);
         font-weight: 600;
-        color: var(--accent);
+        border-bottom: 1px solid var(--border);
       }
 
-      .recent-section .wo-title {
-        font-weight: 500;
+      .fleet-table td {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 260px;
       }
 
-      .recent-section .wo-meta {
-        grid-column: 1 / -1;
+      .fleet-table tbody tr:hover {
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .fleet-table-count {
+        margin: 10px 4px 24px;
         color: var(--muted);
         font-size: 0.85rem;
       }
 
       @media (max-width: 900px) {
-        .dash-strip {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+        .filter-bar {
+          grid-template-columns: 1fr;
         }
       }
     </style>
@@ -87,53 +83,230 @@
           <a class="active" href="index.html">Dashboard</a>
           <a href="workorders.html">Work Orders</a>
           <a href="pm.html">Preventive Maintenance</a>
+          <a href="#fleet">Fleet</a>
+          <a href="accidents.html">Accident Damage</a>
         </div>
       </nav>
 
-      <section class="card">
-        <div class="top-strip">
+      <section class="card page-section">
+        <div class="hero-strip">
           <div>
             <span class="eyebrow">Fleet Dashboard</span>
-            <h2>SMI Properties — 839 golf carts across NASCAR venues.</h2>
+            <h2>SMI Properties golf cart maintenance across NASCAR venues.</h2>
+            <p class="hero-sub" id="hero-sub">Loading fleet summary…</p>
           </div>
         </div>
 
-        <div class="dash-strip">
-          <div class="stat-card"><div class="stat-num" id="stat-open">—</div><div class="stat-label">Open Work Orders</div></div>
-          <div class="stat-card"><div class="stat-num" id="stat-overdue">—</div><div class="stat-label">Overdue</div></div>
-          <div class="stat-card"><div class="stat-num" id="stat-pm-week">—</div><div class="stat-label">PM Due This Week</div></div>
-          <div class="stat-card"><div class="stat-num" id="stat-pm-overdue">—</div><div class="stat-label">PM Overdue</div></div>
+        <div class="quick-actions">
+          <a class="btn primary" href="workorders.html">View Work Orders</a>
+          <a class="btn secondary" href="pm.html">PM Schedule</a>
+          <a class="btn secondary" href="accidents.html">Accident Damage</a>
         </div>
 
-        <div class="recent-section">
-          <h2>Recent Work Orders</h2>
-          <div id="recent-wo-list"></div>
-          <h2>PM Due This Week</h2>
-          <div id="recent-pm-list"></div>
+        <div class="dash-strip">
+          <div class="stat-card"><strong class="stat-num loading-pulse" id="stat-open">—</strong><span class="stat-label">Open Work Orders</span></div>
+          <div class="stat-card alert"><strong class="stat-num loading-pulse" id="stat-overdue">—</strong><span class="stat-label">Overdue</span></div>
+          <div class="stat-card"><strong class="stat-num loading-pulse" id="stat-pm-week">—</strong><span class="stat-label">PM Due This Week</span></div>
+          <div class="stat-card alert"><strong class="stat-num loading-pulse" id="stat-pm-overdue">—</strong><span class="stat-label">PM Overdue</span></div>
+        </div>
+
+        <h2 class="section-title" id="fleet">Fleet Overview</h2>
+        <div class="fleet-grid" id="fleet-grid"></div>
+
+        <div class="filter-bar fleet-filter-bar">
+          <div class="filter-group">
+            <label for="fleet-filter-location">Location</label>
+            <select id="fleet-filter-location"><option value="all">All</option></select>
+          </div>
+          <div class="filter-group">
+            <label for="fleet-filter-model">Model</label>
+            <select id="fleet-filter-model"><option value="all">All</option></select>
+          </div>
+          <div class="filter-group search-group">
+            <label for="fleet-filter-search">Search</label>
+            <input id="fleet-filter-search" type="search" placeholder="Cart ID, serial, status, or notes" />
+          </div>
+        </div>
+
+        <div class="fleet-table-wrap">
+          <table class="fleet-table">
+            <thead>
+              <tr><th>ID</th><th>Serial</th><th>Model</th><th>Year</th><th>Location</th><th>Status</th></tr>
+            </thead>
+            <tbody id="fleet-table-body"></tbody>
+          </table>
+          <p class="fleet-table-count" id="fleet-table-count"></p>
+        </div>
+
+        <h2 class="section-title">Recent Work Orders</h2>
+        <div class="recent-list" id="recent-wo-list">
+          <div class="empty-state loading-pulse">Loading work orders…</div>
+        </div>
+
+        <h2 class="section-title">PM Due This Week</h2>
+        <div class="recent-list" id="recent-pm-list">
+          <div class="empty-state loading-pulse">Loading PM schedule…</div>
         </div>
       </section>
+
+      <footer class="page-footer">MaintainSMIP · SMI Properties Fleet Maintenance</footer>
     </div>
 
     <script src="db.js"></script>
     <script>
-      async function loadDashboard() {
-        const stats = await db.getStats();
-        document.getElementById('stat-open').textContent = stats.open_work_orders ?? 0;
-        document.getElementById('stat-overdue').textContent = stats.overdue_work_orders ?? 0;
-        document.getElementById('stat-pm-week').textContent = stats.pm_due_this_week ?? 0;
-        document.getElementById('stat-pm-overdue').textContent = stats.pm_overdue ?? 0;
-
-        const wos = await db.getWorkOrders({limit: 5, status: 'open'});
-        document.getElementById('recent-wo-list').innerHTML = wos.length
-          ? wos.map(wo => `<div class="wo-item"><span class="wo-id">${wo.id}</span><span class="wo-title">${wo.title}</span><span class="badge status-${wo.status}">${wo.status.replace('_',' ')}</span><span class="wo-meta">Cart #${wo.cart_id} · ${wo.location}</span></div>`).join('')
-          : '<p class="empty-state">No open work orders.</p>';
-
-        const pms = await db.getPmRecords({status: 'scheduled'});
-        const thisWeek = pms.filter(p => new Date(p.scheduled_date) <= new Date(Date.now() + 7*86400000));
-        document.getElementById('recent-pm-list').innerHTML = thisWeek.length
-          ? thisWeek.map(p => `<div class="wo-item"><span class="wo-id">${p.id}</span><span class="wo-title">${p.template_name}</span><span class="wo-meta">Cart #${p.cart_id} · Due ${new Date(p.scheduled_date).toLocaleDateString()}</span></div>`).join('')
-          : '<p class="empty-state">No PM due this week.</p>';
+      function formatDate(value) {
+        if (!value) return 'N/A';
+        return new Date(value).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
       }
+
+      function statusBadge(status) {
+        return `<span class="badge status-${status}">${status.replace('_', ' ')}</span>`;
+      }
+
+      function priorityBadge(priority) {
+        return `<span class="badge priority-${priority}">${priority}</span>`;
+      }
+
+      let allCarts = [];
+
+      function getUniqueSorted(values) {
+        return Array.from(new Set(values.filter(Boolean))).sort();
+      }
+
+      async function loadFleetSummary() {
+        allCarts = await db.getCarts();
+        const byLocation = allCarts.reduce((acc, cart) => {
+          const loc = cart.location || 'Unknown';
+          acc[loc] = (acc[loc] || 0) + 1;
+          return acc;
+        }, {});
+        const topLocations = Object.entries(byLocation)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 6);
+
+        document.getElementById('hero-sub').textContent =
+          `${allCarts.length.toLocaleString()} carts tracked · ${Object.keys(byLocation).length} active venues · Live maintenance data`;
+
+        document.getElementById('fleet-grid').innerHTML = topLocations
+          .map(([location, count]) => `
+            <div class="fleet-pill">
+              <strong>${count}</strong>
+              <span>${location}</span>
+            </div>
+          `).join('');
+
+        const locationSelect = document.getElementById('fleet-filter-location');
+        getUniqueSorted(allCarts.map(c => c.location)).forEach(loc => {
+          const opt = document.createElement('option');
+          opt.value = loc;
+          opt.textContent = loc;
+          locationSelect.appendChild(opt);
+        });
+
+        const modelSelect = document.getElementById('fleet-filter-model');
+        getUniqueSorted(allCarts.map(c => c.model)).forEach(model => {
+          const opt = document.createElement('option');
+          opt.value = model;
+          opt.textContent = model;
+          modelSelect.appendChild(opt);
+        });
+
+        renderFleetTable();
+      }
+
+      function renderFleetTable() {
+        const locationFilter = document.getElementById('fleet-filter-location').value;
+        const modelFilter = document.getElementById('fleet-filter-model').value;
+        const searchTerm = document.getElementById('fleet-filter-search').value.trim().toLowerCase();
+
+        const filtered = allCarts.filter(cart => {
+          if (locationFilter !== 'all' && cart.location !== locationFilter) return false;
+          if (modelFilter !== 'all' && cart.model !== modelFilter) return false;
+          if (searchTerm) {
+            const target = `${cart.id} ${cart.serial || ''} ${cart.status || ''} ${cart.notes || ''}`.toLowerCase();
+            if (!target.includes(searchTerm)) return false;
+          }
+          return true;
+        });
+
+        const body = document.getElementById('fleet-table-body');
+        const SHOWN_LIMIT = 300;
+        body.innerHTML = filtered.length
+          ? filtered.slice(0, SHOWN_LIMIT).map(cart => `
+              <tr>
+                <td>${cart.id}</td>
+                <td>${cart.serial || '—'}</td>
+                <td>${cart.model || '—'}</td>
+                <td>${cart.year || '—'}</td>
+                <td>${cart.location || '—'}</td>
+                <td>${cart.status || '—'}</td>
+              </tr>
+            `).join('')
+          : '<tr><td colspan="6" style="text-align:center; color: var(--muted); padding: 24px;">No carts match these filters.</td></tr>';
+
+        const shown = Math.min(filtered.length, SHOWN_LIMIT);
+        document.getElementById('fleet-table-count').textContent =
+          filtered.length > SHOWN_LIMIT
+            ? `Showing first ${shown.toLocaleString()} of ${filtered.length.toLocaleString()} matching carts — narrow your search to see more.`
+            : `Showing ${filtered.length.toLocaleString()} of ${allCarts.length.toLocaleString()} carts.`;
+      }
+
+      async function loadDashboard() {
+        try {
+          const stats = await db.getStats();
+          document.getElementById('stat-open').textContent = stats.open_work_orders ?? 0;
+          document.getElementById('stat-overdue').textContent = stats.overdue_work_orders ?? 0;
+          document.getElementById('stat-pm-week').textContent = stats.pm_due_this_week ?? 0;
+          document.getElementById('stat-pm-overdue').textContent = stats.pm_overdue ?? 0;
+          document.querySelectorAll('.stat-num').forEach(el => el.classList.remove('loading-pulse'));
+
+          const wos = await db.getWorkOrders({ limit: 5 });
+          const woList = document.getElementById('recent-wo-list');
+          if (!wos.length) {
+            woList.innerHTML = '<div class="empty-state"><h3>No work orders yet</h3><p>Create one from the Work Orders page.</p></div>';
+          } else {
+            woList.innerHTML = wos.map(wo => `
+              <a class="recent-row" href="workorders.html">
+                <span class="recent-id">WO-${wo.id}</span>
+                <span class="recent-title">${wo.title}</span>
+                ${priorityBadge(wo.priority)}
+                <span class="recent-meta">Cart #${wo.cart_id} · ${wo.location} · ${wo.assigned_to || 'Unassigned'} · Due ${formatDate(wo.due_date)}</span>
+              </a>
+            `).join('');
+          }
+
+          const pms = await db.getPmRecords();
+          const weekEnd = Date.now() + 7 * 86400000;
+          const thisWeek = pms
+            .filter(p => p.status === 'scheduled' && p.scheduled_date && new Date(p.scheduled_date) <= new Date(weekEnd))
+            .slice(0, 5);
+          const pmList = document.getElementById('recent-pm-list');
+          if (!thisWeek.length) {
+            pmList.innerHTML = '<div class="empty-state"><h3>No PM due this week</h3><p>Check the PM schedule for upcoming maintenance.</p></div>';
+          } else {
+            pmList.innerHTML = thisWeek.map(p => `
+              <a class="recent-row" href="pm.html">
+                <span class="recent-id">PM-${p.id}</span>
+                <span class="recent-title">${p.template_name}</span>
+                ${statusBadge(p.status)}
+                <span class="recent-meta">Cart #${p.cart_id} · ${p.location} · Due ${formatDate(p.scheduled_date)}</span>
+              </a>
+            `).join('');
+          }
+
+          await loadFleetSummary();
+        } catch (err) {
+          document.getElementById('hero-sub').textContent = 'Could not reach the API. Start the server with start.bat.';
+          document.getElementById('recent-wo-list').innerHTML =
+            '<div class="empty-state"><h3>Server offline</h3><p>Run start.bat, then refresh this page.</p></div>';
+          document.getElementById('recent-pm-list').innerHTML = '';
+        }
+      }
+
+      document.getElementById('fleet-filter-location').addEventListener('change', renderFleetTable);
+      document.getElementById('fleet-filter-model').addEventListener('change', renderFleetTable);
+      document.getElementById('fleet-filter-search').addEventListener('input', renderFleetTable);
+
       loadDashboard();
     </script>
   </body>

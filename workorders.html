@@ -22,10 +22,11 @@
           <a class="active" href="workorders.html">Work Orders</a>
           <a href="pm.html">Preventive Maintenance</a>
           <a href="index.html#fleet">Fleet</a>
+          <a href="accidents.html">Accident Damage</a>
         </div>
       </nav>
 
-      <section class="card">
+      <section class="card page-section">
         <div class="top-strip">
           <div>
             <span class="eyebrow">Work Orders</span>
@@ -100,19 +101,22 @@
           </div>
         </div>
 
+        <p class="hero-sub" style="margin-bottom: 18px;">Click a work order to view details, then use <strong>Edit Work Order</strong> to change it.</p>
+
         <div class="grid wo-grid">
           <div class="wo-list card" id="wo-list"></div>
-          <div class="wo-detail card hidden" id="wo-detail-panel"></div>
+          <div class="wo-detail card" id="wo-detail-panel"></div>
         </div>
       </section>
+      <footer class="page-footer">MaintainSMIP · SMI Properties Fleet Maintenance</footer>
     </div>
 
     <div class="modal hidden" id="wo-modal">
       <div class="modal-panel card">
         <div class="modal-header">
           <div>
-            <span class="eyebrow">New Work Order</span>
-            <h2>Create Work Order</h2>
+            <span class="eyebrow" id="wo-modal-eyebrow">New Work Order</span>
+            <h2 id="wo-modal-heading">Create Work Order</h2>
           </div>
           <button class="btn ghost" id="modal-close">Close</button>
         </div>
@@ -195,7 +199,7 @@
 
           <div class="modal-actions">
             <button class="btn secondary" type="button" id="modal-cancel">Cancel</button>
-            <button class="btn primary" type="submit">Save Work Order</button>
+            <button class="btn primary" type="submit" id="wo-save-btn">Save Work Order</button>
           </div>
         </form>
       </div>

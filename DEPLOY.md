@@ -9,12 +9,15 @@ git add .
 git commit -m "MaintainSMIP demo ready for Render"
 ```
 
-Create a new repo on GitHub (e.g. `maintainsmip`), then:
+Repo: **https://github.com/hopalongis-del/MaintainSMIP**
+
+Push updates:
 
 ```powershell
-git remote add origin https://github.com/YOUR_USER/maintainsmip.git
-git branch -M main
-git push -u origin main
+cd "C:\Claude Code"
+git add .
+git commit -m "Your message here"
+git push origin main
 ```
 
 ## 2. Deploy on Render

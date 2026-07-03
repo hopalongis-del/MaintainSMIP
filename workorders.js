@@ -165,18 +165,60 @@ function renderCartSelection(filter = '') {
   });
 }
 
+function toDateInputValue(value) {
+  if (!value) return '';
+  return String(value).slice(0, 10);
+}
+
+function setModalMode(mode) {
+  const isEdit = mode === 'edit';
+  document.getElementById('wo-modal-eyebrow').textContent = isEdit ? 'Edit Work Order' : 'New Work Order';
+  document.getElementById('wo-modal-heading').textContent = isEdit ? 'Update Work Order' : 'Create Work Order';
+  document.getElementById('wo-save-btn').textContent = isEdit ? 'Save Changes' : 'Save Work Order';
+}
+
 function openModal() {
+  editingWoId = null;
+  setModalMode('create');
   selectedWoCart = null;
   document.getElementById('wo-form').reset();
+  document.getElementById('wo-labor-minutes').value = '0';
   document.getElementById('wo-cart-list').innerHTML = '';
   renderCartSelection();
   document.getElementById('wo-selected-cart').textContent = 'Select a cart to populate work order fields.';
   document.getElementById('wo-location').value = '';
-  document.getElementById('wo-detail-panel').classList.add('hidden');
+  document.getElementById('wo-modal').classList.remove('hidden');
+}
+
+function openEditModal(wo) {
+  editingWoId = wo.id;
+  setModalMode('edit');
+  selectedWoCart = cartData.find(cart => cart.id === wo.cart_id) || null;
+
+  document.getElementById('wo-title').value = wo.title || '';
+  document.getElementById('wo-description').value = wo.description || '';
+  document.getElementById('wo-type').value = wo.type || 'repair';
+  document.getElementById('wo-priority').value = wo.priority || 'medium';
+  document.getElementById('wo-status').value = wo.status || 'open';
+  document.getElementById('wo-assigned-to').value = wo.assigned_to || '';
+  document.getElementById('wo-location').value = wo.location || '';
+  document.getElementById('wo-due-date').value = toDateInputValue(wo.due_date);
+  document.getElementById('wo-labor-minutes').value = String(wo.labor_minutes ?? 0);
+
+  renderCartSelection();
+  if (selectedWoCart) {
+    document.getElementById('wo-selected-cart').textContent =
+      `Selected cart #${selectedWoCart.id} · ${selectedWoCart.model} · ${selectedWoCart.location}`;
+  } else {
+    document.getElementById('wo-selected-cart').textContent =
+      `Cart #${wo.cart_id} · ${wo.cart_serial || 'serial unknown'}`;
+  }
+
   document.getElementById('wo-modal').classList.remove('hidden');
 }
 
 function closeModal() {
+  editingWoId = null;
   document.getElementById('wo-modal').classList.add('hidden');
 }
 
@@ -186,7 +228,6 @@ async function openWoDetail(id) {
   if (!wo) return;
 
   const panel = document.getElementById('wo-detail-panel');
-  panel.classList.remove('hidden');
   panel.classList.add('slide-in');
   panel.innerHTML = `
     <div class="detail-row">
@@ -195,8 +236,9 @@ async function openWoDetail(id) {
         <h2>${wo.id}</h2>
         <p>${wo.title}</p>
       </div>
-      <div style="text-align:right;">
+      <div style="text-align:right; display:grid; gap:10px; justify-items:end;">
         <span class="badge ${getPriorityClass(wo.priority)}">${wo.priority.replace('_', ' ')}</span>
+        <button class="btn primary" type="button" id="btn-edit">Edit Work Order</button>
       </div>
     </div>
     <div class="detail-card">
@@ -249,6 +291,7 @@ async function openWoDetail(id) {
     </div>
   `;
 
+  document.getElementById('btn-edit').addEventListener('click', () => openEditModal(wo));
   document.getElementById('btn-start').addEventListener('click', () => updateWoStatus(wo.id, 'in_progress'));
   document.getElementById('btn-hold').addEventListener('click', () => updateWoStatus(wo.id, 'on_hold'));
   document.getElementById('btn-complete').addEventListener('click', () => updateWoStatus(wo.id, 'completed'));
@@ -279,7 +322,7 @@ async function addWoComment(id, existingComments) {
 async function deleteWo(id) {
   if (!confirm('Delete this work order? This cannot be undone.')) return;
   await db.deleteWorkOrder(id);
-  document.getElementById('wo-detail-panel').classList.add('hidden');
+  showDetailPlaceholder();
   await renderWoList();
   await updateDashboard();
 }
@@ -295,10 +338,10 @@ async function updateWoStatus(id, status) {
   await updateDashboard();
 }
 
-function serializeForm() {
+function serializeForm(forEdit = false) {
   const cart = getSelectedCart();
-  return {
-    cart_id: cart ? cart.id : null,
+  const dueDate = document.getElementById('wo-due-date').value;
+  const payload = {
     title: document.getElementById('wo-title').value.trim(),
     description: document.getElementById('wo-description').value.trim(),
     priority: document.getElementById('wo-priority').value,
@@ -306,28 +349,75 @@ function serializeForm() {
     type: document.getElementById('wo-type').value,
     assigned_to: document.getElementById('wo-assigned-to').value.trim(),
     location: document.getElementById('wo-location').value.trim(),
-    due_date: document.getElementById('wo-due-date').value || null,
+    due_date: dueDate ? `${dueDate}T00:00:00` : null,
     labor_minutes: Number(document.getElementById('wo-labor-minutes').value || 0),
-    parts_used: [],
-    comments: []
   };
+
+  if (cart) {
+    payload.cart_id = cart.id;
+  }
+
+  if (!forEdit) {
+    payload.parts_used = [];
+    payload.comments = [];
+  }
+
+  return payload;
 }
 
 async function handleWoSave(event) {
   event.preventDefault();
   const cart = getSelectedCart();
+
+  if (editingWoId) {
+    if (!cart) {
+      alert('Please select the cart for this work order.');
+      return;
+    }
+    const saved = await db.updateWorkOrder(editingWoId, serializeForm(true));
+    if (!saved) {
+      alert('Failed to save changes.');
+      return;
+    }
+    closeModal();
+    await renderWoList();
+    await updateDashboard();
+    await openWoDetail(editingWoId);
+    return;
+  }
+
   if (!cart) {
     alert('Please select a cart for the work order.');
     return;
   }
 
-  await db.saveWorkOrder(serializeForm());
+  await db.saveWorkOrder(serializeForm(false));
   closeModal();
   await renderWoList();
   await updateDashboard();
 }
 
 let selectedWoCart = null;
+let editingWoId = null;
+
+function showDetailPlaceholder() {
+  const panel = document.getElementById('wo-detail-panel');
+  panel.innerHTML = `
+    <div class="empty-state">
+      <h3>Select a work order</h3>
+      <p>Choose one from the list to view details, then click <strong>Edit Work Order</strong> to change title, priority, due date, and more.</p>
+    </div>
+  `;
+}
+
+function showApiError(listId, message) {
+  document.getElementById(listId).innerHTML = `
+    <div class="empty-state">
+      <h3>Could not load data</h3>
+      <p>${message}</p>
+    </div>
+  `;
+}
 
 async function initWorkOrders() {
   document.getElementById('new-wo-btn').addEventListener('click', openModal);
@@ -341,9 +431,14 @@ async function initWorkOrders() {
   document.getElementById('filter-type').addEventListener('change', () => renderWoList());
   document.getElementById('filter-search').addEventListener('input', () => renderWoList());
 
-  setLocationFilterOptions();
-  await renderWoList();
-  await updateDashboard();
+  try {
+    showDetailPlaceholder();
+    setLocationFilterOptions();
+    await renderWoList();
+    await updateDashboard();
+  } catch (err) {
+    showApiError('wo-list', 'Start the server with start.bat, then refresh this page.');
+  }
 }
 
 initWorkOrders();

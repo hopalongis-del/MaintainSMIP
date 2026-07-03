@@ -2,12 +2,15 @@ from __future__ import annotations
 import json
 import os
 import re
-from datetime import datetime
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, List, Optional
 
 import aiosqlite
-from fastapi import Depends, FastAPI, HTTPException, Query
+import uuid
+
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -15,8 +18,21 @@ from pydantic import BaseModel, Field
 ROOT_DIR = Path(__file__).parent.resolve()
 DB_PATH = ROOT_DIR / 'maintainsmip.db'
 CART_DATA_PATH = ROOT_DIR / 'cart_data.js'
+UPLOADS_DIR = ROOT_DIR / 'uploads' / 'accidents'
 
-app = FastAPI(title='MaintainSMIP API', version='1.0')
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    os.makedirs(ROOT_DIR, exist_ok=True)
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    await migrate_schema()
+    await create_tables()
+    app.state.carts = parse_cart_data()
+    await seed_pm_templates()
+    await seed_demo_data()
+    yield
+
+
+app = FastAPI(title='MaintainSMIP API', version='1.0', lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=['*'],
@@ -55,8 +71,14 @@ class WorkOrderCreate(WorkOrderBase):
 
 
 class WorkOrderUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
     status: Optional[str] = None
+    type: Optional[str] = None
+    cart_id: Optional[int] = None
     assigned_to: Optional[str] = None
+    location: Optional[str] = None
     due_date: Optional[str] = None
     labor_minutes: Optional[int] = None
     parts_used: Optional[List[Any]] = None
@@ -110,6 +132,43 @@ class PMRecordCreate(PMRecordBase):
 
 class PMRecord(PMRecordBase):
     id: Any
+
+
+class AccidentReportBase(BaseModel):
+    cart_id: int
+    location: Optional[str] = ''
+    reported_by: Optional[str] = ''
+    incident_date: Optional[str] = None
+    description: str
+    severity: str = 'moderate'
+    status: str = 'reported'
+    damage_areas: List[str] = Field(default_factory=list)
+    photos: List[str] = Field(default_factory=list)
+    notes: Optional[str] = ''
+    linked_wo_id: Optional[int] = None
+
+
+class AccidentReportCreate(AccidentReportBase):
+    pass
+
+
+class AccidentReportUpdate(BaseModel):
+    cart_id: Optional[int] = None
+    location: Optional[str] = None
+    reported_by: Optional[str] = None
+    incident_date: Optional[str] = None
+    description: Optional[str] = None
+    severity: Optional[str] = None
+    status: Optional[str] = None
+    damage_areas: Optional[List[str]] = None
+    notes: Optional[str] = None
+    linked_wo_id: Optional[int] = None
+
+
+class AccidentReport(AccidentReportBase):
+    id: int
+    cart_serial: Optional[str] = None
+    created_date: str
 
 
 async def get_database() -> aiosqlite.Connection:
@@ -208,17 +267,27 @@ async def create_tables() -> None:
             )
             '''
         )
+        await connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS accident_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cart_id INTEGER,
+                cart_serial TEXT,
+                location TEXT,
+                reported_by TEXT,
+                incident_date TEXT,
+                description TEXT NOT NULL,
+                severity TEXT,
+                status TEXT,
+                damage_areas TEXT,
+                photos TEXT,
+                notes TEXT,
+                linked_wo_id INTEGER,
+                created_date TEXT
+            )
+            '''
+        )
         await connection.commit()
-
-
-@app.on_event('startup')
-async def startup_event() -> None:
-    os.makedirs(ROOT_DIR, exist_ok=True)
-    await migrate_schema()
-    await create_tables()
-    app.state.carts = parse_cart_data()
-
-    await seed_pm_templates()
 
 
 PM_TEMPLATE_SEED = [
@@ -265,6 +334,304 @@ async def seed_pm_templates() -> None:
                 PM_TEMPLATE_SEED,
             )
             await db.commit()
+
+
+def _iso_days_from_now(days: int) -> str:
+    return (datetime.utcnow() + timedelta(days=days)).isoformat()
+
+
+DEMO_WORK_ORDERS = [
+    {
+        'cart_id': 2002,
+        'title': 'Brake squeal under load',
+        'description': 'Operator reports grinding noise when descending hills at Charlotte. Inspect pads and rear drum.',
+        'priority': 'high',
+        'status': 'in_progress',
+        'type': 'repair',
+        'assigned_to': 'Mike Casady',
+        'location': 'Charlotte',
+        'due_date': _iso_days_from_now(2),
+        'labor_minutes': 45,
+        'parts_used': ['Brake pad set'],
+        'comments': [{'author': 'Mike Casady', 'text': 'Pads at 20%, ordering replacements.', 'date': _iso_days_from_now(-1)}],
+    },
+    {
+        'cart_id': 2000,
+        'title': 'Battery terminal corrosion',
+        'description': 'Green buildup on positive terminal. Clean, test load, verify charger output.',
+        'priority': 'medium',
+        'status': 'open',
+        'type': 'battery',
+        'assigned_to': 'Gavin Weinmeister',
+        'location': 'SMIP',
+        'due_date': _iso_days_from_now(4),
+        'labor_minutes': 30,
+        'parts_used': [],
+        'comments': [],
+    },
+    {
+        'cart_id': 2057,
+        'title': 'Steering wander at speed',
+        'description': 'Cart drifts right above 12 mph on service roads. Check toe alignment and tire wear.',
+        'priority': 'critical',
+        'status': 'open',
+        'type': 'repair',
+        'assigned_to': '',
+        'location': 'Bristol',
+        'due_date': _iso_days_from_now(-3),
+        'labor_minutes': 0,
+        'parts_used': [],
+        'comments': [],
+    },
+    {
+        'cart_id': 2003,
+        'title': 'Headlight intermittent',
+        'description': 'Left headlight flickers over bumps. Inspect harness and connector at firewall.',
+        'priority': 'low',
+        'status': 'completed',
+        'type': 'electrical',
+        'assigned_to': 'Cory Yeager',
+        'location': 'Charlotte',
+        'due_date': _iso_days_from_now(-7),
+        'labor_minutes': 25,
+        'parts_used': ['Bulb 12V'],
+        'comments': [{'author': 'Cory Yeager', 'text': 'Loose ground strap — tightened and tested.', 'date': _iso_days_from_now(-5)}],
+    },
+    {
+        'cart_id': 2001,
+        'title': 'Quarterly safety inspection',
+        'description': 'Routine safety walk-around before CMS event weekend.',
+        'priority': 'medium',
+        'status': 'on_hold',
+        'type': 'inspection',
+        'assigned_to': 'Kevin Stellman',
+        'location': 'SMIP',
+        'due_date': _iso_days_from_now(6),
+        'labor_minutes': 15,
+        'parts_used': [],
+        'comments': [{'author': 'Kevin Stellman', 'text': 'Waiting on parts cage key.', 'date': _iso_days_from_now(0)}],
+    },
+]
+
+
+DEMO_PM_RECORDS = [
+    {
+        'template_id': 'PM-TPL-001',
+        'template_name': '90-Day Inspection',
+        'description': 'Full inspection every 90 days',
+        'cart_id': 2000,
+        'location': 'SMIP',
+        'scheduled_date': _iso_days_from_now(3),
+        'status': 'scheduled',
+        'checklist_results': [
+            {'task_id': 1, 'task': 'Check tire pressure', 'passed': False, 'note': ''},
+            {'task_id': 2, 'task': 'Inspect brakes', 'passed': False, 'note': ''},
+            {'task_id': 3, 'task': 'Test lights', 'passed': False, 'note': ''},
+            {'task_id': 4, 'task': 'Check battery connections', 'passed': False, 'note': ''},
+            {'task_id': 5, 'task': 'Inspect steering', 'passed': False, 'note': ''},
+        ],
+    },
+    {
+        'template_id': 'PM-TPL-003',
+        'template_name': 'Battery Service',
+        'description': 'Battery check every 6 months',
+        'cart_id': 2002,
+        'location': 'Charlotte',
+        'scheduled_date': _iso_days_from_now(5),
+        'status': 'scheduled',
+        'checklist_results': [
+            {'task_id': 1, 'task': 'Check water levels', 'passed': False, 'note': ''},
+            {'task_id': 2, 'task': 'Clean terminals', 'passed': False, 'note': ''},
+            {'task_id': 3, 'task': 'Load test', 'passed': False, 'note': ''},
+        ],
+    },
+    {
+        'template_id': 'PM-TPL-004',
+        'template_name': 'Brake Inspection',
+        'description': 'Brake check every 6 months',
+        'cart_id': 2057,
+        'location': 'Bristol',
+        'scheduled_date': _iso_days_from_now(-2),
+        'status': 'scheduled',
+        'checklist_results': [
+            {'task_id': 1, 'task': 'Check brake pads', 'passed': False, 'note': ''},
+            {'task_id': 2, 'task': 'Test brake response', 'passed': False, 'note': ''},
+        ],
+    },
+    {
+        'template_id': 'PM-TPL-002',
+        'template_name': 'Annual Full Service',
+        'description': 'Complete annual service',
+        'cart_id': 2003,
+        'location': 'Charlotte',
+        'scheduled_date': _iso_days_from_now(-14),
+        'status': 'completed',
+        'completed_date': _iso_days_from_now(-10),
+        'tech_name': 'Dusty Hixson',
+        'labor_minutes': 110,
+        'checklist_results': [
+            {'task_id': 1, 'task': 'Full brake service', 'passed': True, 'note': ''},
+            {'task_id': 2, 'task': 'Battery load test', 'passed': True, 'note': ''},
+            {'task_id': 3, 'task': 'Tire check', 'passed': True, 'note': ''},
+            {'task_id': 4, 'task': 'Motor inspection', 'passed': True, 'note': ''},
+        ],
+    },
+]
+
+
+DEMO_ACCIDENTS = [
+    {
+        'cart_id': 2002,
+        'location': 'Charlotte',
+        'reported_by': 'Mike Casady',
+        'incident_date': _iso_days_from_now(-1),
+        'description': 'Rear corner impact with loading dock post. Cracked body panel and bent rear bumper bracket.',
+        'severity': 'moderate',
+        'status': 'under_review',
+        'damage_areas': ['rear bumper', 'right rear panel', 'tail light'],
+        'notes': 'Operator reported during CMS infield move.',
+        'created_days_ago': -1,
+    },
+    {
+        'cart_id': 2057,
+        'location': 'Bristol',
+        'reported_by': 'Gavin Weinmeister',
+        'incident_date': _iso_days_from_now(-4),
+        'description': 'Roof scrape under low garage door. Bubble top scuffed, no structural damage visible.',
+        'severity': 'minor',
+        'status': 'repair_scheduled',
+        'damage_areas': ['roof', 'top trim'],
+        'notes': 'WO created for body shop assessment.',
+        'created_days_ago': -4,
+    },
+]
+
+
+async def seed_demo_data() -> None:
+    carts_by_id = {cart.id: cart for cart in app.state.carts}
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute('SELECT COUNT(*) FROM work_orders')
+        if (await cursor.fetchone())[0] == 0:
+            for wo in DEMO_WORK_ORDERS:
+                cart = carts_by_id.get(wo['cart_id'])
+                serial = cart.serial if cart else ''
+                created = _iso_days_from_now(-5)
+                completed = _iso_days_from_now(-5) if wo['status'] == 'completed' else None
+                await db.execute(
+                    '''
+                    INSERT INTO work_orders (
+                        cart_id, cart_serial, title, description, priority, status, type,
+                        assigned_to, location, created_date, due_date, completed_date,
+                        labor_minutes, parts_used, comments
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''',
+                    (
+                        wo['cart_id'],
+                        serial,
+                        wo['title'],
+                        wo['description'],
+                        wo['priority'],
+                        wo['status'],
+                        wo['type'],
+                        wo['assigned_to'],
+                        wo['location'],
+                        created,
+                        wo['due_date'],
+                        completed,
+                        wo['labor_minutes'],
+                        json.dumps(wo['parts_used']),
+                        json.dumps(wo['comments']),
+                    ),
+                )
+
+        cursor = await db.execute('SELECT COUNT(*) FROM pm_records')
+        if (await cursor.fetchone())[0] == 0:
+            for rec in DEMO_PM_RECORDS:
+                await db.execute(
+                    '''
+                    INSERT INTO pm_records (
+                        template_id, template_name, description, cart_id, location,
+                        scheduled_date, completed_date, status, checklist_results,
+                        tech_name, labor_minutes, linked_wo_ids
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''',
+                    (
+                        rec['template_id'],
+                        rec['template_name'],
+                        rec['description'],
+                        rec['cart_id'],
+                        rec['location'],
+                        rec['scheduled_date'],
+                        rec.get('completed_date'),
+                        rec['status'],
+                        json.dumps(rec['checklist_results']),
+                        rec.get('tech_name', ''),
+                        rec.get('labor_minutes', 0),
+                        json.dumps([]),
+                    ),
+                )
+
+        cursor = await db.execute('SELECT COUNT(*) FROM accident_reports')
+        if (await cursor.fetchone())[0] == 0:
+            for acc in DEMO_ACCIDENTS:
+                cart = carts_by_id.get(acc['cart_id'])
+                serial = cart.serial if cart else ''
+                await db.execute(
+                    '''
+                    INSERT INTO accident_reports (
+                        cart_id, cart_serial, location, reported_by, incident_date,
+                        description, severity, status, damage_areas, photos, notes,
+                        linked_wo_id, created_date
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''',
+                    (
+                        acc['cart_id'],
+                        serial,
+                        acc['location'],
+                        acc['reported_by'],
+                        acc['incident_date'],
+                        acc['description'],
+                        acc['severity'],
+                        acc['status'],
+                        json.dumps(acc['damage_areas']),
+                        json.dumps([]),
+                        acc.get('notes', ''),
+                        acc.get('linked_wo_id'),
+                        _iso_days_from_now(acc.get('created_days_ago', -2)),
+                    ),
+                )
+
+        await db.commit()
+
+
+def accident_from_row(row: Any) -> AccidentReport:
+    data = dict(row)
+    return AccidentReport(**{
+        **data,
+        'damage_areas': json.loads(data.get('damage_areas') or '[]'),
+        'photos': json.loads(data.get('photos') or '[]'),
+    })
+
+
+async def get_accident_row(accident_id: int) -> dict:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT * FROM accident_reports WHERE id = ?',
+            (accident_id,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail='Accident report not found')
+        return dict(row)
+
+
+def delete_photo_files(photo_paths: List[str]) -> None:
+    for rel_path in photo_paths:
+        target = ROOT_DIR / rel_path
+        if target.exists() and target.is_file():
+            target.unlink()
 
 
 @app.get('/api/carts', response_model=List[CartItem])
@@ -364,14 +731,32 @@ async def update_work_order(workorder_id: int, item: WorkOrderUpdate) -> WorkOrd
 
         existing = dict(row)
         updated = {**existing}
+        if item.title is not None:
+            updated['title'] = item.title
+        if item.description is not None:
+            updated['description'] = item.description
+        if item.priority is not None:
+            updated['priority'] = item.priority
+        if item.type is not None:
+            updated['type'] = item.type
+        if item.cart_id is not None:
+            updated['cart_id'] = item.cart_id
+            updated['cart_serial'] = next(
+                (cart.serial for cart in app.state.carts if cart.id == item.cart_id),
+                updated.get('cart_serial', ''),
+            )
         if item.status is not None:
             updated['status'] = item.status
-            if item.status == 'completed':
+            if item.status == 'completed' and not updated.get('completed_date'):
                 updated['completed_date'] = datetime.utcnow().isoformat()
+            elif item.status not in ('completed', 'closed'):
+                updated['completed_date'] = None
         if item.assigned_to is not None:
             updated['assigned_to'] = item.assigned_to
+        if item.location is not None:
+            updated['location'] = item.location
         if item.due_date is not None:
-            updated['due_date'] = item.due_date
+            updated['due_date'] = item.due_date if item.due_date else None
         if item.labor_minutes is not None:
             updated['labor_minutes'] = item.labor_minutes
         if item.parts_used is not None:
@@ -382,8 +767,15 @@ async def update_work_order(workorder_id: int, item: WorkOrderUpdate) -> WorkOrd
         await connection.execute(
             '''
             UPDATE work_orders SET
+                cart_id = ?,
+                cart_serial = ?,
+                title = ?,
+                description = ?,
+                priority = ?,
                 status = ?,
+                type = ?,
                 assigned_to = ?,
+                location = ?,
                 due_date = ?,
                 completed_date = ?,
                 labor_minutes = ?,
@@ -392,8 +784,15 @@ async def update_work_order(workorder_id: int, item: WorkOrderUpdate) -> WorkOrd
             WHERE id = ?
             ''',
             (
+                updated['cart_id'],
+                updated['cart_serial'],
+                updated['title'],
+                updated['description'],
+                updated['priority'],
                 updated['status'],
+                updated['type'],
                 updated['assigned_to'],
+                updated['location'],
                 updated['due_date'],
                 updated['completed_date'],
                 updated['labor_minutes'],
@@ -562,6 +961,211 @@ async def delete_pm_record(record_id: int) -> dict:
     return {'deleted': record_id}
 
 
+@app.get('/api/accidents', response_model=List[AccidentReport])
+async def list_accidents(
+    status: Optional[str] = Query(None),
+    cart_id: Optional[int] = Query(None),
+) -> List[AccidentReport]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        query = 'SELECT * FROM accident_reports'
+        conditions = []
+        params: List[Any] = []
+        if status:
+            conditions.append('status = ?')
+            params.append(status)
+        if cart_id is not None:
+            conditions.append('cart_id = ?')
+            params.append(cart_id)
+        if conditions:
+            query += ' WHERE ' + ' AND '.join(conditions)
+        query += ' ORDER BY incident_date DESC, id DESC'
+        cursor = await connection.execute(query, params)
+        rows = await cursor.fetchall()
+    return [accident_from_row(row) for row in rows]
+
+
+@app.get('/api/accidents/{accident_id}', response_model=AccidentReport)
+async def get_accident(accident_id: int) -> AccidentReport:
+    row = await get_accident_row(accident_id)
+    return accident_from_row(row)
+
+
+@app.post('/api/accidents', response_model=AccidentReport)
+async def create_accident(item: AccidentReportCreate) -> AccidentReport:
+    created_date = datetime.utcnow().isoformat()
+    cart_serial = next(
+        (cart.serial for cart in app.state.carts if cart.id == item.cart_id),
+        '',
+    )
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute(
+            '''
+            INSERT INTO accident_reports (
+                cart_id, cart_serial, location, reported_by, incident_date,
+                description, severity, status, damage_areas, photos, notes,
+                linked_wo_id, created_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                item.cart_id,
+                cart_serial,
+                item.location,
+                item.reported_by,
+                item.incident_date or created_date,
+                item.description,
+                item.severity,
+                item.status,
+                json.dumps(item.damage_areas or []),
+                json.dumps(item.photos or []),
+                item.notes,
+                item.linked_wo_id,
+                created_date,
+            ),
+        )
+        await connection.commit()
+        row_id = cursor.lastrowid
+
+    return AccidentReport(**{
+        'id': row_id,
+        'cart_id': item.cart_id,
+        'cart_serial': cart_serial,
+        'location': item.location,
+        'reported_by': item.reported_by,
+        'incident_date': item.incident_date or created_date,
+        'description': item.description,
+        'severity': item.severity,
+        'status': item.status,
+        'damage_areas': item.damage_areas,
+        'photos': item.photos,
+        'notes': item.notes,
+        'linked_wo_id': item.linked_wo_id,
+        'created_date': created_date,
+    })
+
+
+@app.put('/api/accidents/{accident_id}', response_model=AccidentReport)
+async def update_accident(accident_id: int, item: AccidentReportUpdate) -> AccidentReport:
+    existing = await get_accident_row(accident_id)
+    updated = {**existing}
+    payload = item.model_dump(exclude_unset=True)
+
+    if 'cart_id' in payload:
+        updated['cart_id'] = payload['cart_id']
+        updated['cart_serial'] = next(
+            (cart.serial for cart in app.state.carts if cart.id == payload['cart_id']),
+            updated.get('cart_serial', ''),
+        )
+    for field in ('location', 'reported_by', 'incident_date', 'description', 'severity', 'status', 'notes', 'linked_wo_id'):
+        if field in payload:
+            updated[field] = payload[field]
+    if 'damage_areas' in payload:
+        updated['damage_areas'] = json.dumps(payload['damage_areas'])
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            '''
+            UPDATE accident_reports SET
+                cart_id = ?, cart_serial = ?, location = ?, reported_by = ?,
+                incident_date = ?, description = ?, severity = ?, status = ?,
+                damage_areas = ?, notes = ?, linked_wo_id = ?
+            WHERE id = ?
+            ''',
+            (
+                updated['cart_id'],
+                updated['cart_serial'],
+                updated['location'],
+                updated['reported_by'],
+                updated['incident_date'],
+                updated['description'],
+                updated['severity'],
+                updated['status'],
+                updated['damage_areas'] if isinstance(updated['damage_areas'], str) else json.dumps(updated['damage_areas']),
+                updated['notes'],
+                updated['linked_wo_id'],
+                accident_id,
+            ),
+        )
+        await connection.commit()
+
+    updated['damage_areas'] = json.loads(updated['damage_areas'] or '[]')
+    updated['photos'] = json.loads(updated['photos'] or '[]')
+    return AccidentReport(**updated)
+
+
+@app.post('/api/accidents/{accident_id}/photos')
+async def upload_accident_photo(accident_id: int, file: UploadFile = File(...)) -> dict:
+    row = await get_accident_row(accident_id)
+    if not file.content_type or not file.content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail='Only image files are allowed')
+
+    ext = Path(file.filename or 'photo.jpg').suffix.lower()
+    if ext not in {'.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'}:
+        ext = '.jpg'
+
+    accident_dir = UPLOADS_DIR / str(accident_id)
+    accident_dir.mkdir(parents=True, exist_ok=True)
+    filename = f'{uuid.uuid4().hex}{ext}'
+    dest = accident_dir / filename
+
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail='Image must be under 10 MB')
+
+    dest.write_bytes(contents)
+    rel_path = f'uploads/accidents/{accident_id}/{filename}'
+    photos = json.loads(row['photos'] or '[]')
+    photos.append(rel_path)
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            'UPDATE accident_reports SET photos = ? WHERE id = ?',
+            (json.dumps(photos), accident_id),
+        )
+        await connection.commit()
+
+    return {'path': rel_path, 'photos': photos}
+
+
+@app.delete('/api/accidents/{accident_id}/photos')
+async def delete_accident_photo(accident_id: int, path: str = Query(...)) -> dict:
+    row = await get_accident_row(accident_id)
+    photos = json.loads(row['photos'] or '[]')
+    if path not in photos:
+        raise HTTPException(status_code=404, detail='Photo not found on this report')
+
+    delete_photo_files([path])
+    photos = [p for p in photos if p != path]
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            'UPDATE accident_reports SET photos = ? WHERE id = ?',
+            (json.dumps(photos), accident_id),
+        )
+        await connection.commit()
+
+    return {'photos': photos}
+
+
+@app.delete('/api/accidents/{accident_id}')
+async def delete_accident(accident_id: int) -> dict:
+    row = await get_accident_row(accident_id)
+    photos = json.loads(row['photos'] or '[]')
+    delete_photo_files(photos)
+
+    accident_dir = UPLOADS_DIR / str(accident_id)
+    if accident_dir.exists():
+        for leftover in accident_dir.iterdir():
+            leftover.unlink(missing_ok=True)
+        accident_dir.rmdir()
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute('DELETE FROM accident_reports WHERE id = ?', (accident_id,))
+        await connection.commit()
+
+    return {'deleted': accident_id}
+
+
 @app.get('/api/stats')
 async def get_stats() -> dict:
     now = datetime.utcnow().isoformat()
@@ -609,11 +1213,20 @@ async def get_stats() -> dict:
         )
         pm_overdue = (await cursor.fetchone())['total']
 
+        cursor = await connection.execute(
+            """
+            SELECT COUNT(*) as total FROM accident_reports
+            WHERE status NOT IN ('resolved')
+            """
+        )
+        open_accidents = (await cursor.fetchone())['total']
+
     return {
         'open_work_orders': open_wo,
         'overdue_work_orders': overdue_wo,
         'pm_due_this_week': pm_week,
         'pm_overdue': pm_overdue,
+        'open_accidents': open_accidents,
     }
 
 

@@ -482,11 +482,25 @@ function setTemplatesTab() {
   document.getElementById('tab-templates').classList.add('active');
 }
 
+function showPmApiError(message) {
+  document.getElementById('pm-list').innerHTML = `
+    <div class="empty-state">
+      <h3>Could not load data</h3>
+      <p>${message}</p>
+    </div>
+  `;
+}
+
 async function initPmModule() {
-  updatePmFilters();
-  await renderPmSchedule();
-  await renderTemplateList();
-  await updatePmDashboard();
+  try {
+    updatePmFilters();
+    await renderPmSchedule();
+    await renderTemplateList();
+    await updatePmDashboard();
+  } catch (err) {
+    showPmApiError('Start the server with start.bat, then refresh this page.');
+    return;
+  }
 
   document.getElementById('tab-schedule').addEventListener('click', setScheduleTab);
   document.getElementById('tab-templates').addEventListener('click', setTemplatesTab);

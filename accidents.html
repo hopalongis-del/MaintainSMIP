@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Accident Damage | MaintainSMIP</title>
+    <link rel="icon" href="logo1.png" type="image/png" />
+    <link rel="stylesheet" href="shared.css" />
+    <link rel="stylesheet" href="accidents.css" />
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="index.html">
+          <div class="brand-mark">
+            <img class="brand-logo" src="logo1.png" alt="MaintainSMIP" />
+          </div>
+          <span>MaintainSMIP</span>
+        </a>
+        <div class="nav-links">
+          <a href="index.html">Dashboard</a>
+          <a href="workorders.html">Work Orders</a>
+          <a href="pm.html">Preventive Maintenance</a>
+          <a href="index.html#fleet">Fleet</a>
+          <a class="active" href="accidents.html">Accident Damage</a>
+        </div>
+      </nav>
+
+      <section class="card page-section">
+        <div class="top-strip">
+          <div>
+            <span class="eyebrow">Accident Damage</span>
+            <h2>Document cart damage with photos from the field.</h2>
+            <p class="hero-sub">Tap a report to view details. Use the camera button on your phone to snap damage photos and approve before saving.</p>
+          </div>
+          <button class="btn primary" id="new-accident-btn" type="button">Report Damage</button>
+        </div>
+
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label for="acc-filter-status">Status</label>
+            <select id="acc-filter-status">
+              <option value="all">All</option>
+              <option value="reported">Reported</option>
+              <option value="under_review">Under Review</option>
+              <option value="repair_scheduled">Repair Scheduled</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="acc-filter-severity">Severity</label>
+            <select id="acc-filter-severity">
+              <option value="all">All</option>
+              <option value="minor">Minor</option>
+              <option value="moderate">Moderate</option>
+              <option value="major">Major</option>
+              <option value="total_loss">Total Loss</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="acc-filter-location">Location</label>
+            <select id="acc-filter-location"><option value="all">All</option></select>
+          </div>
+          <div class="filter-group">
+            <label for="acc-filter-search">Search</label>
+            <input id="acc-filter-search" type="search" placeholder="Cart ID or description" />
+          </div>
+        </div>
+
+        <div class="grid accident-grid">
+          <div class="accident-list card" id="accident-list"></div>
+          <div class="accident-detail card" id="accident-detail-panel"></div>
+        </div>
+      </section>
+
+      <footer class="page-footer">MaintainSMIP · SMI Properties Fleet Maintenance</footer>
+    </div>
+
+    <div class="modal hidden" id="accident-modal">
+      <div class="modal-panel card">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow" id="acc-modal-eyebrow">Accident Report</span>
+            <h2 id="acc-modal-heading">Report Damage</h2>
+          </div>
+          <button class="btn ghost" id="acc-modal-close" type="button">Close</button>
+        </div>
+
+        <form id="accident-form">
+          <div class="form-grid">
+            <div>
+              <label for="acc-cart-search">Cart</label>
+              <input id="acc-cart-search" type="search" placeholder="Search cart by ID, serial, or location" />
+              <div class="cart-picker" id="acc-cart-list"></div>
+              <div class="selected-cart-summary" id="acc-selected-cart">Select the damaged cart.</div>
+            </div>
+            <div>
+              <label for="acc-reported-by">Reported By</label>
+              <select id="acc-reported-by">
+                <option value="">— Select —</option>
+                <option>Gavin Weinmeister</option>
+                <option>Kevin Stellman</option>
+                <option>Cory Yeager</option>
+                <option>Mike Casady</option>
+                <option>Dusty Hixson</option>
+                <option>Brian Lachance</option>
+                <option>Stephen Hering</option>
+                <option>Mark Hixson</option>
+              </select>
+            </div>
+            <div>
+              <label for="acc-incident-date">Incident Date</label>
+              <input id="acc-incident-date" type="date" required />
+            </div>
+            <div>
+              <label for="acc-severity">Severity</label>
+              <select id="acc-severity">
+                <option value="minor">Minor</option>
+                <option value="moderate" selected>Moderate</option>
+                <option value="major">Major</option>
+                <option value="total_loss">Total Loss</option>
+              </select>
+            </div>
+            <div>
+              <label for="acc-status">Status</label>
+              <select id="acc-status">
+                <option value="reported">Reported</option>
+                <option value="under_review">Under Review</option>
+                <option value="repair_scheduled">Repair Scheduled</option>
+                <option value="resolved">Resolved</option>
+              </select>
+            </div>
+            <div>
+              <label for="acc-location">Location</label>
+              <input id="acc-location" placeholder="Venue / track" />
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label for="acc-damage-areas">Damaged Areas (comma-separated)</label>
+              <input id="acc-damage-areas" placeholder="e.g. rear bumper, roof, left fender" />
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label for="acc-description">Damage Description</label>
+              <textarea id="acc-description" required placeholder="What happened? Describe visible damage..."></textarea>
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label for="acc-notes">Notes</label>
+              <textarea id="acc-notes" rows="2" placeholder="Optional follow-up notes"></textarea>
+            </div>
+          </div>
+
+          <div class="detail-card">
+            <h3>Damage Photos</h3>
+            <p class="hero-sub" style="margin-top: 0;">Take a photo, review it, then approve or retake before it attaches to this report.</p>
+            <div class="photo-actions">
+              <button class="btn photo-btn camera" type="button" id="btn-take-photo">📷 Take Photo</button>
+              <button class="btn secondary photo-btn" type="button" id="btn-choose-photo">🖼 Choose from Gallery</button>
+            </div>
+            <input type="file" id="photo-camera-input" accept="image/*" capture="environment" hidden />
+            <input type="file" id="photo-gallery-input" accept="image/*" hidden />
+            <div class="photo-grid" id="pending-photo-grid"></div>
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn secondary" type="button" id="acc-modal-cancel">Cancel</button>
+            <button class="btn primary" type="submit" id="acc-save-btn">Save Report</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="photo-review hidden" id="photo-review">
+      <div class="photo-review-panel card">
+        <h3>Review Photo</h3>
+        <p class="hero-sub">Approve to attach this photo, or deny to retake.</p>
+        <img id="photo-review-image" alt="Photo preview" />
+        <div class="photo-review-actions">
+          <button class="btn ghost deny" type="button" id="photo-deny-btn">Deny / Retake</button>
+          <button class="btn primary approve" type="button" id="photo-approve-btn">Approve Photo</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="cart_data.js"></script>
+    <script src="accidents.js"></script>
+  </body>
+</html>
