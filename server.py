@@ -55,7 +55,7 @@ TECHNICIAN_ACCOUNTS = [
     ('gavin.weinmeister', 'Gavin Weinmeister', 'technician'),
     ('kevin.stellman', 'Kevin Stellman', 'technician'),
     ('cory.yeager', 'Cory Yeager', 'technician'),
-    ('mike.casady', 'Mike Casady', 'manager'),
+    ('mike.casady', 'Mike Casady', 'admin'),
     ('dusty.hixson', 'Dusty Hixson', 'admin'),
     ('brian.lachance', 'Brian Lachance', 'admin'),
     ('chelsie', 'Chelsie', 'admin'),
@@ -64,7 +64,7 @@ TECHNICIAN_ACCOUNTS = [
 ]
 
 PRIVILEGED_ROLE_OVERRIDES = {
-    'mike.casady': 'manager',
+    'mike.casady': 'admin',
     'dusty.hixson': 'admin',
     'brian.lachance': 'admin',
     'chelsie': 'admin',

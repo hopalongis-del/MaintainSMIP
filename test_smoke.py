@@ -41,7 +41,7 @@ def test_seeded_user_resync_login(client: TestClient) -> None:
         json={"username": "mike.casady", "password": "WeLoveRacing!"},
     )
     assert response.status_code == 200, response.text
-    assert response.json()["user"]["role"] == "manager"
+    assert response.json()["user"]["role"] == "admin"
 
 
 def test_change_password(client: TestClient) -> None:
