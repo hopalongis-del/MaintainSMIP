@@ -1,0 +1,19 @@
+{
+  "id": "WO-TPL-001",
+  "name": "SMI Maintenance Sheet",
+  "description": "Standard SMI Properties paper maintenance sheet — engine, electrical, exterior, brakes, tires, and general checklist.",
+  "default_title": "Maintenance Service",
+  "default_type": "repair",
+  "default_priority": "medium",
+  "maintenance_sheet": {
+    "service_type": "repair",
+    "start_date": "",
+    "previous_service_date": "",
+    "total_labor_hours": 0,
+    "rpm_reading": "",
+    "brake_depths": { "frt_l": "", "frt_r": "", "rear_l": "", "rear_r": "" },
+    "parts_lines": [{ "qty": "", "part_number": "", "description": "" }],
+    "sheet_comments": "",
+    "checklist": []
+  }
+}

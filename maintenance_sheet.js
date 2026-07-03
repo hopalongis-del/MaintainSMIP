@@ -119,6 +119,16 @@ const MAINTENANCE_SHEET_SECTIONS = [
   },
 ];
 
+function applyWoTemplate(template) {
+  const base = defaultMaintenanceSheet();
+  if (!template) return base;
+  const sheet = template.maintenance_sheet || {};
+  return normalizeMaintenanceSheet({
+    ...sheet,
+    start_date: sheet.start_date || new Date().toISOString().slice(0, 10),
+  });
+}
+
 function defaultMaintenanceSheet() {
   const checklist = [];
   MAINTENANCE_SHEET_SECTIONS.forEach((section) => {

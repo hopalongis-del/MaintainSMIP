@@ -232,6 +232,8 @@ function openModal() {
   renderCartSelection();
   document.getElementById('wo-selected-cart').textContent = 'Select a cart to populate work order fields.';
   document.getElementById('wo-location').value = '';
+  populateWoTemplateSelect(activeWoTemplate?.id);
+  applyTemplateDefaultsToForm(getActiveWoTemplate());
   document.getElementById('wo-modal').classList.remove('hidden');
 }
 
@@ -332,7 +334,7 @@ async function openWoDetail(id) {
       </div>
     </div>
     <div class="detail-card">
-      ${renderMaintenanceSheetHtml(wo, wo.maintenance_sheet || defaultMaintenanceSheet())}
+      ${renderMaintenanceSheetHtml(wo, wo.maintenance_sheet || applyWoTemplate(getActiveWoTemplate()))}
     </div>
   `;
 
@@ -397,11 +399,13 @@ function serializeForm(forEdit = false) {
   if (!forEdit) {
     payload.parts_used = [];
     payload.comments = [];
-    const sheet = defaultMaintenanceSheet();
-    if (payload.assigned_to) {
-      sheet.start_date = new Date().toISOString().slice(0, 10);
+    const template = getActiveWoTemplate();
+    payload.maintenance_sheet = applyWoTemplate(template);
+    if (!payload.title && template?.default_title) {
+      payload.title = template.default_title;
     }
-    payload.maintenance_sheet = sheet;
+    if (template?.default_type) payload.type = template.default_type;
+    if (template?.default_priority) payload.priority = template.default_priority;
   }
 
   return payload;
@@ -442,6 +446,48 @@ async function handleWoSave(event) {
 
 let selectedWoCart = null;
 let editingWoId = null;
+let woTemplates = [];
+let activeWoTemplate = null;
+
+function getActiveWoTemplate() {
+  return activeWoTemplate || woTemplates[0] || null;
+}
+
+function renderWoTemplateBar() {
+  const template = getActiveWoTemplate();
+  const nameEl = document.getElementById('wo-template-name');
+  const descEl = document.getElementById('wo-template-desc');
+  if (!template) {
+    nameEl.textContent = 'SMI Maintenance Sheet';
+    descEl.textContent = 'Default checklist template used for all new work orders.';
+    return;
+  }
+  nameEl.textContent = template.name;
+  descEl.textContent = template.description || 'Used for all new work orders.';
+}
+
+function populateWoTemplateSelect(selectedId) {
+  const select = document.getElementById('wo-template-select');
+  if (!select) return;
+  select.innerHTML = woTemplates.map((template) => `
+    <option value="${template.id}" ${template.id === selectedId ? 'selected' : ''}>${template.name}</option>
+  `).join('');
+}
+
+function applyTemplateDefaultsToForm(template = getActiveWoTemplate()) {
+  if (!template || editingWoId) return;
+  document.getElementById('wo-title').value = template.default_title || 'Maintenance Service';
+  document.getElementById('wo-type').value = template.default_type || 'repair';
+  document.getElementById('wo-priority').value = template.default_priority || 'medium';
+  document.getElementById('wo-description').value = template.description || '';
+}
+
+async function loadWoTemplates() {
+  woTemplates = await db.getWoTemplates();
+  activeWoTemplate = woTemplates[0] || null;
+  renderWoTemplateBar();
+  populateWoTemplateSelect(activeWoTemplate?.id);
+}
 
 function showDetailPlaceholder() {
   const panel = document.getElementById('wo-detail-panel');
@@ -463,6 +509,12 @@ function showApiError(listId, message) {
 }
 
 async function initWorkOrders() {
+  document.getElementById('wo-template-select')?.addEventListener('change', (event) => {
+    activeWoTemplate = woTemplates.find((t) => t.id === event.target.value) || woTemplates[0];
+    renderWoTemplateBar();
+    applyTemplateDefaultsToForm(activeWoTemplate);
+  });
+
   document.getElementById('new-wo-btn').addEventListener('click', openModal);
   document.getElementById('modal-close').addEventListener('click', closeModal);
   document.getElementById('modal-cancel').addEventListener('click', closeModal);
@@ -479,6 +531,7 @@ async function initWorkOrders() {
   });
 
   try {
+    await loadWoTemplates();
     showDetailPlaceholder();
     setLocationFilterOptions();
     wireWoStatCards();

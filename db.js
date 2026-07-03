@@ -93,6 +93,10 @@ const db = {
     const r = await fetchApi('/api/carts');
     return r.ok ? r.json() : [];
   },
+  async getWoTemplates() {
+    const r = await fetchApi('/api/wo/templates');
+    return r.ok ? r.json() : [];
+  },
   async getWorkOrders(filters = {}) {
     const p = new URLSearchParams(filters);
     const r = await fetchApi(`/api/workorders?${p}`);

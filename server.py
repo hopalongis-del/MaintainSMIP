@@ -83,6 +83,7 @@ async def lifespan(app: FastAPI):
     await create_tables()
     app.state.carts = parse_cart_data()
     await seed_pm_templates()
+    await seed_wo_templates()
     await seed_demo_data()
     yield
 
@@ -149,6 +150,24 @@ class WorkOrder(WorkOrderBase):
     cart_serial: Optional[str] = None
     created_date: str
     completed_date: Optional[str] = None
+
+
+class WoTemplateBase(BaseModel):
+    name: str
+    description: Optional[str] = ''
+    default_title: str = 'Maintenance Service'
+    default_type: str = 'repair'
+    default_priority: str = 'medium'
+    maintenance_sheet: dict = Field(default_factory=dict)
+    active: bool = True
+
+
+class WoTemplateCreate(WoTemplateBase):
+    pass
+
+
+class WoTemplate(WoTemplateBase):
+    id: str
 
 
 class PMTemplateBase(BaseModel):
@@ -314,6 +333,20 @@ async def create_tables() -> None:
         )
         await connection.execute(
             '''
+            CREATE TABLE IF NOT EXISTS wo_templates (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                default_title TEXT,
+                default_type TEXT,
+                default_priority TEXT,
+                maintenance_sheet TEXT,
+                active INTEGER
+            )
+            '''
+        )
+        await connection.execute(
+            '''
             CREATE TABLE IF NOT EXISTS pm_templates (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -376,6 +409,38 @@ PM_TEMPLATE_SEED = [
     ('PM-TPL-004', 'Brake Inspection', 'Brake check every 6 months', 'interval_days', 180, '{"all":true,"models":[],"locations":[]}', '[{"id":1,"task":"Check brake pads","required":true},{"id":2,"task":"Test brake response","required":true}]', 20, 1),
     ('PM-TPL-005', 'Roof Inspection', 'Annual roof and top check', 'interval_days', 365, '{"all":true,"models":[],"locations":[]}', '[{"id":1,"task":"Check for cracks","required":true},{"id":2,"task":"Check mounting hardware","required":true}]', 15, 1),
 ]
+
+
+WO_TEMPLATE_PATH = ROOT_DIR / 'work_order_template.json'
+
+
+async def seed_wo_templates() -> None:
+    if not WO_TEMPLATE_PATH.exists():
+        return
+    payload = json.loads(WO_TEMPLATE_PATH.read_text(encoding='utf-8'))
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute('SELECT COUNT(*) FROM wo_templates')
+        if (await cursor.fetchone())[0] > 0:
+            return
+        await db.execute(
+            '''
+            INSERT INTO wo_templates (
+                id, name, description, default_title, default_type,
+                default_priority, maintenance_sheet, active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                payload['id'],
+                payload['name'],
+                payload.get('description', ''),
+                payload.get('default_title', 'Maintenance Service'),
+                payload.get('default_type', 'repair'),
+                payload.get('default_priority', 'medium'),
+                json.dumps(payload.get('maintenance_sheet', {})),
+                1,
+            ),
+        )
+        await db.commit()
 
 
 async def seed_pm_templates() -> None:
@@ -753,6 +818,52 @@ def delete_photo_files(photo_paths: List[str]) -> None:
 @app.get('/api/carts', response_model=List[CartItem])
 async def list_carts() -> List[CartItem]:
     return app.state.carts
+
+
+@app.get('/api/wo/templates', response_model=List[WoTemplate])
+async def list_wo_templates() -> List[WoTemplate]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT * FROM wo_templates WHERE active = 1 ORDER BY id'
+        )
+        rows = await cursor.fetchall()
+    return [
+        WoTemplate(**{
+            **dict(row),
+            'maintenance_sheet': json.loads(row['maintenance_sheet'] or '{}'),
+            'active': bool(row['active']),
+        })
+        for row in rows
+    ]
+
+
+@app.post('/api/wo/templates', response_model=WoTemplate)
+async def create_wo_template(item: WoTemplateCreate) -> WoTemplate:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute('SELECT COUNT(*) FROM wo_templates')
+        count = (await cursor.fetchone())[0]
+        template_id = f'WO-TPL-{count + 1:03d}'
+        await connection.execute(
+            '''
+            INSERT INTO wo_templates (
+                id, name, description, default_title, default_type,
+                default_priority, maintenance_sheet, active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                template_id,
+                item.name,
+                item.description,
+                item.default_title,
+                item.default_type,
+                item.default_priority,
+                json.dumps(item.maintenance_sheet or {}),
+                1 if item.active else 0,
+            ),
+        )
+        await connection.commit()
+    return WoTemplate(id=template_id, **item.model_dump())
 
 
 @app.get('/api/workorders', response_model=List[WorkOrder])

@@ -19,6 +19,10 @@ def run_tests(client: TestClient) -> None:
     stats = client.get("/api/stats")
     assert stats.status_code == 200, stats.text
 
+    wo_templates = client.get("/api/wo/templates")
+    assert wo_templates.status_code == 200, wo_templates.text
+    assert len(wo_templates.json()) >= 1, wo_templates.text
+
     wos = client.get("/api/workorders")
     assert wos.status_code == 200, wos.text
 
@@ -83,6 +87,7 @@ def run_tests(client: TestClient) -> None:
 
     print("ALL TESTS PASSED")
     print("stats:", stats.json())
+    print("wo_templates:", len(wo_templates.json()))
     print("work_orders:", len(wos.json()))
     print("pm_templates:", len(templates.json()))
     print("pm_records:", len(records.json()))

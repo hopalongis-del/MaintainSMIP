@@ -32,7 +32,17 @@
             <span class="eyebrow">Work Orders</span>
             <h2>Digital SMI Maintenance Sheets for every fleet job.</h2>
           </div>
-          <button class="btn primary" id="new-wo-btn">New Work Order</button>
+          <div class="wo-top-actions">
+            <button class="btn primary" id="new-wo-btn">New Work Order</button>
+          </div>
+        </div>
+
+        <div class="wo-template-bar card" id="wo-template-bar">
+          <div class="wo-template-copy">
+            <span class="eyebrow">Work Order Template</span>
+            <strong id="wo-template-name">Loading template…</strong>
+            <p class="hero-sub" id="wo-template-desc"></p>
+          </div>
         </div>
 
         <div class="dash-strip" id="wo-dashboard-strip">
@@ -123,6 +133,10 @@
 
         <form id="wo-form">
           <div class="form-grid">
+            <div>
+              <label for="wo-template-select">Template</label>
+              <select id="wo-template-select"></select>
+            </div>
             <div>
               <label for="wo-cart-search">Cart</label>
               <input id="wo-cart-search" type="search" placeholder="Search cart by ID, serial, or location" />
