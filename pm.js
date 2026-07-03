@@ -246,6 +246,14 @@ async function renderPmDetail(record) {
   document.getElementById('pm-delete-record').addEventListener('click', () => deletePmRecord(record.id));
   document.getElementById('pm-fail-wos').addEventListener('click', () => createWoFromPm(record.id));
   document.getElementById('pm-skip-record').addEventListener('click', () => skipPmRecord(record.id));
+
+  const auditEntries = await db.getAuditLog({ entity_type: 'pm_record', entity_id: record.id, limit: 20 });
+  panel.insertAdjacentHTML('beforeend', `
+    <div class="detail-card">
+      <h3>Activity</h3>
+      ${db.renderAuditActivityHtml(auditEntries)}
+    </div>
+  `);
 }
 
 async function savePmChecklist(recordId) {

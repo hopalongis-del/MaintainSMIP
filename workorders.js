@@ -361,6 +361,14 @@ async function openWoDetail(id) {
   document.getElementById('btn-start').addEventListener('click', () => updateWoStatus(wo.id, 'in_progress'));
   document.getElementById('btn-complete').addEventListener('click', () => updateWoStatus(wo.id, 'completed'));
   document.getElementById('btn-delete').addEventListener('click', () => deleteWo(wo.id));
+
+  const auditEntries = await db.getAuditLog({ entity_type: 'work_order', entity_id: wo.id, limit: 20 });
+  panel.insertAdjacentHTML('beforeend', `
+    <div class="detail-card">
+      <h3>Activity</h3>
+      ${db.renderAuditActivityHtml(auditEntries)}
+    </div>
+  `);
 }
 
 async function addWoComment(id, existingComments) {

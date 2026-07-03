@@ -166,6 +166,13 @@ def run_tests(client: TestClient) -> None:
     assert edit.status_code == 200, edit.text
     assert edit.json()["title"] == "Updated smoke test WO"
 
+    audit = client.get(f"/api/audit?entity_type=work_order&entity_id={wo_id}")
+    assert audit.status_code == 200, audit.text
+    audit_entries = audit.json()
+    assert len(audit_entries) >= 2, audit.text
+    assert any("Created WO-" in entry["summary"] for entry in audit_entries)
+    assert any("status" in entry["summary"].lower() for entry in audit_entries)
+
     delete = client.delete(f"/api/workorders/{wo_id}")
     assert delete.status_code == 200, delete.text
 
@@ -188,6 +195,10 @@ def run_tests(client: TestClient) -> None:
     assert photo.status_code == 200, photo.text
     photo_path = photo.json()["path"]
     assert client.get(f"/{photo_path}").status_code == 200
+    accident_audit = client.get(f"/api/audit?entity_type=accident&entity_id={accident_id}")
+    assert accident_audit.status_code == 200, accident_audit.text
+    assert any("Reported ACC-" in entry["summary"] for entry in accident_audit.json())
+
     assert client.delete(f"/api/accidents/{accident_id}").status_code == 200
 
     print("ALL TESTS PASSED")

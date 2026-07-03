@@ -312,6 +312,102 @@ def require_admin(request: Request) -> dict[str, Any]:
     return user
 
 
+async def record_audit(
+    request: Request,
+    action: str,
+    entity_type: str,
+    entity_id: Any,
+    summary: str,
+    details: Optional[dict[str, Any]] = None,
+) -> None:
+    user = get_request_user(request) or {}
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            '''
+            INSERT INTO audit_log (
+                created_at, user_id, username, display_name,
+                action, entity_type, entity_id, summary, details
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                datetime.utcnow().isoformat(),
+                user.get('id'),
+                user.get('username'),
+                user.get('display_name') or 'System',
+                action,
+                entity_type,
+                str(entity_id),
+                summary,
+                json.dumps(details) if details else None,
+            ),
+        )
+        await connection.commit()
+
+
+def _format_field_change(label: str, old_value: Any, new_value: Any) -> Optional[str]:
+    if old_value == new_value:
+        return None
+    old_text = '—' if old_value in (None, '') else str(old_value).replace('_', ' ')
+    new_text = '—' if new_value in (None, '') else str(new_value).replace('_', ' ')
+    return f'{label}: {old_text} → {new_text}'
+
+
+def summarize_work_order_update(existing: dict[str, Any], item: WorkOrderUpdate) -> tuple[str, dict[str, Any]]:
+    changes: list[str] = []
+    payload = item.model_dump(exclude_unset=True)
+    field_labels = {
+        'title': 'title',
+        'status': 'status',
+        'priority': 'priority',
+        'type': 'type',
+        'assigned_to': 'assigned to',
+        'location': 'location',
+        'cart_id': 'cart',
+    }
+    for field, label in field_labels.items():
+        if field in payload:
+            change = _format_field_change(label, existing.get(field), payload[field])
+            if change:
+                changes.append(change)
+
+    details: dict[str, Any] = {'changes': changes}
+    if 'maintenance_sheet' in payload and isinstance(payload['maintenance_sheet'], dict):
+        checklist = payload['maintenance_sheet'].get('checklist') or []
+        done = sum(1 for entry in checklist if entry.get('checked'))
+        changes.append(f'maintenance sheet ({done}/{len(checklist)} checked)')
+        details['sheet_progress'] = {'done': done, 'total': len(checklist)}
+    if 'comments' in payload:
+        changes.append('added comment')
+    if 'parts_used' in payload:
+        changes.append('updated parts list')
+
+    if not changes:
+        return 'Updated work order', details
+    return 'Updated ' + ', '.join(changes), details
+
+
+def summarize_accident_update(existing: dict[str, Any], payload: dict[str, Any]) -> str:
+    changes: list[str] = []
+    for field, label in (
+        ('status', 'status'),
+        ('severity', 'severity'),
+        ('location', 'location'),
+        ('reported_by', 'reported by'),
+        ('cart_id', 'cart'),
+    ):
+        if field in payload:
+            change = _format_field_change(label, existing.get(field), payload[field])
+            if change:
+                changes.append(change)
+    if 'description' in payload and payload['description'] != existing.get('description'):
+        changes.append('updated description')
+    if 'damage_areas' in payload:
+        changes.append('updated damage areas')
+    if not changes:
+        return 'Updated accident report'
+    return 'Updated ' + ', '.join(changes)
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         request.state.user = None
@@ -562,6 +658,19 @@ class AccidentReport(AccidentReportBase):
     created_date: str
 
 
+class AuditEntry(BaseModel):
+    id: int
+    created_at: str
+    user_id: Optional[int] = None
+    username: Optional[str] = None
+    display_name: str
+    action: str
+    entity_type: str
+    entity_id: str
+    summary: str
+    details: Optional[dict[str, Any]] = None
+
+
 async def get_database() -> aiosqlite.Connection:
     return await aiosqlite.connect(DB_PATH)
 
@@ -732,6 +841,22 @@ async def create_tables() -> None:
             await connection.execute(
                 'ALTER TABLE users ADD COLUMN password_changed INTEGER NOT NULL DEFAULT 0',
             )
+        await connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                user_id INTEGER,
+                username TEXT,
+                display_name TEXT,
+                action TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                details TEXT
+            )
+            '''
+        )
         await connection.commit()
 
 
@@ -1286,6 +1411,15 @@ async def create_work_order(request: Request, item: WorkOrderCreate) -> WorkOrde
         await connection.commit()
         row_id = cursor.lastrowid
 
+    await record_audit(
+        request,
+        'created',
+        'work_order',
+        row_id,
+        f'Created WO-{row_id} for cart #{item.cart_id}',
+        {'title': item.title, 'status': item.status},
+    )
+
     return WorkOrder(**{
         'id': row_id,
         'cart_id': item.cart_id,
@@ -1400,6 +1534,8 @@ async def update_work_order(request: Request, workorder_id: int, item: WorkOrder
     updated['parts_used'] = json.loads(updated['parts_used'] or '[]')
     updated['comments'] = json.loads(updated['comments'] or '[]')
     updated['maintenance_sheet'] = json.loads(updated.get('maintenance_sheet') or '{}')
+    summary, details = summarize_work_order_update(existing, item)
+    await record_audit(request, 'updated', 'work_order', workorder_id, summary, details)
     return WorkOrder(**updated)
 
 
@@ -1520,6 +1656,15 @@ async def create_pm_record(request: Request, item: PMRecordCreate) -> PMRecord:
         await connection.commit()
         row_id = cursor.lastrowid
 
+    await record_audit(
+        request,
+        'created',
+        'pm_record',
+        row_id,
+        f'Created PM-{row_id} for cart #{item.cart_id}',
+        {'template_name': item.template_name, 'status': item.status},
+    )
+
     return PMRecord(**{
         'id': row_id,
         **item.dict(),
@@ -1539,6 +1684,10 @@ async def update_pm_record(request: Request, record_id: str, update: dict) -> di
         fields['rid'] = record_id
         await db.execute(f'UPDATE pm_records SET {set_clause} WHERE id = :rid', fields)
         await db.commit()
+    summary = f'Updated PM-{record_id}'
+    if 'status' in update:
+        summary = f'Updated PM-{record_id}: status → {str(update["status"]).replace("_", " ")}'
+    await record_audit(request, 'updated', 'pm_record', record_id, summary, update)
     return {'id': record_id, **update}
 
 
@@ -1551,6 +1700,7 @@ async def delete_work_order(request: Request, workorder_id: int) -> dict:
             raise HTTPException(status_code=404, detail='Work order not found')
         await connection.execute('DELETE FROM work_orders WHERE id = ?', (workorder_id,))
         await connection.commit()
+    await record_audit(request, 'deleted', 'work_order', workorder_id, f'Deleted WO-{workorder_id}')
     return {'deleted': workorder_id}
 
 
@@ -1563,6 +1713,7 @@ async def delete_pm_record(request: Request, record_id: int) -> dict:
             raise HTTPException(status_code=404, detail='PM record not found')
         await connection.execute('DELETE FROM pm_records WHERE id = ?', (record_id,))
         await connection.commit()
+    await record_audit(request, 'deleted', 'pm_record', record_id, f'Deleted PM-{record_id}')
     return {'deleted': record_id}
 
 
@@ -1634,6 +1785,15 @@ async def create_accident(request: Request, item: AccidentReportCreate) -> Accid
         await connection.commit()
         row_id = cursor.lastrowid
 
+    await record_audit(
+        request,
+        'created',
+        'accident',
+        row_id,
+        f'Reported ACC-{row_id} for cart #{item.cart_id}',
+        {'severity': item.severity, 'status': item.status},
+    )
+
     return AccidentReport(**{
         'id': row_id,
         'cart_id': item.cart_id,
@@ -1699,6 +1859,8 @@ async def update_accident(request: Request, accident_id: int, item: AccidentRepo
 
     updated['damage_areas'] = json.loads(updated['damage_areas'] or '[]')
     updated['photos'] = json.loads(updated['photos'] or '[]')
+    summary = summarize_accident_update(existing, payload)
+    await record_audit(request, 'updated', 'accident', accident_id, summary, payload)
     return AccidentReport(**updated)
 
 
@@ -1734,6 +1896,14 @@ async def upload_accident_photo(request: Request, accident_id: int, file: Upload
         )
         await connection.commit()
 
+    await record_audit(
+        request,
+        'photo_added',
+        'accident',
+        accident_id,
+        f'Added damage photo to ACC-{accident_id}',
+        {'path': rel_path},
+    )
     return {'path': rel_path, 'photos': photos}
 
 
@@ -1755,6 +1925,14 @@ async def delete_accident_photo(request: Request, accident_id: int, path: str = 
         )
         await connection.commit()
 
+    await record_audit(
+        request,
+        'photo_removed',
+        'accident',
+        accident_id,
+        f'Removed damage photo from ACC-{accident_id}',
+        {'path': path},
+    )
     return {'photos': photos}
 
 
@@ -1775,7 +1953,44 @@ async def delete_accident(request: Request, accident_id: int) -> dict:
         await connection.execute('DELETE FROM accident_reports WHERE id = ?', (accident_id,))
         await connection.commit()
 
+    await record_audit(request, 'deleted', 'accident', accident_id, f'Deleted ACC-{accident_id}')
     return {'deleted': accident_id}
+
+
+@app.get('/api/audit', response_model=List[AuditEntry])
+async def list_audit_entries(
+    request: Request,
+    entity_type: Optional[str] = Query(None),
+    entity_id: Optional[str] = Query(None),
+    limit: int = Query(25, ge=1, le=100),
+) -> List[dict[str, Any]]:
+    require_authenticated_user(request)
+    query = 'SELECT * FROM audit_log'
+    conditions: list[str] = []
+    params: list[Any] = []
+    if entity_type:
+        conditions.append('entity_type = ?')
+        params.append(entity_type)
+    if entity_id is not None:
+        conditions.append('entity_id = ?')
+        params.append(str(entity_id))
+    if conditions:
+        query += ' WHERE ' + ' AND '.join(conditions)
+    query += ' ORDER BY id DESC LIMIT ?'
+    params.append(limit)
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(query, params)
+        rows = await cursor.fetchall()
+
+    entries: list[dict[str, Any]] = []
+    for row in rows:
+        data = dict(row)
+        details_raw = data.get('details')
+        data['details'] = json.loads(details_raw) if details_raw else None
+        entries.append(data)
+    return entries
 
 
 @app.get('/api/stats')

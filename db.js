@@ -118,6 +118,36 @@ function readUrlParams() {
 let currentUser = null;
 let currentUserPromise = null;
 
+function formatAuditTimestamp(value) {
+  if (!value) return '';
+  return new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function renderAuditActivityHtml(entries) {
+  if (!entries?.length) {
+    return '<p class="hero-sub">No activity recorded yet.</p>';
+  }
+  return `
+    <ul class="audit-list">
+      ${entries.map((entry) => `
+        <li class="audit-item">
+          <div class="audit-item-head">
+            <strong>${entry.display_name || 'System'}</strong>
+            <span class="audit-item-time">${formatAuditTimestamp(entry.created_at)}</span>
+          </div>
+          <p class="audit-item-summary">${entry.summary}</p>
+        </li>
+      `).join('')}
+    </ul>
+  `;
+}
+
 async function loadCurrentUser() {
   if (!currentUserPromise) {
     currentUserPromise = (async () => {
@@ -146,6 +176,13 @@ const db = {
   getCurrentUser: loadCurrentUser,
   getCachedUser() {
     return currentUser;
+  },
+  formatAuditTimestamp,
+  renderAuditActivityHtml,
+  async getAuditLog(filters = {}) {
+    const p = new URLSearchParams(filters);
+    const r = await fetchApi(`/api/audit?${p}`);
+    return r.ok ? r.json() : [];
   },
   async getCarts() {
     const r = await fetchApi('/api/carts');

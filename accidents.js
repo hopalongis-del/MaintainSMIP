@@ -312,6 +312,14 @@ async function openAccidentDetail(id) {
     uploadOnApproveAccidentId = acc.id;
     showPhotoReview(file);
   });
+
+  const auditEntries = await db.getAuditLog({ entity_type: 'accident', entity_id: acc.id, limit: 20 });
+  panel.insertAdjacentHTML('beforeend', `
+    <div class="detail-card">
+      <h3>Activity</h3>
+      ${db.renderAuditActivityHtml(auditEntries)}
+    </div>
+  `);
 }
 
 function showDetailPlaceholder() {
