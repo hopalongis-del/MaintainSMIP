@@ -113,6 +113,48 @@ def run_tests(client: TestClient) -> None:
     assert carts.status_code == 200, carts.text
     assert len(carts.json()) > 0
 
+    create_cart = client.post(
+        "/api/carts",
+        json={
+            "id": "SMOKE-TEST-1",
+            "serial": "SMOKE-123",
+            "model": "Carryall 1",
+            "year": "2024",
+            "location": "SMIP",
+            "status": "active",
+            "notes": "Smoke test cart",
+        },
+    )
+    assert create_cart.status_code == 200, create_cart.text
+    assert create_cart.json()["serial"] == "SMOKE-123"
+
+    duplicate_cart = client.post(
+        "/api/carts",
+        json={"id": "SMOKE-TEST-1", "model": "Duplicate"},
+    )
+    assert duplicate_cart.status_code == 409, duplicate_cart.text
+
+    update_cart = client.put(
+        "/api/carts/SMOKE-TEST-1",
+        json={"location": "Charlotte", "notes": "Updated smoke cart"},
+    )
+    assert update_cart.status_code == 200, update_cart.text
+    assert update_cart.json()["location"] == "Charlotte"
+
+    retire_cart = client.put(
+        "/api/carts/SMOKE-TEST-1",
+        json={"status": "retired"},
+    )
+    assert retire_cart.status_code == 200, retire_cart.text
+    assert retire_cart.json()["status"] == "retired"
+
+    cart_audit = client.get("/api/audit?entity_type=cart&entity_id=SMOKE-TEST-1")
+    assert cart_audit.status_code == 200, cart_audit.text
+    cart_audit_entries = cart_audit.json()
+    assert len(cart_audit_entries) >= 2, cart_audit.text
+    assert any("Added cart" in entry["summary"] for entry in cart_audit_entries)
+    assert any("Retired cart" in entry["summary"] for entry in cart_audit_entries)
+
     health = client.get("/api/health")
     assert health.status_code == 200, health.text
     health_data = health.json()

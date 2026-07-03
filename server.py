@@ -408,6 +408,29 @@ def summarize_accident_update(existing: dict[str, Any], payload: dict[str, Any])
     return 'Updated ' + ', '.join(changes)
 
 
+def summarize_cart_update(existing: dict[str, Any], payload: dict[str, Any]) -> str:
+    changes: list[str] = []
+    for field, label in (
+        ('serial', 'serial'),
+        ('model', 'model'),
+        ('year', 'year'),
+        ('location', 'location'),
+        ('status', 'status'),
+    ):
+        if field in payload:
+            change = _format_field_change(label, existing.get(field), payload[field])
+            if change:
+                changes.append(change)
+    if 'notes' in payload and payload['notes'] != existing.get('notes'):
+        changes.append('updated notes')
+    cart_label = existing.get('id')
+    if payload.get('status') == 'retired' and existing.get('status') != 'retired':
+        return f'Retired cart #{cart_label}'
+    if not changes:
+        return f'Updated cart #{cart_label}'
+    return f'Updated cart #{cart_label}: ' + ', '.join(changes)
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         request.state.user = None
@@ -488,7 +511,8 @@ async def lifespan(app: FastAPI):
     ensure_persistent_storage()
     await migrate_schema()
     await create_tables()
-    app.state.carts = parse_cart_data()
+    await seed_carts_from_file()
+    app.state.carts = await fetch_all_carts()
     await seed_pm_templates()
     await seed_wo_templates()
     await ensure_wo_templates_seeded()
@@ -515,6 +539,25 @@ class CartItem(BaseModel):
     location: Optional[str]
     status: Optional[str]
     notes: Optional[str]
+
+
+class CartCreate(BaseModel):
+    id: Any
+    serial: Optional[str] = ''
+    model: Optional[str] = ''
+    year: Optional[str] = ''
+    location: Optional[str] = ''
+    status: str = 'active'
+    notes: Optional[str] = ''
+
+
+class CartUpdate(BaseModel):
+    serial: Optional[str] = None
+    model: Optional[str] = None
+    year: Optional[str] = None
+    location: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class WorkOrderBase(BaseModel):
@@ -692,6 +735,84 @@ def parse_cart_data() -> List[CartItem]:
         return []
 
 
+def cart_id_str(cart_id: Any) -> str:
+    return str(cart_id).strip()
+
+
+def cart_row_to_item(row: Any) -> CartItem:
+    data = dict(row)
+    raw_id = data['id']
+    if isinstance(raw_id, str) and raw_id.isdigit():
+        raw_id = int(raw_id)
+    return CartItem(
+        id=raw_id,
+        serial=data.get('serial'),
+        model=data.get('model'),
+        year=data.get('year'),
+        location=data.get('location'),
+        status=data.get('status'),
+        notes=data.get('notes'),
+    )
+
+
+async def fetch_all_carts() -> List[CartItem]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT id, serial, model, year, location, status, notes FROM carts ORDER BY id'
+        )
+        rows = await cursor.fetchall()
+    return [cart_row_to_item(row) for row in rows]
+
+
+async def fetch_cart_row(cart_id: Any) -> Optional[dict[str, Any]]:
+    normalized = cart_id_str(cart_id)
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT * FROM carts WHERE id = ?',
+            (normalized,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def lookup_cart_serial(cart_id: Any) -> str:
+    row = await fetch_cart_row(cart_id)
+    return row.get('serial', '') if row else ''
+
+
+async def seed_carts_from_file() -> None:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute('SELECT COUNT(*) FROM carts')
+        if (await cursor.fetchone())[0] > 0:
+            return
+        items = parse_cart_data()
+        if not items:
+            return
+        for cart in items:
+            await connection.execute(
+                '''
+                INSERT INTO carts (id, serial, model, year, location, status, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''',
+                (
+                    cart_id_str(cart.id),
+                    cart.serial or '',
+                    cart.model or '',
+                    cart.year or '',
+                    cart.location or '',
+                    cart.status or 'active',
+                    cart.notes or '',
+                ),
+            )
+        await connection.commit()
+
+
+async def refresh_carts_cache() -> None:
+    app.state.carts = await fetch_all_carts()
+
+
 def parse_work_order_row(row: aiosqlite.Row) -> WorkOrder:
     data = dict(row)
     data['parts_used'] = json.loads(data.get('parts_used') or '[]')
@@ -854,6 +975,19 @@ async def create_tables() -> None:
                 entity_id TEXT NOT NULL,
                 summary TEXT NOT NULL,
                 details TEXT
+            )
+            '''
+        )
+        await connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS carts (
+                id TEXT PRIMARY KEY,
+                serial TEXT,
+                model TEXT,
+                year TEXT,
+                location TEXT,
+                status TEXT,
+                notes TEXT
             )
             '''
         )
@@ -1296,7 +1430,90 @@ def delete_photo_files(photo_paths: List[str]) -> None:
 
 @app.get('/api/carts', response_model=List[CartItem])
 async def list_carts() -> List[CartItem]:
-    return app.state.carts
+    return await fetch_all_carts()
+
+
+@app.get('/api/carts/{cart_id}', response_model=CartItem)
+async def get_cart(cart_id: str) -> CartItem:
+    row = await fetch_cart_row(cart_id)
+    if not row:
+        raise HTTPException(status_code=404, detail='Cart not found')
+    return cart_row_to_item(row)
+
+
+@app.post('/api/carts', response_model=CartItem)
+async def create_cart(request: Request, item: CartCreate) -> CartItem:
+    require_write_access(request)
+    normalized_id = cart_id_str(item.id)
+    if not normalized_id:
+        raise HTTPException(status_code=400, detail='Cart ID is required')
+    if await fetch_cart_row(normalized_id):
+        raise HTTPException(status_code=409, detail=f'Cart #{normalized_id} already exists')
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            '''
+            INSERT INTO carts (id, serial, model, year, location, status, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                normalized_id,
+                item.serial or '',
+                item.model or '',
+                item.year or '',
+                item.location or '',
+                item.status or 'active',
+                item.notes or '',
+            ),
+        )
+        await connection.commit()
+
+    await refresh_carts_cache()
+    await record_audit(
+        request,
+        'created',
+        'cart',
+        normalized_id,
+        f'Added cart #{normalized_id} ({item.model or "unknown model"})',
+        {'location': item.location, 'status': item.status},
+    )
+    row = await fetch_cart_row(normalized_id)
+    return cart_row_to_item(row)
+
+
+@app.put('/api/carts/{cart_id}', response_model=CartItem)
+async def update_cart(request: Request, cart_id: str, item: CartUpdate) -> CartItem:
+    require_write_access(request)
+    existing = await fetch_cart_row(cart_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail='Cart not found')
+
+    payload = item.model_dump(exclude_unset=True)
+    updated = {**existing, **payload}
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            '''
+            UPDATE carts SET serial = ?, model = ?, year = ?, location = ?, status = ?, notes = ?
+            WHERE id = ?
+            ''',
+            (
+                updated.get('serial', ''),
+                updated.get('model', ''),
+                updated.get('year', ''),
+                updated.get('location', ''),
+                updated.get('status', ''),
+                updated.get('notes', ''),
+                cart_id_str(cart_id),
+            ),
+        )
+        await connection.commit()
+
+    await refresh_carts_cache()
+    summary = summarize_cart_update(existing, payload)
+    await record_audit(request, 'updated', 'cart', cart_id_str(cart_id), summary, payload)
+    row = await fetch_cart_row(cart_id)
+    return cart_row_to_item(row)
 
 
 @app.get('/api/wo/templates', response_model=List[WoTemplate])
@@ -1380,6 +1597,7 @@ async def create_work_order(request: Request, item: WorkOrderCreate) -> WorkOrde
     if not item.assigned_to:
         item = item.model_copy(update={'assigned_to': user['display_name']})
     created_date = datetime.utcnow().isoformat()
+    cart_serial = await lookup_cart_serial(item.cart_id)
     async with aiosqlite.connect(DB_PATH) as connection:
         cursor = await connection.execute(
             '''
@@ -1391,7 +1609,7 @@ async def create_work_order(request: Request, item: WorkOrderCreate) -> WorkOrde
             ''',
             (
                 item.cart_id,
-                next((cart.serial for cart in app.state.carts if cart.id == item.cart_id), ''),
+                cart_serial,
                 item.title,
                 item.description,
                 item.priority,
@@ -1423,7 +1641,7 @@ async def create_work_order(request: Request, item: WorkOrderCreate) -> WorkOrde
     return WorkOrder(**{
         'id': row_id,
         'cart_id': item.cart_id,
-        'cart_serial': next((cart.serial for cart in app.state.carts if cart.id == item.cart_id), ''),
+        'cart_serial': cart_serial,
         'title': item.title,
         'description': item.description,
         'priority': item.priority,
@@ -1463,10 +1681,7 @@ async def update_work_order(request: Request, workorder_id: int, item: WorkOrder
             updated['type'] = item.type
         if item.cart_id is not None:
             updated['cart_id'] = item.cart_id
-            updated['cart_serial'] = next(
-                (cart.serial for cart in app.state.carts if cart.id == item.cart_id),
-                updated.get('cart_serial', ''),
-            )
+            updated['cart_serial'] = await lookup_cart_serial(item.cart_id) or updated.get('cart_serial', '')
         if item.status is not None:
             updated['status'] = item.status
             if item.status == 'completed' and not updated.get('completed_date'):
@@ -1753,10 +1968,7 @@ async def create_accident(request: Request, item: AccidentReportCreate) -> Accid
     if not item.reported_by:
         item = item.model_copy(update={'reported_by': user['display_name']})
     created_date = datetime.utcnow().isoformat()
-    cart_serial = next(
-        (cart.serial for cart in app.state.carts if cart.id == item.cart_id),
-        '',
-    )
+    cart_serial = await lookup_cart_serial(item.cart_id)
     async with aiosqlite.connect(DB_PATH) as connection:
         cursor = await connection.execute(
             '''
@@ -1821,10 +2033,7 @@ async def update_accident(request: Request, accident_id: int, item: AccidentRepo
 
     if 'cart_id' in payload:
         updated['cart_id'] = payload['cart_id']
-        updated['cart_serial'] = next(
-            (cart.serial for cart in app.state.carts if cart.id == payload['cart_id']),
-            updated.get('cart_serial', ''),
-        )
+        updated['cart_serial'] = await lookup_cart_serial(payload['cart_id']) or updated.get('cart_serial', '')
     for field in ('location', 'reported_by', 'incident_date', 'description', 'severity', 'status', 'notes', 'linked_wo_id'):
         if field in payload:
             updated[field] = payload[field]

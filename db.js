@@ -85,6 +85,11 @@ async function fetchApi(path, options = {}) {
 
 let cartDataPromise = null;
 
+function resetCartCache() {
+  cartDataPromise = null;
+  window.cartData = [];
+}
+
 async function loadCartData() {
   if (!cartDataPromise) {
     cartDataPromise = (async () => {
@@ -92,7 +97,7 @@ async function loadCartData() {
         const response = await fetchApi('/api/carts');
         if (response.ok) {
           const carts = await response.json();
-          if (Array.isArray(carts) && carts.length) {
+          if (Array.isArray(carts)) {
             window.cartData = carts;
           }
         }
@@ -104,6 +109,11 @@ async function loadCartData() {
     })();
   }
   return cartDataPromise;
+}
+
+function userCanWrite() {
+  const role = currentUser?.role;
+  return Boolean(role && role !== 'readonly');
 }
 
 function parseDeepLinkId(value) {
@@ -172,6 +182,8 @@ const db = {
   parseDeepLinkId,
   readUrlParams,
   loadCartData,
+  resetCartCache,
+  userCanWrite,
   loadCurrentUser,
   getCurrentUser: loadCurrentUser,
   getCachedUser() {
@@ -187,6 +199,48 @@ const db = {
   async getCarts() {
     const r = await fetchApi('/api/carts');
     return r.ok ? r.json() : [];
+  },
+  async getCart(id) {
+    const r = await fetchApi(`/api/carts/${encodeURIComponent(id)}`);
+    return r.ok ? r.json() : null;
+  },
+  async saveCart(cart) {
+    const r = await fetchApi('/api/carts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cart),
+    });
+    if (!r.ok) {
+      let detail = `Save failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = body.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    resetCartCache();
+    return r.json();
+  },
+  async updateCart(id, fields) {
+    const r = await fetchApi(`/api/carts/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+    if (!r.ok) {
+      let detail = `Update failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = body.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    resetCartCache();
+    return r.json();
   },
   async getWoTemplates() {
     const r = await fetchApi('/api/wo/templates');

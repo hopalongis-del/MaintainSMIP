@@ -65,6 +65,26 @@
         font-size: 0.85rem;
       }
 
+      .fleet-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+        flex-wrap: wrap;
+      }
+
+      .fleet-table .fleet-edit-btn {
+        padding: 4px 10px;
+        font-size: 0.8rem;
+      }
+
+      .cart-audit-panel {
+        margin-top: 18px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+      }
+
       @media (max-width: 900px) {
         .filter-bar {
           grid-template-columns: 1fr;
@@ -126,6 +146,11 @@
         <h2 class="section-title" id="fleet">Fleet Overview</h2>
         <div class="fleet-grid" id="fleet-grid"></div>
 
+        <div class="fleet-actions">
+          <p class="hero-sub" style="margin: 0;">Search and filter the fleet table below. Click a row to view work orders for that cart.</p>
+          <button type="button" class="btn primary hidden" id="fleet-add-btn">Add Cart</button>
+        </div>
+
         <div class="filter-bar fleet-filter-bar">
           <div class="filter-group">
             <label for="fleet-filter-location">Location</label>
@@ -144,7 +169,7 @@
         <div class="fleet-table-wrap">
           <table class="fleet-table">
             <thead>
-              <tr><th>ID</th><th>Serial</th><th>Model</th><th>Year</th><th>Location</th><th>Status</th></tr>
+              <tr><th>ID</th><th>Serial</th><th>Model</th><th>Year</th><th>Location</th><th>Status</th><th id="fleet-actions-col" class="hidden">Actions</th></tr>
             </thead>
             <tbody id="fleet-table-body"></tbody>
           </table>
@@ -163,6 +188,70 @@
       </section>
 
       <footer class="page-footer" data-settings-footer>MaintainSMIP · SMI Properties Fleet Maintenance</footer>
+    </div>
+
+    <div class="modal hidden" id="cart-modal">
+      <div class="modal-panel card">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow" id="cart-modal-eyebrow">Fleet</span>
+            <h2 id="cart-modal-heading">Add Cart</h2>
+          </div>
+          <button class="btn ghost" type="button" id="cart-modal-close">Close</button>
+        </div>
+
+        <form id="cart-form">
+          <div class="form-grid">
+            <div>
+              <label for="cart-id">Cart ID</label>
+              <input id="cart-id" required placeholder="e.g. 2100 or ADA 12" />
+            </div>
+            <div>
+              <label for="cart-serial">Serial</label>
+              <input id="cart-serial" placeholder="Manufacturer serial number" />
+            </div>
+            <div>
+              <label for="cart-model">Model</label>
+              <input id="cart-model" list="cart-model-options" placeholder="Carryall 1, Villager 8, etc." />
+              <datalist id="cart-model-options"></datalist>
+            </div>
+            <div>
+              <label for="cart-year">Year</label>
+              <input id="cart-year" placeholder="Year" />
+            </div>
+            <div>
+              <label for="cart-location">Location</label>
+              <input id="cart-location" list="cart-location-options" placeholder="Venue or warehouse" />
+              <datalist id="cart-location-options"></datalist>
+            </div>
+            <div>
+              <label for="cart-status">Status</label>
+              <input id="cart-status" list="cart-status-options" value="active" />
+              <datalist id="cart-status-options">
+                <option value="active"></option>
+                <option value="retired"></option>
+                <option value="Maintenance"></option>
+                <option value="Out of Service - Reason TBD / On Hill"></option>
+              </datalist>
+            </div>
+          </div>
+          <div>
+            <label for="cart-notes">Notes</label>
+            <textarea id="cart-notes" placeholder="Optional notes about this cart"></textarea>
+          </div>
+          <div class="modal-actions">
+            <button class="btn secondary" type="button" id="cart-modal-cancel">Cancel</button>
+            <button class="btn secondary hidden" type="button" id="cart-retire-btn">Retire Cart</button>
+            <a class="btn ghost hidden" id="cart-view-wo-btn" href="#">View Work Orders</a>
+            <button class="btn primary" type="submit" id="cart-save-btn">Save Cart</button>
+          </div>
+        </form>
+
+        <div class="cart-audit-panel hidden" id="cart-audit-panel">
+          <h3 class="section-title" style="font-size: 1rem; margin-bottom: 8px;">Activity</h3>
+          <div id="cart-audit-list"></div>
+        </div>
+      </div>
     </div>
 
     <script src="db.js"></script>
@@ -197,9 +286,67 @@
       }
 
       let allCarts = [];
+      let editingCartId = null;
+      let fleetWriteEnabled = false;
 
       function getUniqueSorted(values) {
         return Array.from(new Set(values.filter(Boolean))).sort();
+      }
+
+      function populateCartDatalists() {
+        const models = getUniqueSorted(allCarts.map(c => c.model));
+        const locations = getUniqueSorted(allCarts.map(c => c.location));
+        document.getElementById('cart-model-options').innerHTML =
+          models.map(v => `<option value="${v.replace(/"/g, '&quot;')}"></option>`).join('');
+        document.getElementById('cart-location-options').innerHTML =
+          locations.map(v => `<option value="${v.replace(/"/g, '&quot;')}"></option>`).join('');
+      }
+
+      function setFleetWriteUi(enabled) {
+        fleetWriteEnabled = enabled;
+        document.getElementById('fleet-add-btn').classList.toggle('hidden', !enabled);
+        document.getElementById('fleet-actions-col').classList.toggle('hidden', !enabled);
+      }
+
+      function openCartModal(mode, cart = null) {
+        editingCartId = mode === 'edit' ? cart.id : null;
+        const isEdit = mode === 'edit';
+        document.getElementById('cart-modal-eyebrow').textContent = isEdit ? 'Edit Cart' : 'New Cart';
+        document.getElementById('cart-modal-heading').textContent = isEdit ? `Cart #${cart.id}` : 'Add Cart';
+        document.getElementById('cart-id').value = cart?.id ?? '';
+        document.getElementById('cart-id').readOnly = isEdit;
+        document.getElementById('cart-serial').value = cart?.serial ?? '';
+        document.getElementById('cart-model').value = cart?.model ?? '';
+        document.getElementById('cart-year').value = cart?.year ?? '';
+        document.getElementById('cart-location').value = cart?.location ?? '';
+        document.getElementById('cart-status').value = cart?.status ?? 'active';
+        document.getElementById('cart-notes').value = cart?.notes ?? '';
+        document.getElementById('cart-retire-btn').classList.toggle('hidden', !isEdit || cart?.status === 'retired');
+        document.getElementById('cart-view-wo-btn').classList.toggle('hidden', !isEdit);
+        if (isEdit) {
+          document.getElementById('cart-view-wo-btn').href =
+            `workorders.html?search=${encodeURIComponent(cart.id)}`;
+        }
+        document.getElementById('cart-audit-panel').classList.toggle('hidden', !isEdit);
+        document.getElementById('cart-modal').classList.remove('hidden');
+        if (isEdit) {
+          loadCartAudit(cart.id);
+        } else {
+          document.getElementById('cart-audit-list').innerHTML = '';
+        }
+      }
+
+      function closeCartModal() {
+        editingCartId = null;
+        document.getElementById('cart-modal').classList.add('hidden');
+        document.getElementById('cart-form').reset();
+      }
+
+      async function loadCartAudit(cartId) {
+        const list = document.getElementById('cart-audit-list');
+        list.innerHTML = '<p class="hero-sub loading-pulse">Loading activity…</p>';
+        const entries = await db.getAuditLog({ entity_type: 'cart', entity_id: String(cartId), limit: 15 });
+        list.innerHTML = db.renderAuditActivityHtml(entries);
       }
 
       async function loadFleetSummary() {
@@ -255,6 +402,7 @@
           modelSelect.appendChild(opt);
         });
 
+        populateCartDatalists();
         renderFleetTable();
       }
 
@@ -275,6 +423,11 @@
 
         const body = document.getElementById('fleet-table-body');
         const SHOWN_LIMIT = 300;
+        const actionCell = fleetWriteEnabled
+          ? (cart) => `<td><button type="button" class="btn ghost fleet-edit-btn" data-edit-cart="${String(cart.id).replace(/"/g, '&quot;')}">Edit</button></td>`
+          : () => '';
+        const colSpan = fleetWriteEnabled ? 7 : 6;
+
         body.innerHTML = filtered.length
           ? filtered.slice(0, SHOWN_LIMIT).map(cart => `
               <tr data-cart-id="${cart.id}" title="View work orders for cart #${cart.id}">
@@ -284,9 +437,10 @@
                 <td>${cart.year || '—'}</td>
                 <td>${cart.location || '—'}</td>
                 <td>${cart.status || '—'}</td>
+                ${actionCell(cart)}
               </tr>
             `).join('')
-          : '<tr><td colspan="6" style="text-align:center; color: var(--muted); padding: 24px;">No carts match these filters.</td></tr>';
+          : `<tr><td colspan="${colSpan}" style="text-align:center; color: var(--muted); padding: 24px;">No carts match these filters.</td></tr>`;
 
         const shown = Math.min(filtered.length, SHOWN_LIMIT);
         document.getElementById('fleet-table-count').textContent =
@@ -297,6 +451,9 @@
 
       async function loadDashboard() {
         try {
+          await db.getCurrentUser();
+          setFleetWriteUi(db.userCanWrite());
+
           const stats = await db.getStats();
           document.getElementById('stat-open').textContent = stats.open_work_orders ?? 0;
           document.getElementById('stat-overdue').textContent = stats.overdue_work_orders ?? 0;
@@ -355,9 +512,69 @@
       }
 
       document.getElementById('fleet-table-body').addEventListener('click', (event) => {
+        const editBtn = event.target.closest('[data-edit-cart]');
+        if (editBtn) {
+          event.stopPropagation();
+          const cartId = editBtn.dataset.editCart;
+          const cart = allCarts.find((c) => String(c.id) === String(cartId));
+          if (cart) openCartModal('edit', cart);
+          return;
+        }
         const row = event.target.closest('tr[data-cart-id]');
         if (!row) return;
         window.location.href = `workorders.html?search=${encodeURIComponent(row.dataset.cartId)}`;
+      });
+
+      document.getElementById('fleet-add-btn')?.addEventListener('click', () => openCartModal('add'));
+      document.getElementById('cart-modal-close')?.addEventListener('click', closeCartModal);
+      document.getElementById('cart-modal-cancel')?.addEventListener('click', closeCartModal);
+      document.getElementById('cart-modal')?.addEventListener('click', (event) => {
+        if (event.target.id === 'cart-modal') closeCartModal();
+      });
+
+      document.getElementById('cart-retire-btn')?.addEventListener('click', async () => {
+        if (!editingCartId) return;
+        if (!confirm(`Retire cart #${editingCartId}? It will stay in the fleet list with retired status.`)) return;
+        const result = await db.updateCart(editingCartId, { status: 'retired' });
+        if (result?.error) {
+          alert(result.error);
+          return;
+        }
+        closeCartModal();
+        await loadFleetSummary();
+      });
+
+      document.getElementById('cart-form')?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const payload = {
+          serial: document.getElementById('cart-serial').value.trim(),
+          model: document.getElementById('cart-model').value.trim(),
+          year: document.getElementById('cart-year').value.trim(),
+          location: document.getElementById('cart-location').value.trim(),
+          status: document.getElementById('cart-status').value.trim() || 'active',
+          notes: document.getElementById('cart-notes').value.trim(),
+        };
+        const saveBtn = document.getElementById('cart-save-btn');
+        saveBtn.disabled = true;
+        let result;
+        if (editingCartId) {
+          result = await db.updateCart(editingCartId, payload);
+        } else {
+          const cartId = document.getElementById('cart-id').value.trim();
+          if (!cartId) {
+            alert('Cart ID is required.');
+            saveBtn.disabled = false;
+            return;
+          }
+          result = await db.saveCart({ id: cartId, ...payload });
+        }
+        saveBtn.disabled = false;
+        if (result?.error) {
+          alert(result.error);
+          return;
+        }
+        closeCartModal();
+        await loadFleetSummary();
       });
 
       document.getElementById('fleet-filter-location').addEventListener('change', () => {
