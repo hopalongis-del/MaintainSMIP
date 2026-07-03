@@ -33,8 +33,12 @@ function parseDamageAreas(value) {
   return value.split(',').map(s => s.trim()).filter(Boolean);
 }
 
+function getFleetCarts() {
+  return window.cartData || (typeof cartData !== 'undefined' ? cartData : []) || [];
+}
+
 function getLocations() {
-  return Array.from(new Set((cartData || []).map(c => c.location).filter(Boolean))).sort();
+  return Array.from(new Set(getFleetCarts().map((c) => c.location).filter(Boolean))).sort();
 }
 
 function getCartLabel(cart) {
@@ -45,7 +49,7 @@ function renderCartPicker(filter = '') {
   const list = document.getElementById('acc-cart-list');
   const query = filter.trim().toLowerCase();
   list.innerHTML = '';
-  const matches = (cartData || [])
+  const matches = getFleetCarts()
     .map(cart => ({ cart, label: getCartLabel(cart) }))
     .filter(item => !query || item.label.toLowerCase().includes(query) || String(item.cart.id).includes(query));
 
@@ -342,7 +346,7 @@ function openCreateModal() {
 
 function openEditModal(acc) {
   editingAccidentId = acc.id;
-  selectedAccidentCart = cartData.find((c) => String(c.id) === String(acc.cart_id)) || null;
+  selectedAccidentCart = getFleetCarts().find((c) => String(c.id) === String(acc.cart_id)) || null;
   approvedPendingPhotos = [];
   document.getElementById('acc-description').value = acc.description || '';
   document.getElementById('acc-notes').value = acc.notes || '';
@@ -411,8 +415,8 @@ async function handleAccidentSave(event) {
   }
 
   saved = await db.saveAccident(payload);
-  if (!saved) {
-    alert('Failed to save accident report.');
+  if (!saved || saved.error) {
+    alert(saved?.error || 'Failed to save accident report.');
     return;
   }
   if (approvedPendingPhotos.length) {
@@ -513,6 +517,7 @@ async function initAccidents() {
   document.getElementById('photo-deny-btn').addEventListener('click', denyPhoto);
 
   try {
+    await db.loadCartData();
     showDetailPlaceholder();
     setupLocationFilter();
     wireAccStatCards();

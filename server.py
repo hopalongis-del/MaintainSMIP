@@ -132,6 +132,7 @@ async def lifespan(app: FastAPI):
     app.state.carts = parse_cart_data()
     await seed_pm_templates()
     await seed_wo_templates()
+    await ensure_wo_templates_seeded()
     await seed_demo_data()
     yield
 
@@ -489,6 +490,17 @@ async def seed_wo_templates() -> None:
             ),
         )
         await db.commit()
+
+
+async def ensure_wo_templates_seeded() -> None:
+    """Re-seed default template if persistent disk has an empty templates table."""
+    if not WO_TEMPLATE_PATH.exists():
+        return
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute('SELECT COUNT(*) FROM wo_templates')
+        if (await cursor.fetchone())[0] > 0:
+            return
+    await seed_wo_templates()
 
 
 async def seed_pm_templates() -> None:

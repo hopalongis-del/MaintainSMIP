@@ -1,4 +1,5 @@
 // Same origin in production (Render); works locally at http://localhost:8000 too.
+window.cartData = window.cartData || [];
 const API = '';
 const LIVE_URL = 'https://maintainsmip.onrender.com';
 
@@ -62,18 +63,47 @@ async function fetchApi(path, options = {}) {
       await new Promise((resolve) => setTimeout(resolve, delays[attempt] || 5000));
     }
     try {
-      const response = await fetch(`${API}${path}`, options);
+      const response = await fetch(`${API}${path}`, {
+        credentials: 'same-origin',
+        ...options,
+      });
       if (response.status === 401) {
         const next = encodeURIComponent(window.location.pathname + window.location.search);
         window.location.href = `/login.html?next=${next}`;
-        throw new Error('Authentication required');
+        return response;
       }
-      return response;
+      if (response.status < 500) {
+        return response;
+      }
+      lastErr = new Error(`Server error ${response.status} on ${path}`);
     } catch (err) {
       lastErr = err;
     }
   }
   throw lastErr;
+}
+
+let cartDataPromise = null;
+
+async function loadCartData() {
+  if (!cartDataPromise) {
+    cartDataPromise = (async () => {
+      try {
+        const response = await fetchApi('/api/carts');
+        if (response.ok) {
+          const carts = await response.json();
+          if (Array.isArray(carts) && carts.length) {
+            window.cartData = carts;
+          }
+        }
+      } catch (err) {
+        console.error('Could not load fleet carts from API', err);
+      }
+      window.cartData = window.cartData || [];
+      return window.cartData;
+    })();
+  }
+  return cartDataPromise;
 }
 
 function parseDeepLinkId(value) {
@@ -89,13 +119,18 @@ const db = {
   getOfflineHelp,
   parseDeepLinkId,
   readUrlParams,
+  loadCartData,
   async getCarts() {
     const r = await fetchApi('/api/carts');
     return r.ok ? r.json() : [];
   },
   async getWoTemplates() {
     const r = await fetchApi('/api/wo/templates');
-    return r.ok ? r.json() : [];
+    if (!r.ok) {
+      console.error('Work order templates request failed', r.status);
+      return [];
+    }
+    return r.json();
   },
   async getWorkOrders(filters = {}) {
     const p = new URLSearchParams(filters);
@@ -106,7 +141,17 @@ const db = {
     const r = await fetchApi('/api/workorders', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(wo)
     });
-    return r.ok ? r.json() : null;
+    if (!r.ok) {
+      let detail = `Save failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = body.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
   },
   async updateWorkOrder(id, fields) {
     const r = await fetchApi(`/api/workorders/${id}`, {
@@ -170,7 +215,17 @@ const db = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(report),
     });
-    return r.ok ? r.json() : null;
+    if (!r.ok) {
+      let detail = `Save failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = body.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
   },
   async updateAccident(id, fields) {
     const r = await fetchApi(`/api/accidents/${id}`, {

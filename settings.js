@@ -387,8 +387,16 @@ async function populateSettingsDynamicOptions() {
   const templateSelect = document.getElementById('settings-default-template');
 
   let locations = [];
-  if (typeof cartData !== 'undefined' && Array.isArray(cartData)) {
-    locations = Array.from(new Set(cartData.map((cart) => cart.location).filter(Boolean))).sort();
+  const carts = window.cartData || (typeof cartData !== 'undefined' ? cartData : []);
+  if (Array.isArray(carts) && carts.length) {
+    locations = Array.from(new Set(carts.map((cart) => cart.location).filter(Boolean))).sort();
+  } else if (typeof db !== 'undefined') {
+    try {
+      const loaded = await db.getCarts();
+      locations = Array.from(new Set(loaded.map((cart) => cart.location).filter(Boolean))).sort();
+    } catch (err) {
+      /* settings can open before fleet loads */
+    }
   }
 
   if (locationList) {

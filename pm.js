@@ -11,8 +11,12 @@ async function getLinkedWorkOrders(ids) {
   return workOrders.filter(wo => ids.includes(wo.id));
 }
 
+function getFleetCarts() {
+  return window.cartData || (typeof cartData !== 'undefined' ? cartData : []) || [];
+}
+
 function getLocations() {
-  const carts = cartData || [];
+  const carts = getFleetCarts();
   const set = new Set(carts.map(cart => cart.location).filter(Boolean));
   return Array.from(set).sort();
 }
@@ -367,7 +371,7 @@ async function applyTemplateToFleet(templateId) {
     ? JSON.parse(template.checklist)
     : template.checklist;
 
-  const carts = cartData.filter(cart => getTemplateMatches(template, cart));
+  const carts = getFleetCarts().filter((cart) => getTemplateMatches(template, cart));
   let created = 0;
 
   for (const cart of carts) {
@@ -569,6 +573,7 @@ async function initPmModule() {
   });
 
   try {
+    await db.loadCartData();
     updatePmFilters();
     wirePmStatCards();
     const deepLinkId = applyPmUrlState();

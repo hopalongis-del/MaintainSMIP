@@ -48,8 +48,12 @@ function getDaysAge(dateValue) {
   return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
 }
 
+function getFleetCarts() {
+  return window.cartData || (typeof cartData !== 'undefined' ? cartData : []) || [];
+}
+
 function getLocations() {
-  const carts = cartData || [];
+  const carts = getFleetCarts();
   const set = new Set(carts.map(cart => cart.location).filter(Boolean));
   return Array.from(set).sort();
 }
@@ -200,7 +204,7 @@ function renderCartSelection(filter = '') {
   const list = document.getElementById('wo-cart-list');
   const query = filter.trim().toLowerCase();
   list.innerHTML = '';
-  const matches = cartData
+  const matches = getFleetCarts()
     .map((cart, index) => ({ cart, index, label: getCartDisplay(cart) }))
     .filter(item => !query || item.label.toLowerCase().includes(query));
 
@@ -263,7 +267,7 @@ function openModal() {
 function openEditModal(wo) {
   editingWoId = wo.id;
   setModalMode('edit');
-  selectedWoCart = cartData.find(cart => cart.id === wo.cart_id) || null;
+  selectedWoCart = getFleetCarts().find((cart) => String(cart.id) === String(wo.cart_id)) || null;
 
   document.getElementById('wo-title').value = wo.title || '';
   document.getElementById('wo-description').value = wo.description || '';
@@ -463,10 +467,14 @@ async function handleWoSave(event) {
   }
 
   const created = await db.saveWorkOrder(serializeForm(false));
+  if (!created || created.error) {
+    alert(created?.error || 'Failed to create work order.');
+    return;
+  }
   closeModal();
   await renderWoList();
   await updateDashboard();
-  if (created?.id) await openWoDetail(created.id);
+  if (created.id) await openWoDetail(created.id);
 }
 
 let selectedWoCart = null;
@@ -510,11 +518,24 @@ function applyTemplateDefaultsToForm(template = getActiveWoTemplate()) {
 }
 
 async function loadWoTemplates() {
-  woTemplates = await db.getWoTemplates();
-  const preferredId = window.MaintainSMIPSettings?.getDefaultWoTemplateId?.() || '';
-  activeWoTemplate = woTemplates.find((template) => template.id === preferredId) || woTemplates[0] || null;
-  renderWoTemplateBar();
-  populateWoTemplateSelect(activeWoTemplate?.id);
+  const nameEl = document.getElementById('wo-template-name');
+  const descEl = document.getElementById('wo-template-desc');
+  try {
+    woTemplates = await db.getWoTemplates();
+    const preferredId = window.MaintainSMIPSettings?.getDefaultWoTemplateId?.() || '';
+    activeWoTemplate = woTemplates.find((template) => template.id === preferredId) || woTemplates[0] || null;
+    renderWoTemplateBar();
+    populateWoTemplateSelect(activeWoTemplate?.id);
+  } catch (err) {
+    console.error('Failed to load work order templates', err);
+    woTemplates = [];
+    activeWoTemplate = null;
+    if (nameEl) nameEl.textContent = 'Template unavailable';
+    if (descEl) {
+      const help = db.getOfflineHelp();
+      descEl.textContent = help.detail.replace(/<[^>]+>/g, '');
+    }
+  }
 }
 
 function showDetailPlaceholder() {
@@ -559,7 +580,7 @@ async function initWorkOrders() {
   });
 
   try {
-    await loadWoTemplates();
+    await Promise.all([db.loadCartData(), loadWoTemplates()]);
     showDetailPlaceholder();
     setLocationFilterOptions();
     wireWoStatCards();

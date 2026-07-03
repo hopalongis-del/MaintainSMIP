@@ -195,7 +195,8 @@ function countCheckedItems(sheet) {
 
 function renderMaintenanceSheetHtml(wo, sheet, { editable = true } = {}) {
   const normalized = normalizeMaintenanceSheet(sheet);
-  const cart = (typeof cartData !== 'undefined' ? cartData : []).find((c) => c.id === wo.cart_id);
+  const carts = window.cartData || (typeof cartData !== 'undefined' ? cartData : []);
+  const cart = carts.find((c) => String(c.id) === String(wo.cart_id));
   const progress = countCheckedItems(normalized);
 
   const sectionHtml = MAINTENANCE_SHEET_SECTIONS.map((section) => {
