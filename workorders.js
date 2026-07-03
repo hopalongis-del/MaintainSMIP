@@ -1,14 +1,3 @@
-const TECHNICIANS = [
-  'Gavin Weinmeister',
-  'Kevin Stellman',
-  'Cory Yeager',
-  'Mike Casady',
-  'Dusty Hixson',
-  'Brian Lachance',
-  'Stephen Hering',
-  'Mark Hixson',
-];
-
 function formatDate(value) {
   if (window.MaintainSMIPSettings?.formatDate) {
     return window.MaintainSMIPSettings.formatDate(value);

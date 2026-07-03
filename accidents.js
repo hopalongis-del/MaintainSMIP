@@ -1,8 +1,3 @@
-const TECHNICIANS = [
-  'Gavin Weinmeister', 'Kevin Stellman', 'Cory Yeager', 'Mike Casady',
-  'Dusty Hixson', 'Brian Lachance', 'Stephen Hering', 'Mark Hixson',
-];
-
 let selectedAccidentCart = null;
 let editingAccidentId = null;
 let pendingReviewPhoto = null;
