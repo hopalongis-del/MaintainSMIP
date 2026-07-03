@@ -42,10 +42,51 @@ def test_seeded_user_resync_login(client: TestClient) -> None:
     assert response.json()["user"]["role"] == "manager"
 
 
+def test_change_password(client: TestClient) -> None:
+    client.post("/api/auth/logout")
+    login = client.post(
+        "/api/auth/login",
+        json={"username": "mike.casady", "password": "WeLoveRacing!"},
+    )
+    assert login.status_code == 200, login.text
+
+    bad = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "wrong-password", "new_password": "NewPass123!"},
+    )
+    assert bad.status_code == 400, bad.text
+
+    changed = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "WeLoveRacing!", "new_password": "NewPass123!"},
+    )
+    assert changed.status_code == 200, changed.text
+
+    client.post("/api/auth/logout")
+    old_login = client.post(
+        "/api/auth/login",
+        json={"username": "mike.casady", "password": "WeLoveRacing!"},
+    )
+    assert old_login.status_code == 401, old_login.text
+
+    new_login = client.post(
+        "/api/auth/login",
+        json={"username": "mike.casady", "password": "NewPass123!"},
+    )
+    assert new_login.status_code == 200, new_login.text
+
+    client.post(
+        "/api/auth/change-password",
+        json={"current_password": "NewPass123!", "new_password": "WeLoveRacing!"},
+    )
+    client.post("/api/auth/logout")
+
+
 def run_tests(client: TestClient) -> None:
     login(client)
     test_legacy_password_login(client)
     test_seeded_user_resync_login(client)
+    test_change_password(client)
     login(client)
 
     stats = client.get("/api/stats")

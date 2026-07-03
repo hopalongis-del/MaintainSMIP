@@ -136,6 +136,17 @@ async def fetch_user_by_id(user_id: int) -> Optional[dict[str, Any]]:
         return dict(row) if row else None
 
 
+async def fetch_user_auth_record(user_id: int) -> Optional[dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT id, username, display_name, role, active, password_hash FROM users WHERE id = ?',
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
 async def fetch_user_by_username(username: str) -> Optional[dict[str, Any]]:
     async with aiosqlite.connect(DB_PATH) as connection:
         connection.row_factory = aiosqlite.Row
@@ -1829,6 +1840,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 class UserPublic(BaseModel):
     id: int
     username: str
@@ -1900,6 +1916,32 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
 async def auth_me(request: Request) -> dict[str, Any]:
     user = require_authenticated_user(request)
     return user_public(user)
+
+
+@app.post('/api/auth/change-password')
+async def change_password(request: Request, body: ChangePasswordRequest) -> dict[str, bool]:
+    user = require_authenticated_user(request)
+    record = await fetch_user_auth_record(user['id'])
+    if not record or not record.get('active'):
+        raise HTTPException(status_code=401, detail='Authentication required')
+
+    if not verify_password(body.current_password, record['password_hash']):
+        raise HTTPException(status_code=400, detail='Current password is incorrect')
+
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail='New password must be at least 8 characters')
+
+    if body.current_password == body.new_password:
+        raise HTTPException(status_code=400, detail='New password must be different from your current password')
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            'UPDATE users SET password_hash = ? WHERE id = ?',
+            (hash_password(body.new_password), user['id']),
+        )
+        await connection.commit()
+
+    return {'ok': True}
 
 
 @app.post('/api/auth/logout')

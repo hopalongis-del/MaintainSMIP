@@ -352,16 +352,18 @@ function buildSettingsModal() {
             <p class="hero-sub" id="admin-users-status"></p>
           </div>
           <form id="change-password-form" class="settings-form">
+            <h4>Change Password</h4>
             <label>Current Password
-              <input type="password" id="settings-current-password" placeholder="Enter current password" autocomplete="current-password" disabled />
+              <input type="password" id="settings-current-password" placeholder="Enter current password" autocomplete="current-password" required />
             </label>
             <label>New Password
-              <input type="password" id="settings-new-password" placeholder="Enter new password" autocomplete="new-password" disabled />
+              <input type="password" id="settings-new-password" placeholder="At least 8 characters" autocomplete="new-password" minlength="8" required />
             </label>
             <label>Confirm New Password
-              <input type="password" id="settings-confirm-password" placeholder="Confirm new password" autocomplete="new-password" disabled />
+              <input type="password" id="settings-confirm-password" placeholder="Confirm new password" autocomplete="new-password" minlength="8" required />
             </label>
-            <button class="btn secondary" type="button" id="settings-password-placeholder" disabled>Save Password (Coming Soon)</button>
+            <button class="btn secondary" type="submit" id="settings-save-password">Save Password</button>
+            <p class="hero-sub" id="settings-password-status"></p>
           </form>
         </section>
 
@@ -576,6 +578,40 @@ async function refreshAdminUsersList() {
   `).join('');
 }
 
+function wireChangePasswordForm() {
+  const form = document.getElementById('change-password-form');
+  if (!form || form._wired) return;
+  form._wired = true;
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const status = document.getElementById('settings-password-status');
+    const currentPassword = document.getElementById('settings-current-password').value;
+    const newPassword = document.getElementById('settings-new-password').value;
+    const confirmPassword = document.getElementById('settings-confirm-password').value;
+    const button = document.getElementById('settings-save-password');
+
+    if (newPassword !== confirmPassword) {
+      status.textContent = 'New passwords do not match.';
+      return;
+    }
+
+    button.disabled = true;
+    status.textContent = 'Saving…';
+
+    const result = await db.changePassword(currentPassword, newPassword);
+    button.disabled = false;
+
+    if (result?.error) {
+      status.textContent = result.error;
+      return;
+    }
+
+    form.reset();
+    status.textContent = 'Password updated. Use your new password next time you sign in.';
+  });
+}
+
 function wireAdminUserForm() {
   const form = document.getElementById('admin-create-user-form');
   if (!form || form._wired) return;
@@ -720,6 +756,7 @@ function initSettings() {
   buildSettingsModal();
   injectSettingsButton();
   wireAdminUserForm();
+  wireChangePasswordForm();
   applySettings();
   syncSettingsForm();
   wireSettingsForm();

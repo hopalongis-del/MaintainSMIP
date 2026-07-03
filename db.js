@@ -298,6 +298,27 @@ const db = {
     const r = await fetchApi('/api/users');
     return r.ok ? r.json() : [];
   },
+  async changePassword(currentPassword, newPassword) {
+    const r = await fetchApi('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+    if (!r.ok) {
+      let detail = `Password change failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = body.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
   async createUser(user) {
     const r = await fetchApi('/api/users', {
       method: 'POST',
