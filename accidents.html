@@ -36,6 +36,25 @@
           <button class="btn primary" id="new-accident-btn" type="button">Report Damage</button>
         </div>
 
+        <div class="dash-strip" id="acc-dashboard-strip">
+          <div class="stat-card stat-card-link" role="button" tabindex="0" data-acc-filter='{"open":"1"}' title="Filter open accident reports">
+            <span>Open Reports</span>
+            <strong id="count-acc-open">0</strong>
+          </div>
+          <div class="stat-card stat-card-link" role="button" tabindex="0" data-acc-filter='{"status":"under_review"}' title="Filter under review">
+            <span>Under Review</span>
+            <strong id="count-acc-review">0</strong>
+          </div>
+          <div class="stat-card stat-card-link" role="button" tabindex="0" data-acc-filter='{"status":"repair_scheduled"}' title="Filter repair scheduled">
+            <span>Repair Scheduled</span>
+            <strong id="count-acc-repair">0</strong>
+          </div>
+          <div class="stat-card stat-card-link" role="button" tabindex="0" data-acc-filter='{"status":"resolved"}' title="Filter resolved reports">
+            <span>Resolved</span>
+            <strong id="count-acc-resolved">0</strong>
+          </div>
+        </div>
+
         <div class="filter-bar">
           <div class="filter-group">
             <label for="acc-filter-status">Status</label>

@@ -184,7 +184,9 @@ async function renderAccidentList() {
   const search = document.getElementById('acc-filter-search').value.trim().toLowerCase();
 
   const accidents = await db.getAccidents();
+  updateAccidentDashboardCounts(accidents);
   const filtered = accidents.filter(acc => {
+    if (window.__accOpenOnly && acc.status === 'resolved') return false;
     if (status !== 'all' && acc.status !== status) return false;
     if (severity !== 'all' && acc.severity !== severity) return false;
     if (location !== 'all' && acc.location !== location) return false;
@@ -222,7 +224,7 @@ function renderPhotoGrid(photos, accidentId, editable = false) {
 
 async function openAccidentDetail(id) {
   const accidents = await db.getAccidents();
-  const acc = accidents.find(a => a.id === id);
+  const acc = accidents.find(a => String(a.id) === String(id));
   if (!acc) return;
 
   const panel = document.getElementById('accident-detail-panel');
@@ -409,6 +411,52 @@ async function deleteAccident(id) {
   await renderAccidentList();
 }
 
+function applyAccUrlState() {
+  const params = db.readUrlParams();
+  window.__accOpenOnly = params.get('open') === '1';
+  if (params.get('status')) {
+    document.getElementById('acc-filter-status').value = params.get('status');
+    window.__accOpenOnly = false;
+  }
+  if (params.get('location')) {
+    document.getElementById('acc-filter-location').value = params.get('location');
+  }
+  return db.parseDeepLinkId(params.get('id'));
+}
+
+function applyAccStatFilter(filter) {
+  window.__accOpenOnly = filter.open === '1';
+  document.getElementById('acc-filter-status').value = filter.status || 'all';
+  renderAccidentList();
+  document.getElementById('accident-list')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function wireAccStatCards() {
+  document.querySelectorAll('#acc-dashboard-strip [data-acc-filter]').forEach(card => {
+    const activate = () => applyAccStatFilter(JSON.parse(card.dataset.accFilter));
+    card.addEventListener('click', activate);
+    card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        activate();
+      }
+    });
+  });
+}
+
+function updateAccidentDashboardCounts(accidents) {
+  const openEl = document.getElementById('count-acc-open');
+  if (!openEl) return;
+  document.getElementById('count-acc-open').textContent =
+    accidents.filter(acc => acc.status !== 'resolved').length;
+  document.getElementById('count-acc-review').textContent =
+    accidents.filter(acc => acc.status === 'under_review').length;
+  document.getElementById('count-acc-repair').textContent =
+    accidents.filter(acc => acc.status === 'repair_scheduled').length;
+  document.getElementById('count-acc-resolved').textContent =
+    accidents.filter(acc => acc.status === 'resolved').length;
+}
+
 function setupLocationFilter() {
   const select = document.getElementById('acc-filter-location');
   select.innerHTML = '<option value="all">All</option>';
@@ -426,7 +474,10 @@ async function initAccidents() {
   document.getElementById('acc-modal-cancel').addEventListener('click', closeAccidentModal);
   document.getElementById('accident-form').addEventListener('submit', handleAccidentSave);
   document.getElementById('acc-cart-search').addEventListener('input', e => renderCartPicker(e.target.value));
-  document.getElementById('acc-filter-status').addEventListener('change', renderAccidentList);
+  document.getElementById('acc-filter-status').addEventListener('change', () => {
+    window.__accOpenOnly = false;
+    renderAccidentList();
+  });
   document.getElementById('acc-filter-severity').addEventListener('change', renderAccidentList);
   document.getElementById('acc-filter-location').addEventListener('change', renderAccidentList);
   document.getElementById('acc-filter-search').addEventListener('input', renderAccidentList);
@@ -445,7 +496,10 @@ async function initAccidents() {
   try {
     showDetailPlaceholder();
     setupLocationFilter();
+    wireAccStatCards();
+    const deepLinkId = applyAccUrlState();
     await renderAccidentList();
+    if (deepLinkId) await openAccidentDetail(deepLinkId);
   } catch (err) {
     const help = db.getOfflineHelp();
     document.getElementById('accident-list').innerHTML =

@@ -39,6 +39,59 @@ function isOverdue(record) {
   return new Date(record.scheduled_date) < now && record.status !== 'completed' && record.status !== 'skipped';
 }
 
+function isCompletedThisMonth(record) {
+  if (record.status !== 'completed' || !record.completed_date) return false;
+  const date = new Date(record.completed_date);
+  const now = new Date();
+  return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+}
+
+function applyPmUrlState() {
+  const params = db.readUrlParams();
+  window.__pmDueWeekFilter = false;
+  window.__pmCompletedMonthFilter = false;
+
+  if (params.get('status')) {
+    document.getElementById('pm-filter-status').value = params.get('status');
+  }
+  if (params.get('due') === 'week') {
+    window.__pmDueWeekFilter = true;
+    document.getElementById('pm-filter-status').value = 'all';
+    setScheduleTab();
+  }
+  if (params.get('completed') === 'month') {
+    window.__pmCompletedMonthFilter = true;
+    document.getElementById('pm-filter-status').value = 'all';
+    setScheduleTab();
+  }
+  if (params.get('location')) {
+    document.getElementById('pm-filter-location').value = params.get('location');
+  }
+  return db.parseDeepLinkId(params.get('id'));
+}
+
+function applyPmStatFilter(filter) {
+  window.__pmDueWeekFilter = filter.due === 'week';
+  window.__pmCompletedMonthFilter = filter.completed === 'month';
+  document.getElementById('pm-filter-status').value = filter.status || 'all';
+  setScheduleTab();
+  renderPmSchedule();
+  document.getElementById('pm-list')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function wirePmStatCards() {
+  document.querySelectorAll('#pm-dashboard-strip [data-pm-filter]').forEach(card => {
+    const activate = () => applyPmStatFilter(JSON.parse(card.dataset.pmFilter));
+    card.addEventListener('click', activate);
+    card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        activate();
+      }
+    });
+  });
+}
+
 function getRecordStatusLabel(record) {
   if (isOverdue(record)) return 'overdue';
   return record.status;
@@ -91,6 +144,10 @@ async function renderPmSchedule() {
 
   const records = (await db.getPmRecords()).sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
   const filtered = records.filter(record => {
+    if (window.__pmDueWeekFilter) {
+      if (record.status !== 'scheduled' || !isDueThisWeek(record.scheduled_date)) return false;
+    }
+    if (window.__pmCompletedMonthFilter && !isCompletedThisMonth(record)) return false;
     if (statusFilter !== 'all' && getRecordStatusLabel(record) !== statusFilter) return false;
     if (locationFilter !== 'all' && record.location !== locationFilter) return false;
     if (searchTerm) {
@@ -130,7 +187,7 @@ async function renderPmDetail(record) {
       <h3>Linked Work Orders</h3>
       ${linkedWos.length === 0
         ? '<p>No linked work orders.</p>'
-        : linkedWos.map(wo => `<p><strong>${wo.id}</strong> — ${wo.title} (${wo.status})</p>`).join('')}
+        : linkedWos.map(wo => `<p><a class="section-title-link" href="workorders.html?id=${wo.id}"><strong>WO-${wo.id}</strong> — ${wo.title}</a> <span class="badge status-${wo.status}">${wo.status.replace('_', ' ')}</span></p>`).join('')}
     </div>
     <div class="detail-card">
       <h3>Checklist</h3>
@@ -177,7 +234,7 @@ async function renderPmDetail(record) {
 
 async function savePmChecklist(recordId) {
   const records = await db.getPmRecords();
-  const record = records.find(r => r.id === recordId);
+  const record = records.find(r => String(r.id) === String(recordId));
   if (!record) return;
 
   const items = Array.from(document.querySelectorAll('#pm-detail-checklist .checklist-item')).map(el => {
@@ -220,7 +277,7 @@ async function skipPmRecord(recordId) {
 
 async function createWoFromPm(recordId) {
   const records = await db.getPmRecords();
-  const record = records.find(r => r.id === recordId);
+  const record = records.find(r => String(r.id) === String(recordId));
   if (!record) return;
 
   const failed = (record.checklist_results || []).filter(item => !item.passed);
@@ -269,7 +326,7 @@ async function deletePmRecord(id) {
 
 async function openPmDetail(recordId) {
   const records = await db.getPmRecords();
-  const record = records.find(r => r.id === recordId);
+  const record = records.find(r => String(r.id) === String(recordId));
   if (!record) return;
   await renderPmDetail(record);
 }
@@ -494,9 +551,12 @@ function showPmApiError(message) {
 async function initPmModule() {
   try {
     updatePmFilters();
+    wirePmStatCards();
+    const deepLinkId = applyPmUrlState();
     await renderPmSchedule();
     await renderTemplateList();
     await updatePmDashboard();
+    if (deepLinkId) await openPmDetail(deepLinkId);
   } catch (err) {
     const help = db.getOfflineHelp();
     showPmApiError(`<strong>${help.title}</strong><br>${help.detail}`);
@@ -505,7 +565,11 @@ async function initPmModule() {
 
   document.getElementById('tab-schedule').addEventListener('click', setScheduleTab);
   document.getElementById('tab-templates').addEventListener('click', setTemplatesTab);
-  document.getElementById('pm-filter-status').addEventListener('change', () => renderPmSchedule());
+  document.getElementById('pm-filter-status').addEventListener('change', () => {
+    window.__pmDueWeekFilter = false;
+    window.__pmCompletedMonthFilter = false;
+    renderPmSchedule();
+  });
   document.getElementById('pm-filter-location').addEventListener('change', () => renderPmSchedule());
   document.getElementById('pm-filter-search').addEventListener('input', () => renderPmSchedule());
   document.getElementById('new-template-btn').addEventListener('click', () => openTemplateModal());

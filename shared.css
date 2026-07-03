@@ -148,12 +148,13 @@ a {
 
 .dash-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 14px;
   margin-bottom: 24px;
 }
 
-.stat-card {
+.stat-card,
+a.stat-card {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 20px;
@@ -161,6 +162,19 @@ a {
   position: relative;
   overflow: hidden;
   transition: transform 160ms ease, border-color 160ms ease;
+  color: inherit;
+  text-decoration: none;
+}
+
+.stat-card-link,
+.stat-card[role='button'] {
+  cursor: pointer;
+}
+
+.stat-card-link:focus-visible,
+.stat-card[role='button']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .stat-card::before {
@@ -174,9 +188,29 @@ a {
   opacity: 0.85;
 }
 
-.stat-card:hover {
+.stat-card:hover,
+.stat-card-link:hover,
+.stat-card[role='button']:hover {
   transform: translateY(-2px);
   border-color: rgba(255, 255, 255, 0.14);
+}
+
+.stat-card-link::after,
+a.stat-card::after {
+  content: '→';
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  opacity: 0;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.stat-card-link:hover::after,
+a.stat-card:hover::after {
+  opacity: 1;
+  transform: translateX(2px);
 }
 
 .stat-card span,
@@ -204,6 +238,31 @@ a {
   margin: 28px 0 12px;
   font-size: 1.05rem;
   letter-spacing: 0.02em;
+}
+
+a.section-title-link {
+  color: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 160ms ease;
+}
+
+a.section-title-link:hover {
+  color: var(--accent);
+}
+
+a.section-title-link::after {
+  content: '→';
+  font-size: 0.9rem;
+  opacity: 0;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+a.section-title-link:hover::after {
+  opacity: 1;
+  transform: translateX(2px);
 }
 
 .recent-list {
@@ -253,11 +312,36 @@ a {
   margin-top: 12px;
 }
 
-.fleet-pill {
+.fleet-pill,
+button.fleet-pill {
   padding: 14px 16px;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+button.fleet-pill {
+  cursor: pointer;
+}
+
+button.fleet-pill:hover,
+button.fleet-pill.active {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.fleet-table tbody tr[data-cart-id] {
+  cursor: pointer;
+}
+
+.fleet-table tbody tr[data-cart-id]:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .fleet-pill strong {

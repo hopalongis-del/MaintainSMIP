@@ -44,6 +44,49 @@ function getStatusClass(status) {
   return `status-${status}`;
 }
 
+function isWoOverdue(wo) {
+  if (!wo.due_date) return false;
+  return new Date(wo.due_date) < new Date() && !['completed', 'closed'].includes(wo.status);
+}
+
+function applyWoUrlState() {
+  const params = db.readUrlParams();
+  if (params.get('status')) {
+    document.getElementById('filter-status').value = params.get('status');
+  }
+  if (params.get('overdue') === '1') {
+    window.__woOverdueFilter = true;
+    document.getElementById('filter-status').value = 'all';
+  }
+  if (params.get('location')) {
+    document.getElementById('filter-location').value = params.get('location');
+  }
+  if (params.get('search')) {
+    document.getElementById('filter-search').value = params.get('search');
+  }
+  return db.parseDeepLinkId(params.get('id'));
+}
+
+function applyWoStatFilter(filter) {
+  window.__woOverdueFilter = filter.overdue === '1';
+  document.getElementById('filter-status').value = filter.status || 'all';
+  renderWoList();
+  document.getElementById('wo-list')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function wireWoStatCards() {
+  document.querySelectorAll('#wo-dashboard-strip [data-wo-filter]').forEach(card => {
+    const activate = () => applyWoStatFilter(JSON.parse(card.dataset.woFilter));
+    card.addEventListener('click', activate);
+    card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        activate();
+      }
+    });
+  });
+}
+
 function buildWoCard(wo) {
   const card = document.createElement('button');
   card.type = 'button';
@@ -77,6 +120,7 @@ async function renderWoList() {
 
   const workOrders = await db.getWorkOrders();
   const filtered = workOrders.filter(wo => {
+    if (window.__woOverdueFilter && !isWoOverdue(wo)) return false;
     if (statusFilter !== 'all' && wo.status !== statusFilter) return false;
     if (priorityFilter !== 'all' && wo.priority !== priorityFilter) return false;
     if (typeFilter !== 'all' && wo.type !== typeFilter) return false;
@@ -224,7 +268,7 @@ function closeModal() {
 
 async function openWoDetail(id) {
   const workOrders = await db.getWorkOrders();
-  const wo = workOrders.find(item => item.id === id);
+  const wo = workOrders.find(item => String(item.id) === String(id));
   if (!wo) return;
 
   const panel = document.getElementById('wo-detail-panel');
@@ -425,17 +469,24 @@ async function initWorkOrders() {
   document.getElementById('modal-cancel').addEventListener('click', closeModal);
   document.getElementById('wo-form').addEventListener('submit', handleWoSave);
   document.getElementById('wo-cart-search').addEventListener('input', event => renderCartSelection(event.target.value));
-  document.getElementById('filter-status').addEventListener('change', () => renderWoList());
   document.getElementById('filter-priority').addEventListener('change', () => renderWoList());
   document.getElementById('filter-location').addEventListener('change', () => renderWoList());
   document.getElementById('filter-type').addEventListener('change', () => renderWoList());
   document.getElementById('filter-search').addEventListener('input', () => renderWoList());
 
+  document.getElementById('filter-status').addEventListener('change', () => {
+    window.__woOverdueFilter = false;
+    renderWoList();
+  });
+
   try {
     showDetailPlaceholder();
     setLocationFilterOptions();
+    wireWoStatCards();
+    const deepLinkId = applyWoUrlState();
     await renderWoList();
     await updateDashboard();
+    if (deepLinkId) await openWoDetail(deepLinkId);
   } catch (err) {
     const help = db.getOfflineHelp();
     showApiError('wo-list', `<strong>${help.title}</strong><br>${help.detail}`);

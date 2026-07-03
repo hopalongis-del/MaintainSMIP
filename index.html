@@ -104,10 +104,21 @@
         </div>
 
         <div class="dash-strip">
-          <div class="stat-card"><strong class="stat-num loading-pulse" id="stat-open">—</strong><span class="stat-label">Open Work Orders</span></div>
-          <div class="stat-card alert"><strong class="stat-num loading-pulse" id="stat-overdue">—</strong><span class="stat-label">Overdue</span></div>
-          <div class="stat-card"><strong class="stat-num loading-pulse" id="stat-pm-week">—</strong><span class="stat-label">PM Due This Week</span></div>
-          <div class="stat-card alert"><strong class="stat-num loading-pulse" id="stat-pm-overdue">—</strong><span class="stat-label">PM Overdue</span></div>
+          <a class="stat-card stat-card-link" href="workorders.html?status=open" title="View open work orders">
+            <strong class="stat-num loading-pulse" id="stat-open">—</strong><span class="stat-label">Open Work Orders</span>
+          </a>
+          <a class="stat-card stat-card-link alert" href="workorders.html?overdue=1" title="View overdue work orders">
+            <strong class="stat-num loading-pulse" id="stat-overdue">—</strong><span class="stat-label">Overdue Work Orders</span>
+          </a>
+          <a class="stat-card stat-card-link" href="pm.html?due=week" title="View PM due this week">
+            <strong class="stat-num loading-pulse" id="stat-pm-week">—</strong><span class="stat-label">PM Due This Week</span>
+          </a>
+          <a class="stat-card stat-card-link alert" href="pm.html?status=overdue" title="View overdue PM">
+            <strong class="stat-num loading-pulse" id="stat-pm-overdue">—</strong><span class="stat-label">PM Overdue</span>
+          </a>
+          <a class="stat-card stat-card-link alert" href="accidents.html?open=1" title="View open accident reports">
+            <strong class="stat-num loading-pulse" id="stat-accidents">—</strong><span class="stat-label">Open Accident Reports</span>
+          </a>
         </div>
 
         <h2 class="section-title" id="fleet">Fleet Overview</h2>
@@ -138,12 +149,12 @@
           <p class="fleet-table-count" id="fleet-table-count"></p>
         </div>
 
-        <h2 class="section-title">Recent Work Orders</h2>
+        <h2 class="section-title"><a class="section-title-link" href="workorders.html">Recent Work Orders</a></h2>
         <div class="recent-list" id="recent-wo-list">
           <div class="empty-state loading-pulse">Loading work orders…</div>
         </div>
 
-        <h2 class="section-title">PM Due This Week</h2>
+        <h2 class="section-title"><a class="section-title-link" href="pm.html?due=week">PM Due This Week</a></h2>
         <div class="recent-list" id="recent-pm-list">
           <div class="empty-state loading-pulse">Loading PM schedule…</div>
         </div>
@@ -189,11 +200,21 @@
 
         document.getElementById('fleet-grid').innerHTML = topLocations
           .map(([location, count]) => `
-            <div class="fleet-pill">
+            <button type="button" class="fleet-pill" data-fleet-location="${location.replace(/"/g, '&quot;')}">
               <strong>${count}</strong>
               <span>${location}</span>
-            </div>
+            </button>
           `).join('');
+
+        document.querySelectorAll('[data-fleet-location]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.getElementById('fleet-filter-location').value = btn.dataset.fleetLocation;
+            document.querySelectorAll('.fleet-pill').forEach(el => el.classList.remove('active'));
+            btn.classList.add('active');
+            renderFleetTable();
+            document.getElementById('fleet').scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+        });
 
         const locationSelect = document.getElementById('fleet-filter-location');
         getUniqueSorted(allCarts.map(c => c.location)).forEach(loc => {
@@ -233,7 +254,7 @@
         const SHOWN_LIMIT = 300;
         body.innerHTML = filtered.length
           ? filtered.slice(0, SHOWN_LIMIT).map(cart => `
-              <tr>
+              <tr data-cart-id="${cart.id}" title="View work orders for cart #${cart.id}">
                 <td>${cart.id}</td>
                 <td>${cart.serial || '—'}</td>
                 <td>${cart.model || '—'}</td>
@@ -258,15 +279,16 @@
           document.getElementById('stat-overdue').textContent = stats.overdue_work_orders ?? 0;
           document.getElementById('stat-pm-week').textContent = stats.pm_due_this_week ?? 0;
           document.getElementById('stat-pm-overdue').textContent = stats.pm_overdue ?? 0;
+          document.getElementById('stat-accidents').textContent = stats.open_accidents ?? 0;
           document.querySelectorAll('.stat-num').forEach(el => el.classList.remove('loading-pulse'));
 
           const wos = await db.getWorkOrders({ limit: 5 });
           const woList = document.getElementById('recent-wo-list');
           if (!wos.length) {
-            woList.innerHTML = '<div class="empty-state"><h3>No work orders yet</h3><p>Create one from the Work Orders page.</p></div>';
+            woList.innerHTML = '<div class="empty-state"><h3>No work orders yet</h3><p><a class="section-title-link" href="workorders.html">Go to Work Orders</a> to create one.</p></div>';
           } else {
             woList.innerHTML = wos.map(wo => `
-              <a class="recent-row" href="workorders.html">
+              <a class="recent-row" href="workorders.html?id=${wo.id}">
                 <span class="recent-id">WO-${wo.id}</span>
                 <span class="recent-title">${wo.title}</span>
                 ${priorityBadge(wo.priority)}
@@ -282,10 +304,10 @@
             .slice(0, 5);
           const pmList = document.getElementById('recent-pm-list');
           if (!thisWeek.length) {
-            pmList.innerHTML = '<div class="empty-state"><h3>No PM due this week</h3><p>Check the PM schedule for upcoming maintenance.</p></div>';
+            pmList.innerHTML = '<div class="empty-state"><h3>No PM due this week</h3><p><a class="section-title-link" href="pm.html?due=week">View the PM schedule</a> for upcoming maintenance.</p></div>';
           } else {
             pmList.innerHTML = thisWeek.map(p => `
-              <a class="recent-row" href="pm.html">
+              <a class="recent-row" href="pm.html?id=${p.id}">
                 <span class="recent-id">PM-${p.id}</span>
                 <span class="recent-title">${p.template_name}</span>
                 ${statusBadge(p.status)}
@@ -308,7 +330,16 @@
         }
       }
 
-      document.getElementById('fleet-filter-location').addEventListener('change', renderFleetTable);
+      document.getElementById('fleet-table-body').addEventListener('click', (event) => {
+        const row = event.target.closest('tr[data-cart-id]');
+        if (!row) return;
+        window.location.href = `workorders.html?search=${encodeURIComponent(row.dataset.cartId)}`;
+      });
+
+      document.getElementById('fleet-filter-location').addEventListener('change', () => {
+        document.querySelectorAll('.fleet-pill').forEach(el => el.classList.remove('active'));
+        renderFleetTable();
+      });
       document.getElementById('fleet-filter-model').addEventListener('change', renderFleetTable);
       document.getElementById('fleet-filter-search').addEventListener('input', renderFleetTable);
 

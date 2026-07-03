@@ -70,8 +70,19 @@ async function fetchApi(path, options = {}) {
   throw lastErr;
 }
 
+function parseDeepLinkId(value) {
+  if (!value) return null;
+  return String(value).replace(/^(WO-|PM-|ACC-)/i, '');
+}
+
+function readUrlParams() {
+  return new URLSearchParams(window.location.search);
+}
+
 const db = {
   getOfflineHelp,
+  parseDeepLinkId,
+  readUrlParams,
   async getCarts() {
     const r = await fetchApi('/api/carts');
     return r.ok ? r.json() : [];
