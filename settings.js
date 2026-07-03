@@ -1,6 +1,6 @@
 (function applyStoredThemeEarly() {
-  const saved = localStorage.getItem('maintainsmip-theme');
-  if (saved) document.documentElement.setAttribute('data-theme', saved);
+  const saved = localStorage.getItem('maintainsmip-theme') || 'smi-racing';
+  document.documentElement.setAttribute('data-theme', saved);
 })();
 
 const RACING_THEMES = [
@@ -43,10 +43,12 @@ function getActiveThemeId() {
 }
 
 function applyTheme(themeId) {
-  document.documentElement.setAttribute('data-theme', themeId);
-  localStorage.setItem(THEME_STORAGE_KEY, themeId);
+  const valid = RACING_THEMES.some((theme) => theme.id === themeId);
+  const nextTheme = valid ? themeId : 'smi-racing';
+  document.documentElement.setAttribute('data-theme', nextTheme);
+  localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
   document.querySelectorAll('[data-theme-option]').forEach((button) => {
-    button.classList.toggle('active', button.dataset.themeOption === themeId);
+    button.classList.toggle('active', button.dataset.themeOption === nextTheme);
   });
 }
 
@@ -103,21 +105,25 @@ function buildSettingsModal() {
   `);
 }
 
-function createSettingsGearButton({ floating = false } = {}) {
+function createSettingsButton({ floating = false } = {}) {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = floating ? 'nav-gear-btn nav-gear-btn--floating' : 'nav-gear-btn';
+  button.className = floating ? 'nav-settings-btn nav-settings-btn--floating' : 'nav-settings-btn';
   button.id = 'open-settings-btn';
   button.setAttribute('aria-label', 'Open settings');
   button.innerHTML = `
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-      <path fill="currentColor" d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Zm8.94-2.34-.7-.41a6.8 6.8 0 0 0 .05-.78 6.8 6.8 0 0 0-.05-.78l.7-.41a1 1 0 0 0 .37-1.36l-.67-1.16a1 1 0 0 0-1.27-.44l-.83.34a7.2 7.2 0 0 0-1.35-.78l-.13-.88A1 1 0 0 0 14 4h-1.33a1 1 0 0 0-.99.84l-.13.88c-.48.2-.93.46-1.35.78l-.83-.34a1 1 0 0 0-1.27.44L6.43 7.8a1 1 0 0 0 .37 1.36l.7.41c-.03.26-.05.52-.05.78s.02.52.05.78l-.7.41a1 1 0 0 0-.37 1.36l.67 1.16a1 1 0 0 0 1.27.44l.83-.34c.42.32.87.58 1.35.78l.13.88A1 1 0 0 0 12.67 20H14a1 1 0 0 0 .99-.84l.13-.88c.48-.2.93-.46 1.35-.78l.83.34a1 1 0 0 0 1.27-.44l.67-1.16a1 1 0 0 0-.37-1.36Z"/>
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/>
+      <circle cx="4" cy="14" r="2" fill="currentColor" stroke="none"/>
+      <circle cx="12" cy="6" r="2" fill="currentColor" stroke="none"/>
+      <circle cx="20" cy="10" r="2" fill="currentColor" stroke="none"/>
     </svg>
+    <span>Settings</span>
   `;
   return button;
 }
 
-function injectSettingsGear() {
+function injectSettingsButton() {
   if (document.getElementById('open-settings-btn')) return;
 
   const nav = document.querySelector('.nav');
@@ -136,11 +142,11 @@ function injectSettingsGear() {
       }
     }
 
-    navActions.appendChild(createSettingsGearButton());
+    navActions.appendChild(createSettingsButton());
     return;
   }
 
-  document.body.appendChild(createSettingsGearButton({ floating: true }));
+  document.body.appendChild(createSettingsButton({ floating: true }));
 }
 
 function openSettings() {
@@ -159,7 +165,7 @@ function closeSettings() {
 
 function initSettings() {
   buildSettingsModal();
-  injectSettingsGear();
+  injectSettingsButton();
   applyTheme(getActiveThemeId());
 
   document.getElementById('open-settings-btn')?.addEventListener('click', openSettings);
