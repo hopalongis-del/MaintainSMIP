@@ -32,9 +32,20 @@ def test_legacy_password_login(client: TestClient) -> None:
     assert response.json()["user"]["username"] == "admin"
 
 
+def test_seeded_user_resync_login(client: TestClient) -> None:
+    client.post("/api/auth/logout")
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "mike.casady", "password": "WeLoveRacing!"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["user"]["role"] == "manager"
+
+
 def run_tests(client: TestClient) -> None:
     login(client)
     test_legacy_password_login(client)
+    test_seeded_user_resync_login(client)
     login(client)
 
     stats = client.get("/api/stats")

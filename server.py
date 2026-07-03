@@ -62,6 +62,8 @@ PRIVILEGED_ROLE_OVERRIDES = {
     'chelsie': 'admin',
 }
 
+SEEDED_USERNAMES = {MASTER_USERNAME, *(account[0] for account in TECHNICIAN_ACCOUNTS)}
+
 
 def hash_password(password: str) -> str:
     salt = os.urandom(16).hex()
@@ -152,6 +154,28 @@ async def authenticate_user(username: str, password: str) -> Optional[dict[str, 
     if not verify_password(password, user['password_hash']):
         return None
     return user
+
+
+async def resync_seeded_user_password(username: str, password: str) -> Optional[dict[str, Any]]:
+    """Let seeded team accounts sign in with the current APP_PASSWORD env value."""
+    normalized = username.strip().lower()
+    if normalized not in SEEDED_USERNAMES or not APP_PASSWORD:
+        return None
+    if not hmac.compare_digest(password, APP_PASSWORD):
+        return None
+
+    user = await fetch_user_by_username(normalized)
+    if not user or not user.get('active'):
+        return None
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            'UPDATE users SET password_hash = ? WHERE id = ?',
+            (hash_password(password), user['id']),
+        )
+        await connection.commit()
+
+    return await fetch_user_by_id(user['id'])
 
 
 async def upsert_master_admin(password: str) -> dict[str, Any]:
@@ -1849,6 +1873,8 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
 
     if username:
         user = await authenticate_user(username, password)
+        if not user:
+            user = await resync_seeded_user_password(username, password)
         if not user and username == MASTER_USERNAME and hmac.compare_digest(password, APP_PASSWORD):
             user = await upsert_master_admin(APP_PASSWORD)
     elif hmac.compare_digest(password, APP_PASSWORD):

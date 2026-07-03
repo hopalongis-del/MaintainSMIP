@@ -64,22 +64,22 @@
             <h2 style="margin: 6px 0 0;">MaintainSMIP</h2>
           </div>
         </div>
-        <p class="hero-sub">Sign in with your username and password.</p>
+        <p class="hero-sub">Sign in with your username and the site password.</p>
         <form class="login-form" id="login-form">
           <div class="filter-group">
             <label for="username">Username</label>
-            <input id="username" type="text" autocomplete="username" required autofocus placeholder="e.g. admin or gavin.weinmeister" />
+            <input id="username" type="text" autocomplete="username" required autofocus placeholder="mike.casady" />
           </div>
           <div class="filter-group">
             <label for="password">Password</label>
-            <input id="password" type="password" autocomplete="current-password" required />
+            <input id="password" type="password" autocomplete="current-password" required placeholder="Site password (not the word APP_PASSWORD)" />
           </div>
           <p class="login-error" id="login-error" aria-live="polite"></p>
           <button class="btn primary" type="submit" id="login-btn">Sign In</button>
         </form>
         <p class="login-hint">
-          Master admin: <strong>admin</strong> — uses the <code>APP_PASSWORD</code> set in Render.
-          Technician accounts use <code>firstname.lastname</code> (same initial password until changed).
+          <strong>Username</strong> is lowercase with a dot, like <code>mike.casady</code> or <code>dusty.hixson</code>.
+          <strong>Password</strong> is the actual site password configured in Render — for the demo that is usually <code>WeLoveRacing!</code>, not the text <code>APP_PASSWORD</code>.
         </p>
       </section>
     </div>
@@ -105,7 +105,14 @@
             body: JSON.stringify({ username, password }),
           });
           if (!response.ok) {
-            errorEl.textContent = 'Incorrect username or password. Try again.';
+            let detail = 'Incorrect username or password.';
+            try {
+              const body = await response.json();
+              detail = body.detail || detail;
+            } catch (err) {
+              /* ignore */
+            }
+            errorEl.textContent = `${detail} Use username mike.casady and the real site password (e.g. WeLoveRacing!).`;
             btn.disabled = false;
             return;
           }
