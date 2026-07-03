@@ -195,22 +195,28 @@ function renderMaintenanceSheetHtml(wo, sheet, { editable = true } = {}) {
   const cart = (typeof cartData !== 'undefined' ? cartData : []).find((c) => c.id === wo.cart_id);
   const progress = countCheckedItems(normalized);
 
-  const sectionHtml = MAINTENANCE_SHEET_SECTIONS.map((section) => `
-    <div class="sheet-section">
-      <h4>${section.title}</h4>
+  const sectionHtml = MAINTENANCE_SHEET_SECTIONS.map((section) => {
+    const sectionId = section.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return `
+    <div class="sheet-section" data-sheet-section="${sectionId}">
+      <div class="sheet-section-head">
+        <h4>${section.title}</h4>
+        ${editable ? `<button type="button" class="btn ghost sheet-check-all" data-check-all-section="${sectionId}">Check All</button>` : ''}
+      </div>
       <div class="sheet-checklist">
         ${section.items.map((item) => {
           const row = normalized.checklist.find((c) => c.id === item.id);
           return `
             <label class="sheet-check">
-              <input type="checkbox" data-sheet-item="${item.id}" ${row?.checked ? 'checked' : ''} ${editable ? '' : 'disabled'} />
+              <input type="checkbox" data-sheet-item="${item.id}" data-sheet-section="${sectionId}" ${row?.checked ? 'checked' : ''} ${editable ? '' : 'disabled'} />
               <span>${item.label}</span>
             </label>
           `;
         }).join('')}
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   const partsRows = normalized.parts_lines.map((line, index) => `
     <tr>
@@ -332,4 +338,48 @@ function collectMaintenanceSheetFromDom(existingSheet) {
   }
 
   return normalized;
+}
+
+function updateSheetProgress() {
+  const inputs = document.querySelectorAll('[data-sheet-item]');
+  const done = Array.from(inputs).filter((input) => input.checked).length;
+  const progressEl = document.querySelector('.sheet-progress');
+  if (progressEl) {
+    progressEl.textContent = `Checklist ${done} / ${inputs.length} complete`;
+  }
+}
+
+function wireSectionCheckAll() {
+  document.querySelectorAll('[data-check-all-section]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const sectionId = button.dataset.checkAllSection;
+      const boxes = document.querySelectorAll(`[data-sheet-section="${sectionId}"] [data-sheet-item]`);
+      const allChecked = Array.from(boxes).every((box) => box.checked);
+      boxes.forEach((box) => {
+        box.checked = !allChecked;
+      });
+      button.textContent = allChecked ? 'Check All' : 'Uncheck All';
+      updateSheetProgress();
+    });
+  });
+
+  document.querySelectorAll('[data-sheet-item]').forEach((input) => {
+    input.addEventListener('change', () => {
+      updateSheetProgress();
+      const sectionId = input.dataset.sheetSection;
+      const sectionButton = document.querySelector(`[data-check-all-section="${sectionId}"]`);
+      const sectionBoxes = document.querySelectorAll(`[data-sheet-section="${sectionId}"] [data-sheet-item]`);
+      if (sectionButton) {
+        const allChecked = Array.from(sectionBoxes).every((box) => box.checked);
+        sectionButton.textContent = allChecked ? 'Uncheck All' : 'Check All';
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-check-all-section]').forEach((button) => {
+    const sectionId = button.dataset.checkAllSection;
+    const sectionBoxes = document.querySelectorAll(`[data-sheet-section="${sectionId}"] [data-sheet-item]`);
+    const allChecked = sectionBoxes.length > 0 && Array.from(sectionBoxes).every((box) => box.checked);
+    button.textContent = allChecked ? 'Uncheck All' : 'Check All';
+  });
 }

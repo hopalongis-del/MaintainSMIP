@@ -281,6 +281,8 @@ function wireMaintenanceSheetPanel(wo) {
     body.appendChild(row);
   });
 
+  wireSectionCheckAll();
+
   document.getElementById('sheet-save-btn')?.addEventListener('click', async () => {
     const sheet = collectMaintenanceSheetFromDom(wo.maintenance_sheet);
     const mechanic = document.getElementById('sheet-mechanic')?.value?.trim() || '';

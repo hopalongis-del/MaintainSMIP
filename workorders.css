@@ -334,12 +334,26 @@
   background: rgba(255, 255, 255, 0.02);
 }
 
+.sheet-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
 .sheet-section h4 {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: 0.82rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.sheet-check-all {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  white-space: nowrap;
 }
 
 .sheet-checklist {
