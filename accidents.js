@@ -113,10 +113,20 @@ function hidePhotoReview() {
   pendingReviewPhoto = null;
 }
 
+function isImageFile(file) {
+  if (!file) return false;
+  if (file.type && file.type.startsWith('image/')) return true;
+  const name = (file.name || '').toLowerCase();
+  return /\.(jpe?g|png|webp|heic|heif|gif)$/i.test(name);
+}
+
 function onPhotoInput(event) {
   const file = event.target.files?.[0];
   event.target.value = '';
-  if (!file || !file.type.startsWith('image/')) return;
+  if (!isImageFile(file)) {
+    alert('Please choose a photo (JPEG, PNG, or HEIC).');
+    return;
+  }
   showPhotoReview(file);
 }
 
@@ -128,7 +138,11 @@ async function approvePhoto() {
     const file = pendingReviewPhoto.file;
     hidePhotoReview();
     uploadOnApproveAccidentId = null;
-    await db.uploadAccidentPhoto(accidentId, file);
+    const uploaded = await db.uploadAccidentPhoto(accidentId, file);
+    if (!uploaded) {
+      alert('Could not upload the photo. Try again or choose from gallery.');
+      return;
+    }
     await renderAccidentList();
     await openAccidentDetail(accidentId);
     return;
@@ -146,12 +160,17 @@ function denyPhoto() {
 }
 
 async function uploadPendingPhotos(accidentId) {
+  let failed = 0;
   for (const photo of approvedPendingPhotos) {
-    await db.uploadAccidentPhoto(accidentId, photo.file);
+    const uploaded = await db.uploadAccidentPhoto(accidentId, photo.file);
+    if (!uploaded) failed += 1;
     URL.revokeObjectURL(photo.previewUrl);
   }
   approvedPendingPhotos = [];
   renderPendingPhotos();
+  if (failed) {
+    alert(`${failed} photo(s) could not be uploaded. The report was saved — try adding photos again from the detail view.`);
+  }
 }
 
 function buildAccidentCard(acc) {
@@ -323,7 +342,7 @@ function openCreateModal() {
 
 function openEditModal(acc) {
   editingAccidentId = acc.id;
-  selectedAccidentCart = cartData.find(c => c.id === acc.cart_id) || null;
+  selectedAccidentCart = cartData.find((c) => String(c.id) === String(acc.cart_id)) || null;
   approvedPendingPhotos = [];
   document.getElementById('acc-description').value = acc.description || '';
   document.getElementById('acc-notes').value = acc.notes || '';
@@ -353,7 +372,7 @@ function closeAccidentModal() {
 function serializeAccidentForm() {
   const incidentDate = document.getElementById('acc-incident-date').value;
   return {
-    cart_id: selectedAccidentCart.id,
+    cart_id: Number(selectedAccidentCart.id),
     location: document.getElementById('acc-location').value.trim(),
     reported_by: document.getElementById('acc-reported-by').value,
     incident_date: incidentDate ? `${incidentDate}T12:00:00` : null,

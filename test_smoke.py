@@ -91,6 +91,26 @@ def run_tests(client: TestClient) -> None:
     delete = client.delete(f"/api/workorders/{wo_id}")
     assert delete.status_code == 200, delete.text
 
+    accident = client.post(
+        "/api/accidents",
+        json={
+            "cart_id": 2000,
+            "description": "Smoke test accident damage",
+            "severity": "minor",
+            "status": "reported",
+        },
+    )
+    assert accident.status_code == 200, accident.text
+    accident_id = accident.json()["id"]
+    photo = client.post(
+        f"/api/accidents/{accident_id}/photos",
+        files={"file": ("damage.jpg", b"not-a-real-jpeg-but-ok-for-test", "")},
+    )
+    assert photo.status_code == 200, photo.text
+    photo_path = photo.json()["path"]
+    assert client.get(f"/{photo_path}").status_code == 200
+    assert client.delete(f"/api/accidents/{accident_id}").status_code == 200
+
     print("ALL TESTS PASSED")
     print("stats:", stats.json())
     print("wo_templates:", len(wo_templates.json()))

@@ -186,12 +186,24 @@ const db = {
   },
   async uploadAccidentPhoto(id, file) {
     const form = new FormData();
-    form.append('file', file);
+    const filename = file.name || 'photo.jpg';
+    form.append('file', file, filename);
     const r = await fetchApi(`/api/accidents/${id}/photos`, {
       method: 'POST',
       body: form,
     });
-    return r.ok ? r.json() : null;
+    if (!r.ok) {
+      let detail = 'Upload failed';
+      try {
+        const body = await r.json();
+        detail = body.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      console.error('Accident photo upload failed:', detail);
+      return null;
+    }
+    return r.json();
   },
   async deleteAccidentPhoto(id, path) {
     const r = await fetchApi(

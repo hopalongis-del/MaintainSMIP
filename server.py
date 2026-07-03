@@ -856,6 +856,16 @@ async def get_accident_row(accident_id: int) -> dict:
         return dict(row)
 
 
+ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif', '.gif'}
+
+
+def is_allowed_image_upload(file: UploadFile) -> bool:
+    if file.content_type and file.content_type.startswith('image/'):
+        return True
+    ext = Path(file.filename or '').suffix.lower()
+    return ext in ALLOWED_IMAGE_EXTENSIONS
+
+
 def delete_photo_files(photo_paths: List[str]) -> None:
     for rel_path in photo_paths:
         target = resolve_data_path(rel_path)
@@ -1382,11 +1392,11 @@ async def update_accident(accident_id: int, item: AccidentReportUpdate) -> Accid
 @app.post('/api/accidents/{accident_id}/photos')
 async def upload_accident_photo(accident_id: int, file: UploadFile = File(...)) -> dict:
     row = await get_accident_row(accident_id)
-    if not file.content_type or not file.content_type.startswith('image/'):
+    if not is_allowed_image_upload(file):
         raise HTTPException(status_code=400, detail='Only image files are allowed')
 
     ext = Path(file.filename or 'photo.jpg').suffix.lower()
-    if ext not in {'.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'}:
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
         ext = '.jpg'
 
     accident_dir = UPLOADS_DIR / str(accident_id)
