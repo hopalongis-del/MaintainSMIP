@@ -34,6 +34,17 @@ def test_legacy_password_login(client: TestClient) -> None:
     assert response.json()["user"]["username"] == "admin"
 
 
+def ensure_mike_test_password(client: TestClient, password: str = "WeLoveRacing!") -> None:
+    """Reset mike.casady to a known password so tests stay idempotent on local DBs."""
+    login(client)
+    users = client.get("/api/users").json()
+    mike = next((user for user in users if user["username"] == "mike.casady"), None)
+    if not mike:
+        return
+    client.put(f"/api/users/{mike['id']}", json={"password": password})
+    client.post("/api/auth/logout")
+
+
 def test_seeded_user_resync_login(client: TestClient) -> None:
     client.post("/api/auth/logout")
     response = client.post(
@@ -47,18 +58,18 @@ def test_seeded_user_resync_login(client: TestClient) -> None:
 def test_admin_user_management(client: TestClient) -> None:
     login(client)
 
+    temp_username = f"smoke.temp.{int(time.time())}"
     created = client.post(
         "/api/users",
         json={
-            "username": "smoke.temp",
+            "username": temp_username,
             "display_name": "Smoke Temp",
             "role": "technician",
             "password": "TempPass123!",
         },
     )
     assert created.status_code == 200, created.text
-    temp_user = created.json()
-    temp_id = temp_user["id"]
+    temp_id = created.json()["id"]
 
     reset = client.put(
         f"/api/users/{temp_id}",
@@ -69,7 +80,7 @@ def test_admin_user_management(client: TestClient) -> None:
     client.post("/api/auth/logout")
     temp_login = client.post(
         "/api/auth/login",
-        json={"username": "smoke.temp", "password": "ResetPass456!"},
+        json={"username": temp_username, "password": "ResetPass456!"},
     )
     assert temp_login.status_code == 200, temp_login.text
     client.post("/api/auth/logout")
@@ -81,7 +92,7 @@ def test_admin_user_management(client: TestClient) -> None:
     client.post("/api/auth/logout")
     deactivated_login = client.post(
         "/api/auth/login",
-        json={"username": "smoke.temp", "password": "ResetPass456!"},
+        json={"username": temp_username, "password": "ResetPass456!"},
     )
     assert deactivated_login.status_code == 401, deactivated_login.text
 
@@ -140,6 +151,7 @@ def test_change_password(client: TestClient) -> None:
 
 def run_tests(client: TestClient) -> None:
     login(client)
+    ensure_mike_test_password(client)
     test_legacy_password_login(client)
     test_seeded_user_resync_login(client)
     test_change_password(client)

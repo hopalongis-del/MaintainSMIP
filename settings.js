@@ -331,9 +331,27 @@ function buildSettingsModal() {
         <section class="settings-section" id="account-settings-section">
           <h3>Account</h3>
           <p class="hero-sub" id="account-signed-in-copy">Signed in as —</p>
-          <div class="settings-subblock hidden" id="admin-users-panel">
+          <form id="change-password-form" class="settings-form">
+            <h4>Change Password</h4>
+            <label>Current Password
+              <input type="password" id="settings-current-password" placeholder="Enter current password" autocomplete="current-password" required />
+            </label>
+            <label>New Password
+              <input type="password" id="settings-new-password" placeholder="At least 8 characters" autocomplete="new-password" minlength="8" required />
+            </label>
+            <label>Confirm New Password
+              <input type="password" id="settings-confirm-password" placeholder="Confirm new password" autocomplete="new-password" minlength="8" required />
+            </label>
+            <button class="btn secondary" type="submit" id="settings-save-password">Save Password</button>
+            <p class="hero-sub" id="settings-password-status"></p>
+          </form>
+        </section>
+
+        <section class="settings-section hidden" id="admin-settings-section">
+          <h3>Admin Settings</h3>
+          <p class="hero-sub">Manage team accounts and access. You cannot delete yourself or the last active admin.</p>
+          <div class="settings-subblock" id="admin-users-panel">
             <h4>Team Accounts</h4>
-            <p class="hero-sub">Admins can add users, reset passwords, and deactivate accounts. You cannot delete yourself or the last active admin.</p>
             <div id="admin-users-list" class="admin-users-list"></div>
             <form class="settings-form" id="admin-create-user-form">
               <label>New Username
@@ -357,20 +375,6 @@ function buildSettingsModal() {
             </form>
             <p class="hero-sub" id="admin-users-status"></p>
           </div>
-          <form id="change-password-form" class="settings-form">
-            <h4>Change Password</h4>
-            <label>Current Password
-              <input type="password" id="settings-current-password" placeholder="Enter current password" autocomplete="current-password" required />
-            </label>
-            <label>New Password
-              <input type="password" id="settings-new-password" placeholder="At least 8 characters" autocomplete="new-password" minlength="8" required />
-            </label>
-            <label>Confirm New Password
-              <input type="password" id="settings-confirm-password" placeholder="Confirm new password" autocomplete="new-password" minlength="8" required />
-            </label>
-            <button class="btn secondary" type="submit" id="settings-save-password">Save Password</button>
-            <p class="hero-sub" id="settings-password-status"></p>
-          </form>
         </section>
 
         <section class="settings-section">
@@ -392,7 +396,7 @@ function buildSettingsModal() {
       <div class="modal-panel card settings-panel" style="max-width: 420px;">
         <div class="modal-header">
           <div>
-            <span class="eyebrow">Team Accounts</span>
+            <span class="eyebrow">Admin Settings</span>
             <h2 id="admin-reset-password-title">Reset Password</h2>
           </div>
           <button class="btn ghost" type="button" id="admin-reset-password-close" aria-label="Close">Close</button>
@@ -656,7 +660,7 @@ async function injectUserBadge() {
   }
 
   if (user.role === 'admin') {
-    document.getElementById('admin-users-panel')?.classList.remove('hidden');
+    document.getElementById('admin-settings-section')?.classList.remove('hidden');
     await refreshAdminUsersList();
   }
 }
