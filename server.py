@@ -2973,8 +2973,8 @@ async def update_user(request: Request, user_id: int, body: UserUpdate) -> dict[
             values.append(int(body.active))
         password_reset = False
         if body.password:
-            if len(body.password) < 8:
-                raise HTTPException(status_code=400, detail='Password must be at least 8 characters')
+            if not body.password.strip():
+                raise HTTPException(status_code=400, detail='Password cannot be empty')
             fields.append('password_hash = ?')
             values.append(hash_password(body.password))
             fields.append('password_changed = ?')
