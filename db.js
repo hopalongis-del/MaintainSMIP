@@ -659,7 +659,39 @@ const db = {
       let detail = `Create user failed (${r.status})`;
       try {
         const body = await r.json();
-        detail = body.detail || detail;
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+  async updateUser(userId, fields) {
+    const r = await fetchApi(`/api/users/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+    if (!r.ok) {
+      let detail = `Update user failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+  async deleteUser(userId) {
+    const r = await fetchApi(`/api/users/${userId}`, { method: 'DELETE' });
+    if (!r.ok) {
+      let detail = `Delete user failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
       } catch (err) {
         /* ignore */
       }

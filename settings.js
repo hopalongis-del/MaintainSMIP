@@ -333,7 +333,7 @@ function buildSettingsModal() {
           <p class="hero-sub" id="account-signed-in-copy">Signed in as —</p>
           <div class="settings-subblock hidden" id="admin-users-panel">
             <h4>Team Accounts</h4>
-            <p class="hero-sub">Master admin can add users and reset passwords. The last active admin cannot be removed.</p>
+            <p class="hero-sub">Admins can add users, reset passwords, and deactivate accounts. You cannot delete yourself or the last active admin.</p>
             <div id="admin-users-list" class="admin-users-list"></div>
             <form class="settings-form" id="admin-create-user-form">
               <label>New Username
@@ -385,6 +385,29 @@ function buildSettingsModal() {
         <div class="settings-save-bar">
           <span class="settings-save-status" id="settings-save-status">Settings save automatically.</span>
         </div>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="admin-reset-password-modal" aria-hidden="true">
+      <div class="modal-panel card settings-panel" style="max-width: 420px;">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">Team Accounts</span>
+            <h2 id="admin-reset-password-title">Reset Password</h2>
+          </div>
+          <button class="btn ghost" type="button" id="admin-reset-password-close" aria-label="Close">Close</button>
+        </div>
+        <form class="settings-form" id="admin-reset-password-form">
+          <p class="hero-sub" id="admin-reset-password-copy">Set a new password for this user.</p>
+          <label>New Password
+            <input type="password" id="admin-reset-password-input" minlength="8" required autocomplete="new-password" />
+          </label>
+          <label>Confirm Password
+            <input type="password" id="admin-reset-password-confirm" minlength="8" required autocomplete="new-password" />
+          </label>
+          <button class="btn secondary" type="submit">Save New Password</button>
+          <p class="hero-sub" id="admin-reset-password-status"></p>
+        </form>
       </div>
     </div>
   `);
@@ -638,6 +661,16 @@ async function injectUserBadge() {
   }
 }
 
+let adminResetPasswordUserId = null;
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 async function refreshAdminUsersList() {
   const listEl = document.getElementById('admin-users-list');
   if (!listEl || typeof db === 'undefined') return;
@@ -646,14 +679,115 @@ async function refreshAdminUsersList() {
     listEl.innerHTML = '<p class="hero-sub">Could not load users.</p>';
     return;
   }
-  listEl.innerHTML = users.map((user) => `
-    <div class="admin-user-row">
-      <div>
-        <strong>${user.display_name}</strong>
-        <span class="hero-sub">${user.username} · ${user.role}</span>
+  const currentUser = window.__currentUser || db.getCachedUser?.() || null;
+  listEl.innerHTML = users.map((user) => {
+    const isSelf = currentUser && user.id === currentUser.id;
+    return `
+      <div class="admin-user-row" data-user-id="${user.id}">
+        <div>
+          <strong>${escapeHtml(user.display_name)}</strong>
+          <span class="hero-sub">${escapeHtml(user.username)} · ${escapeHtml(user.role)}${isSelf ? ' · you' : ''}</span>
+        </div>
+        <div class="admin-user-actions">
+          <button type="button" class="btn ghost" data-admin-reset-password="${user.id}" data-admin-display-name="${escapeHtml(user.display_name)}">Reset Password</button>
+          ${isSelf ? '' : `<button type="button" class="btn ghost danger" data-admin-delete-user="${user.id}" data-admin-username="${escapeHtml(user.username)}">Delete</button>`}
+        </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
+}
+
+function openAdminResetPasswordModal(userId, displayName) {
+  adminResetPasswordUserId = userId;
+  const modal = document.getElementById('admin-reset-password-modal');
+  const title = document.getElementById('admin-reset-password-title');
+  const copy = document.getElementById('admin-reset-password-copy');
+  const status = document.getElementById('admin-reset-password-status');
+  const form = document.getElementById('admin-reset-password-form');
+  if (!modal) return;
+  if (title) title.textContent = `Reset Password`;
+  if (copy) copy.textContent = `Set a new password for ${displayName}. They will sign in with this password on their next visit.`;
+  if (status) status.textContent = '';
+  form?.reset();
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  document.getElementById('admin-reset-password-input')?.focus();
+}
+
+function closeAdminResetPasswordModal() {
+  adminResetPasswordUserId = null;
+  const modal = document.getElementById('admin-reset-password-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+function wireAdminUserActions() {
+  const listEl = document.getElementById('admin-users-list');
+  if (!listEl || listEl._wired) return;
+  listEl._wired = true;
+
+  listEl.addEventListener('click', async (event) => {
+    const resetBtn = event.target.closest('[data-admin-reset-password]');
+    if (resetBtn) {
+      openAdminResetPasswordModal(
+        Number(resetBtn.dataset.adminResetPassword),
+        resetBtn.dataset.adminDisplayName || 'this user',
+      );
+      return;
+    }
+
+    const deleteBtn = event.target.closest('[data-admin-delete-user]');
+    if (!deleteBtn || typeof db === 'undefined') return;
+
+    const userId = Number(deleteBtn.dataset.adminDeleteUser);
+    const username = deleteBtn.dataset.adminUsername || 'this user';
+    const status = document.getElementById('admin-users-status');
+    if (!window.confirm(`Deactivate ${username}? They will no longer be able to sign in.`)) return;
+
+    const result = await db.deleteUser(userId);
+    if (result?.error) {
+      if (status) status.textContent = result.error;
+      return;
+    }
+    if (status) status.textContent = `Deactivated ${username}.`;
+    await refreshAdminUsersList();
+  });
+
+  const resetForm = document.getElementById('admin-reset-password-form');
+  if (resetForm && !resetForm._wired) {
+    resetForm._wired = true;
+    resetForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const status = document.getElementById('admin-reset-password-status');
+      const password = document.getElementById('admin-reset-password-input')?.value || '';
+      const confirm = document.getElementById('admin-reset-password-confirm')?.value || '';
+      if (!adminResetPasswordUserId) return;
+      if (password.length < 8) {
+        if (status) status.textContent = 'Password must be at least 8 characters.';
+        return;
+      }
+      if (password !== confirm) {
+        if (status) status.textContent = 'Passwords do not match.';
+        return;
+      }
+
+      const result = await db.updateUser(adminResetPasswordUserId, { password });
+      if (result?.error) {
+        if (status) status.textContent = result.error;
+        return;
+      }
+
+      const listStatus = document.getElementById('admin-users-status');
+      if (listStatus) listStatus.textContent = `Password updated for ${result.display_name}.`;
+      closeAdminResetPasswordModal();
+    });
+  }
+
+  document.getElementById('admin-reset-password-close')?.addEventListener('click', closeAdminResetPasswordModal);
+  document.getElementById('admin-reset-password-modal')?.addEventListener('click', (event) => {
+    if (event.target.id === 'admin-reset-password-modal') closeAdminResetPasswordModal();
+  });
 }
 
 function wireChangePasswordForm() {
@@ -897,6 +1031,7 @@ function initSettings() {
   injectReportsNavLink();
   injectSettingsButton();
   wireAdminUserForm();
+  wireAdminUserActions();
   wireChangePasswordForm();
   wirePushNotifications();
   applySettings();

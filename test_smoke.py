@@ -44,6 +44,60 @@ def test_seeded_user_resync_login(client: TestClient) -> None:
     assert response.json()["user"]["role"] == "admin"
 
 
+def test_admin_user_management(client: TestClient) -> None:
+    login(client)
+
+    created = client.post(
+        "/api/users",
+        json={
+            "username": "smoke.temp",
+            "display_name": "Smoke Temp",
+            "role": "technician",
+            "password": "TempPass123!",
+        },
+    )
+    assert created.status_code == 200, created.text
+    temp_user = created.json()
+    temp_id = temp_user["id"]
+
+    reset = client.put(
+        f"/api/users/{temp_id}",
+        json={"password": "ResetPass456!"},
+    )
+    assert reset.status_code == 200, reset.text
+
+    client.post("/api/auth/logout")
+    temp_login = client.post(
+        "/api/auth/login",
+        json={"username": "smoke.temp", "password": "ResetPass456!"},
+    )
+    assert temp_login.status_code == 200, temp_login.text
+    client.post("/api/auth/logout")
+
+    login(client)
+    deleted = client.delete(f"/api/users/{temp_id}")
+    assert deleted.status_code == 200, deleted.text
+
+    client.post("/api/auth/logout")
+    deactivated_login = client.post(
+        "/api/auth/login",
+        json={"username": "smoke.temp", "password": "ResetPass456!"},
+    )
+    assert deactivated_login.status_code == 401, deactivated_login.text
+
+    login(client)
+    me = client.get("/api/auth/me").json()
+    self_delete = client.delete(f"/api/users/{me['id']}")
+    assert self_delete.status_code == 400, self_delete.text
+    assert "own account" in self_delete.json()["detail"].lower()
+
+    admins = [user for user in client.get("/api/users").json() if user["role"] == "admin"]
+    if len(admins) == 1:
+        last_admin_id = admins[0]["id"]
+        block = client.delete(f"/api/users/{last_admin_id}")
+        assert block.status_code == 400, block.text
+
+
 def test_change_password(client: TestClient) -> None:
     client.post("/api/auth/logout")
     login = client.post(
@@ -89,6 +143,7 @@ def run_tests(client: TestClient) -> None:
     test_legacy_password_login(client)
     test_seeded_user_resync_login(client)
     test_change_password(client)
+    test_admin_user_management(client)
     login(client)
 
     stats = client.get("/api/stats")

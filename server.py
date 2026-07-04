@@ -2971,11 +2971,15 @@ async def update_user(request: Request, user_id: int, body: UserUpdate) -> dict[
         if body.active is not None:
             fields.append('active = ?')
             values.append(int(body.active))
+        password_reset = False
         if body.password:
             if len(body.password) < 8:
                 raise HTTPException(status_code=400, detail='Password must be at least 8 characters')
             fields.append('password_hash = ?')
             values.append(hash_password(body.password))
+            fields.append('password_changed = ?')
+            values.append(1)
+            password_reset = True
 
         if fields:
             values.append(user_id)
@@ -2990,7 +2994,73 @@ async def update_user(request: Request, user_id: int, body: UserUpdate) -> dict[
             (user_id,),
         )
         updated = await cursor.fetchone()
+
+    if password_reset:
+        await record_audit(
+            request,
+            'updated',
+            'user',
+            user_id,
+            f'Reset password for {current["username"]}',
+        )
+    elif fields:
+        changes: dict[str, Any] = {}
+        if body.display_name is not None and body.display_name.strip() != current['display_name']:
+            changes['display_name'] = body.display_name.strip()
+        if body.role is not None and body.role != current['role']:
+            changes['role'] = body.role
+        if body.active is not None and int(body.active) != current['active']:
+            changes['active'] = bool(body.active)
+        if changes:
+            await record_audit(
+                request,
+                'updated',
+                'user',
+                user_id,
+                f'Updated user {current["username"]}',
+                changes,
+            )
+
     return user_public(dict(updated))
+
+
+@app.delete('/api/users/{user_id}')
+async def delete_user(request: Request, user_id: int) -> dict[str, bool]:
+    admin = require_admin(request)
+    if admin['id'] == user_id:
+        raise HTTPException(status_code=400, detail='You cannot delete your own account')
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+        row = await cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail='User not found')
+        current = dict(row)
+
+        if not current['active']:
+            return {'ok': True}
+
+        if current['role'] == 'admin':
+            cursor = await connection.execute(
+                "SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = 1 AND id != ?",
+                (user_id,),
+            )
+            remaining_admins = (await cursor.fetchone())[0]
+            if remaining_admins == 0:
+                raise HTTPException(status_code=400, detail='Cannot remove the last active admin')
+
+        await connection.execute('UPDATE users SET active = 0 WHERE id = ?', (user_id,))
+        await connection.commit()
+
+    await record_audit(
+        request,
+        'deleted',
+        'user',
+        user_id,
+        f'Deactivated account {current["username"]}',
+    )
+    return {'ok': True}
 
 
 @app.get('/')

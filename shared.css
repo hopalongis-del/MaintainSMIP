@@ -445,6 +445,27 @@ a {
   margin-top: 4px;
 }
 
+.admin-user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.admin-user-actions .btn {
+  white-space: nowrap;
+}
+
+.admin-user-actions .btn.danger {
+  color: var(--danger, #dc2626);
+  border-color: color-mix(in srgb, var(--danger, #dc2626) 35%, var(--border));
+}
+
+.admin-user-actions .btn.danger:hover {
+  background: color-mix(in srgb, var(--danger, #dc2626) 12%, transparent);
+}
+
 .audit-list {
   list-style: none;
   margin: 0;
