@@ -239,6 +239,40 @@
             <label for="cart-notes">Notes</label>
             <textarea id="cart-notes" placeholder="Optional notes about this cart"></textarea>
           </div>
+          <div class="settings-subblock" style="margin-top: 16px;">
+            <h4 style="margin: 0 0 12px;">Asset Details</h4>
+            <p class="hero-sub" style="margin: 0 0 12px;">Optional fields — many carts don’t have this data yet. Bulk fill via Admin → Fleet Import once Chelsie provides the export.</p>
+            <div class="form-grid">
+              <div>
+                <label for="cart-barcode">Barcode</label>
+                <input id="cart-barcode" placeholder="Scan code / asset tag" />
+              </div>
+              <div>
+                <label for="cart-vin">VIN</label>
+                <input id="cart-vin" placeholder="Vehicle ID" />
+              </div>
+              <div>
+                <label for="cart-meter-hours">Meter Hours</label>
+                <input id="cart-meter-hours" type="number" min="0" step="0.1" placeholder="Hours" />
+              </div>
+              <div>
+                <label for="cart-home-location">Home Location</label>
+                <input id="cart-home-location" placeholder="Default venue / warehouse" />
+              </div>
+              <div>
+                <label for="cart-purchase-date">Purchase Date</label>
+                <input id="cart-purchase-date" type="date" />
+              </div>
+              <div>
+                <label for="cart-warranty-expires">Warranty Expires</label>
+                <input id="cart-warranty-expires" type="date" />
+              </div>
+              <div>
+                <label for="cart-acquisition-cost">Acquisition Cost</label>
+                <input id="cart-acquisition-cost" type="number" min="0" step="0.01" placeholder="USD" />
+              </div>
+            </div>
+          </div>
           <div class="modal-actions">
             <button class="btn secondary" type="button" id="cart-modal-cancel">Cancel</button>
             <button class="btn secondary hidden" type="button" id="cart-retire-btn">Retire Cart</button>
@@ -321,6 +355,13 @@
         document.getElementById('cart-location').value = cart?.location ?? '';
         document.getElementById('cart-status').value = cart?.status ?? 'active';
         document.getElementById('cart-notes').value = cart?.notes ?? '';
+        document.getElementById('cart-barcode').value = cart?.barcode ?? '';
+        document.getElementById('cart-vin').value = cart?.vin ?? '';
+        document.getElementById('cart-meter-hours').value = cart?.meter_hours ?? '';
+        document.getElementById('cart-home-location').value = cart?.home_location ?? '';
+        document.getElementById('cart-purchase-date').value = cart?.purchase_date ?? '';
+        document.getElementById('cart-warranty-expires').value = cart?.warranty_expires ?? '';
+        document.getElementById('cart-acquisition-cost').value = cart?.acquisition_cost ?? '';
         document.getElementById('cart-retire-btn').classList.toggle('hidden', !isEdit || cart?.status === 'retired');
         document.getElementById('cart-view-wo-btn').classList.toggle('hidden', !isEdit);
         if (isEdit) {
@@ -558,6 +599,17 @@
           location: document.getElementById('cart-location').value.trim(),
           status: document.getElementById('cart-status').value.trim(),
           notes: document.getElementById('cart-notes').value.trim(),
+          barcode: document.getElementById('cart-barcode').value.trim() || null,
+          vin: document.getElementById('cart-vin').value.trim() || null,
+          meter_hours: document.getElementById('cart-meter-hours').value
+            ? Number(document.getElementById('cart-meter-hours').value)
+            : null,
+          home_location: document.getElementById('cart-home-location').value.trim() || null,
+          purchase_date: document.getElementById('cart-purchase-date').value || null,
+          warranty_expires: document.getElementById('cart-warranty-expires').value || null,
+          acquisition_cost: document.getElementById('cart-acquisition-cost').value
+            ? Number(document.getElementById('cart-acquisition-cost').value)
+            : null,
         };
         const missing = [];
         if (!payload.serial) missing.push('Serial');

@@ -15,12 +15,11 @@ function readActivityFilters() {
 
 async function populateActivityUsers() {
   const select = document.getElementById('activity-filter-user');
-  const users = await db.getUsers();
+  const users = await db.getAuditUsernames();
   if (!Array.isArray(users)) return;
   const current = select.value;
   select.innerHTML = '<option value="all">All users</option>';
   users
-    .filter((user) => user.active !== false)
     .sort((a, b) => a.display_name.localeCompare(b.display_name))
     .forEach((user) => {
       const opt = document.createElement('option');

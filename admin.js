@@ -193,6 +193,35 @@ async function loadBackupInfo() {
   }
 }
 
+function wireFleetImport() {
+  const form = document.getElementById('admin-fleet-import-form');
+  if (!form || form._wired) return;
+  form._wired = true;
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const status = document.getElementById('admin-fleet-import-status');
+    const fileInput = document.getElementById('admin-fleet-import-file');
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      if (status) status.textContent = 'Choose a CSV file first.';
+      return;
+    }
+    if (status) status.textContent = 'Importing fleet…';
+    const result = await db.importFleetCsv(file);
+    if (result?.error) {
+      if (status) status.textContent = result.error;
+      return;
+    }
+    const errorNote = result.errors?.length
+      ? ` ${result.errors.length} row(s) skipped — see server audit log for details.`
+      : '';
+    if (status) {
+      status.textContent = `Import complete: ${result.created} created, ${result.updated} updated.${errorNote}`;
+    }
+    fileInput.value = '';
+  });
+}
+
 function wireBackupDownload() {
   const button = document.getElementById('admin-download-backup-btn');
   if (!button || button._wired) return;
@@ -226,6 +255,7 @@ async function initAdminPage() {
   }
 
   wireBackupDownload();
+  wireFleetImport();
   wireAdminUserForm();
   wireAdminUserActions();
   await Promise.all([loadBackupInfo(), refreshAdminUsersList()]);

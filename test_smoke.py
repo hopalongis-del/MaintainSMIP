@@ -55,6 +55,44 @@ def test_seeded_user_resync_login(client: TestClient) -> None:
     assert response.json()["user"]["role"] == "admin"
 
 
+def test_team_members_and_audit_users(client: TestClient) -> None:
+    login(client)
+    team = client.get("/api/users/team-members")
+    assert team.status_code == 200, team.text
+    assert len(team.json()) >= 1
+
+    audit_users = client.get("/api/audit/usernames")
+    assert audit_users.status_code == 200, audit_users.text
+    assert isinstance(audit_users.json(), list)
+
+
+def test_pm_automation_rules(client: TestClient) -> None:
+    login(client)
+    created = client.post(
+        "/api/pm/automation-rules",
+        json={
+            "name": "Smoke PM Automation",
+            "template_id": "PM-TPL-001",
+            "enabled": True,
+            "scope_type": "all",
+            "scope_values": [],
+            "lead_days": 14,
+        },
+    )
+    assert created.status_code == 200, created.text
+    rule_id = created.json()["id"]
+
+    listed = client.get("/api/pm/automation-rules")
+    assert listed.status_code == 200, listed.text
+    assert any(rule["id"] == rule_id for rule in listed.json())
+
+    run_now = client.post("/api/pm/automation-rules/run-now")
+    assert run_now.status_code == 200, run_now.text
+
+    deleted = client.delete(f"/api/pm/automation-rules/{rule_id}")
+    assert deleted.status_code == 200, deleted.text
+
+
 def test_database_backup(client: TestClient) -> None:
     login(client)
 
@@ -195,6 +233,8 @@ def run_tests(client: TestClient) -> None:
     test_seeded_user_resync_login(client)
     test_change_password(client)
     test_admin_user_management(client)
+    test_team_members_and_audit_users(client)
+    test_pm_automation_rules(client)
     test_database_backup(client)
     test_database_backup_token(client)
     login(client)
@@ -326,6 +366,7 @@ def run_tests(client: TestClient) -> None:
     health_data = health.json()
     assert health_data["status"] == "ok"
     assert health_data["db_exists"] is True
+    assert health_data["seed_demo_data"] is False
     assert str(server.DB_PATH).endswith("maintainsmip.db")
     assert str(server.DATA_DIR) in health_data["data_dir"]
     assert client.get("/").status_code == 200

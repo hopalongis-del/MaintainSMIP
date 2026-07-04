@@ -191,18 +191,31 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 
 ---
 
-## Suggested next work (not started)
+## Pending owner actions (2026-07-04)
 
-Pick based on product priority:
+1. **Roles & permissions — meet Chelsie in Charlotte** when back from event. Decide what `manager`, `technician`, and `readonly` should each see/do. Then implement role-based UI hiding (readonly still sees edit buttons today).
+2. **Fleet asset enrichment — data from Chelsie.** Extended cart fields exist (barcode, VIN, meter hours, purchase/warranty dates, cost, home location). Most carts are blank until Chelsie provides export → import via **Admin → Fleet Import** or one-off fill script.
+3. **Parts / inventory — PINNED.** Brian has the good Excel inventory when user returns from event. 24/7 system is hated by shop — do not build parts module until that file is reviewed and scope agreed.
+4. **Gmail for management email demo.** Set Render env vars: `SMTP_USER`, `SMTP_PASSWORD` (Google App Password), `SMTP_FROM`, `NOTIFY_EMAIL_RECIPIENTS` (comma-separated management emails). Uses `smtp.gmail.com:587`. Daily digest runs once per day with open/overdue counts.
 
-1. **Sync DEPLOY.md** with current roles and Team Accounts features
-2. **Leasing program** — continue from `leasing project.md` (barcode scan, tablet mode, modules)
-3. **Email notifications** — complement Web Push for users who block browser notifications
-4. **PM automation** — auto-create PM records from templates on schedule
-5. **Fleet import UI** — admin upload CSV instead of `reseed_fleet_demo.py` / `parse_fleet.py`
-6. **Role-based UI hiding** — readonly users still see nav links they cannot use
-7. **Force password change on first login** — UI prompt when `password_changed = 0`
-8. **Backup/export** — scheduled SQLite backup from Render disk
+## Shipped recently (2026-07-04)
+
+- `SEED_DEMO_DATA=false` by default (set `true` only for empty demo environments)
+- PM Automation tab + wizard + daily scheduler
+- Admin fleet CSV import + extended cart fields
+- Technician/assignee dropdowns synced to live users (`/api/users/team-members`)
+- Activity user filter fixed (`/api/audit/usernames`)
+- Admin database backup download + `backup_database.py` for Box/laptop
+
+## Suggested next work
+
+1. **Sync DEPLOY.md** with Admin page, SMTP vars, roles
+2. **Role-based UI** — after Chelsie meeting
+3. **Fleet bulk fill** — after Chelsie export
+4. **Parts inventory** — after Brian Excel review (pinned)
+5. **Force password change on first login**
+6. **Pagination** — see audit notes (discuss with owner)
+7. **Security hardening** — 2FA, SSO, rate limits (discuss with owner)
 
 ---
 

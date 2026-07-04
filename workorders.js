@@ -585,6 +585,11 @@ async function initWorkOrders() {
 
   try {
     await Promise.all([db.loadCartData(), db.loadCurrentUser(), loadWoTemplates()]);
+    if (window.MaintainSMIPSettings?.populateAssigneeSelect) {
+      await window.MaintainSMIPSettings.populateAssigneeSelect(
+        document.getElementById('wo-assigned-to'),
+      );
+    }
     showDetailPlaceholder();
     setLocationFilterOptions();
     wireWoStatCards();

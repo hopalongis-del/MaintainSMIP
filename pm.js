@@ -549,18 +549,183 @@ async function updatePmDashboard() {
   }).length;
 }
 
+let automationWizardStep = 1;
+
+function setActivePmTab(tab) {
+  const views = {
+    schedule: document.getElementById('schedule-view'),
+    templates: document.getElementById('templates-view'),
+    automation: document.getElementById('automation-view'),
+  };
+  const tabs = {
+    schedule: document.getElementById('tab-schedule'),
+    templates: document.getElementById('tab-templates'),
+    automation: document.getElementById('tab-automation'),
+  };
+  Object.entries(views).forEach(([key, el]) => el?.classList.toggle('hidden', key !== tab));
+  Object.entries(tabs).forEach(([key, el]) => el?.classList.toggle('active', key === tab));
+}
+
 function setScheduleTab() {
-  document.getElementById('schedule-view').classList.remove('hidden');
-  document.getElementById('templates-view').classList.add('hidden');
-  document.getElementById('tab-schedule').classList.add('active');
-  document.getElementById('tab-templates').classList.remove('active');
+  setActivePmTab('schedule');
 }
 
 function setTemplatesTab() {
-  document.getElementById('schedule-view').classList.add('hidden');
-  document.getElementById('templates-view').classList.remove('hidden');
-  document.getElementById('tab-schedule').classList.remove('active');
-  document.getElementById('tab-templates').classList.add('active');
+  setActivePmTab('templates');
+}
+
+function setAutomationTab() {
+  setActivePmTab('automation');
+  renderAutomationRules();
+}
+
+function formatAutomationScope(rule) {
+  if (rule.scope_type === 'all') return 'Entire fleet';
+  const values = (rule.scope_values || []).join(', ');
+  if (rule.scope_type === 'location') return `Locations: ${values || '—'}`;
+  if (rule.scope_type === 'model') return `Models: ${values || '—'}`;
+  return rule.scope_type;
+}
+
+async function renderAutomationRules() {
+  const list = document.getElementById('automation-rules-list');
+  if (!list) return;
+  const rules = await db.getPmAutomationRules();
+  if (!Array.isArray(rules) || rules.length === 0) {
+    list.innerHTML = '<div class="empty-state"><h3>No automation rules yet</h3><p>Use the wizard to create your first rule.</p></div>';
+    return;
+  }
+  list.innerHTML = rules.map((rule) => `
+    <div class="automation-rule-card" data-rule-id="${rule.id}">
+      <div>
+        <strong>${rule.name}</strong>
+        <p class="hero-sub">${rule.template_id} · ${formatAutomationScope(rule)} · lead ${rule.lead_days} days</p>
+        <p class="hero-sub">${rule.enabled ? 'Enabled' : 'Disabled'}${rule.last_run_at ? ` · last run ${formatPmDate(rule.last_run_at)}` : ''}</p>
+      </div>
+      <div class="template-actions-row">
+        <button type="button" class="btn ghost" data-toggle-rule="${rule.id}">${rule.enabled ? 'Disable' : 'Enable'}</button>
+        <button type="button" class="btn ghost danger" data-delete-rule="${rule.id}">Delete</button>
+      </div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('[data-toggle-rule]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const rule = rules.find((item) => item.id === Number(button.dataset.toggleRule));
+      if (!rule) return;
+      await db.updatePmAutomationRule(rule.id, { enabled: !rule.enabled });
+      await renderAutomationRules();
+    });
+  });
+
+  list.querySelectorAll('[data-delete-rule]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!window.confirm('Delete this automation rule?')) return;
+      await db.deletePmAutomationRule(Number(button.dataset.deleteRule));
+      await renderAutomationRules();
+    });
+  });
+}
+
+function updateAutomationScopeLabel() {
+  const scopeType = document.getElementById('auto-rule-scope-type')?.value || 'all';
+  const wrap = document.getElementById('auto-rule-scope-values-wrap');
+  const input = document.getElementById('auto-rule-scope-values');
+  if (!wrap || !input) return;
+  if (scopeType === 'all') {
+    wrap.classList.add('hidden');
+    input.value = '';
+    return;
+  }
+  wrap.classList.remove('hidden');
+  const label = document.getElementById('auto-rule-scope-values-label');
+  if (label) {
+    label.textContent = scopeType === 'location'
+      ? 'Locations (comma-separated)'
+      : 'Models (comma-separated)';
+  }
+}
+
+function showAutomationWizardStep(step) {
+  automationWizardStep = step;
+  [1, 2, 3, 4].forEach((num) => {
+    document.getElementById(`automation-wizard-step-${num}`)?.classList.toggle('hidden', num !== step);
+    document.querySelector(`[data-step-label="${num}"]`)?.classList.toggle('active', num === step);
+  });
+  document.getElementById('automation-wizard-back')?.classList.toggle('hidden', step === 1);
+  document.getElementById('automation-wizard-next')?.classList.toggle('hidden', step === 4);
+  document.getElementById('automation-wizard-save')?.classList.toggle('hidden', step !== 4);
+}
+
+async function openAutomationWizard() {
+  const templates = await db.getPmTemplates();
+  const select = document.getElementById('auto-rule-template');
+  if (select) {
+    select.innerHTML = templates.map((template) => `
+      <option value="${template.id}">${template.name}</option>
+    `).join('');
+  }
+  document.getElementById('auto-rule-name').value = '';
+  document.getElementById('auto-rule-lead-days').value = '14';
+  document.getElementById('auto-rule-scope-type').value = 'all';
+  updateAutomationScopeLabel();
+  document.getElementById('automation-wizard-status').textContent = '';
+  showAutomationWizardStep(1);
+  document.getElementById('automation-wizard-modal')?.classList.remove('hidden');
+}
+
+function closeAutomationWizard() {
+  document.getElementById('automation-wizard-modal')?.classList.add('hidden');
+}
+
+function parseAutomationScopeValues() {
+  const scopeType = document.getElementById('auto-rule-scope-type').value;
+  const raw = document.getElementById('auto-rule-scope-values').value;
+  if (scopeType === 'all') return [];
+  return raw.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function buildAutomationReviewHtml() {
+  const templateId = document.getElementById('auto-rule-template').value;
+  const templateName = document.getElementById('auto-rule-template').selectedOptions[0]?.textContent || templateId;
+  const scopeType = document.getElementById('auto-rule-scope-type').value;
+  const scopeValues = parseAutomationScopeValues();
+  const leadDays = document.getElementById('auto-rule-lead-days').value;
+  return `
+    <p><strong>${document.getElementById('auto-rule-name').value.trim()}</strong></p>
+    <p>Template: ${templateName}</p>
+    <p>Scope: ${scopeType === 'all' ? 'Entire fleet' : `${scopeType} → ${scopeValues.join(', ')}`}</p>
+    <p>Lead time: ${leadDays} days before due date</p>
+    <p>Runs automatically once per day. Existing open PM records are not duplicated.</p>
+  `;
+}
+
+async function saveAutomationRuleFromWizard() {
+  const status = document.getElementById('automation-wizard-status');
+  const payload = {
+    name: document.getElementById('auto-rule-name').value.trim(),
+    template_id: document.getElementById('auto-rule-template').value,
+    scope_type: document.getElementById('auto-rule-scope-type').value,
+    scope_values: parseAutomationScopeValues(),
+    lead_days: Number(document.getElementById('auto-rule-lead-days').value || 14),
+    enabled: true,
+  };
+  if (!payload.name) {
+    status.textContent = 'Rule name is required.';
+    return;
+  }
+  if (payload.scope_type !== 'all' && payload.scope_values.length === 0) {
+    status.textContent = 'Enter at least one scope value or choose entire fleet.';
+    return;
+  }
+  const result = await db.createPmAutomationRule(payload);
+  if (result?.error) {
+    status.textContent = result.error;
+    return;
+  }
+  closeAutomationWizard();
+  setAutomationTab();
+  await renderAutomationRules();
 }
 
 function showPmApiError(message) {
@@ -597,6 +762,46 @@ async function initPmModule() {
 
   document.getElementById('tab-schedule').addEventListener('click', setScheduleTab);
   document.getElementById('tab-templates').addEventListener('click', setTemplatesTab);
+  document.getElementById('tab-automation')?.addEventListener('click', setAutomationTab);
+  document.getElementById('open-automation-wizard')?.addEventListener('click', openAutomationWizard);
+  document.getElementById('automation-wizard-close')?.addEventListener('click', closeAutomationWizard);
+  document.getElementById('automation-wizard-back')?.addEventListener('click', () => {
+    if (automationWizardStep > 1) showAutomationWizardStep(automationWizardStep - 1);
+  });
+  document.getElementById('automation-wizard-next')?.addEventListener('click', () => {
+    const status = document.getElementById('automation-wizard-status');
+    if (automationWizardStep === 1 && !document.getElementById('auto-rule-name').value.trim()) {
+      status.textContent = 'Enter a rule name.';
+      return;
+    }
+    if (automationWizardStep === 2) {
+      const scopeType = document.getElementById('auto-rule-scope-type').value;
+      if (scopeType !== 'all' && parseAutomationScopeValues().length === 0) {
+        status.textContent = 'Enter at least one scope value.';
+        return;
+      }
+    }
+    status.textContent = '';
+    if (automationWizardStep === 3) {
+      document.getElementById('automation-review-copy').innerHTML = buildAutomationReviewHtml();
+    }
+    if (automationWizardStep < 4) showAutomationWizardStep(automationWizardStep + 1);
+  });
+  document.getElementById('automation-wizard-save')?.addEventListener('click', saveAutomationRuleFromWizard);
+  document.getElementById('auto-rule-scope-type')?.addEventListener('change', updateAutomationScopeLabel);
+  document.getElementById('run-automation-now')?.addEventListener('click', async () => {
+    const status = document.getElementById('automation-status');
+    status.textContent = 'Running automation…';
+    const result = await db.runPmAutomationNow();
+    if (result?.error) {
+      status.textContent = result.error;
+      return;
+    }
+    status.textContent = `Automation run complete: ${result.created} PM record(s) created, ${result.skipped} skipped.`;
+    await renderPmSchedule();
+    await updatePmDashboard();
+    await renderAutomationRules();
+  });
   document.getElementById('pm-filter-status').addEventListener('change', () => {
     window.__pmDueWeekFilter = false;
     window.__pmCompletedMonthFilter = false;

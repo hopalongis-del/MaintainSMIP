@@ -524,6 +524,91 @@ const db = {
     const r = await fetchApi('/api/users');
     return r.ok ? r.json() : [];
   },
+  async getTeamMembers() {
+    const r = await fetchApi('/api/users/team-members');
+    return r.ok ? r.json() : [];
+  },
+  async getAuditUsernames() {
+    const r = await fetchApi('/api/audit/usernames');
+    return r.ok ? r.json() : [];
+  },
+  async getPmAutomationRules() {
+    const r = await fetchApi('/api/pm/automation-rules');
+    return r.ok ? r.json() : [];
+  },
+  async createPmAutomationRule(payload) {
+    const r = await fetchApi('/api/pm/automation-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Could not save automation rule (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = body.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+  async updatePmAutomationRule(ruleId, payload) {
+    const r = await fetchApi(`/api/pm/automation-rules/${ruleId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Could not update automation rule (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = body.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+  async deletePmAutomationRule(ruleId) {
+    const r = await fetchApi(`/api/pm/automation-rules/${ruleId}`, { method: 'DELETE' });
+    return r.ok ? r.json() : null;
+  },
+  async runPmAutomationNow() {
+    const r = await fetchApi('/api/pm/automation-rules/run-now', { method: 'POST' });
+    if (!r.ok) {
+      let detail = `Automation run failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = body.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+  async importFleetCsv(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const r = await fetchApi('/api/admin/fleet-import', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!r.ok) {
+      let detail = `Fleet import failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = body.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
   async getBackupInfo() {
     const r = await fetchApi('/api/admin/backup/info');
     return r.ok ? r.json() : null;

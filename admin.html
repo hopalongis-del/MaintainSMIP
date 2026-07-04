@@ -49,6 +49,24 @@
         <div class="hero-strip">
           <div>
             <span class="eyebrow">Administration</span>
+            <h2>Fleet Import</h2>
+            <p class="hero-sub">Upload a CSV to create or update carts. Required columns: <code>id</code>, <code>serial</code>, <code>model</code>, <code>year</code>, <code>location</code>, <code>status</code>. Optional: <code>notes</code>, <code>barcode</code>, <code>vin</code>, <code>meter_hours</code>, <code>purchase_date</code>, <code>warranty_expires</code>, <code>acquisition_cost</code>, <code>home_location</code>.</p>
+          </div>
+        </div>
+        <form class="settings-form" id="admin-fleet-import-form">
+          <label>CSV File
+            <input type="file" id="admin-fleet-import-file" accept=".csv,text/csv" required />
+          </label>
+          <button class="btn secondary" type="submit">Import Fleet CSV</button>
+        </form>
+        <p class="hero-sub" id="admin-fleet-import-status"></p>
+        <p class="hero-sub">Bulk enrichment from Chelsie’s data export is pending — once you have the file, import it here or we’ll run a one-off fill script.</p>
+      </section>
+
+      <section class="card page-section">
+        <div class="hero-strip">
+          <div>
+            <span class="eyebrow">Administration</span>
             <h2>Team Accounts</h2>
             <p class="hero-sub">Add users, reset passwords, and deactivate accounts. You cannot delete yourself or the last active admin.</p>
           </div>

@@ -37,6 +37,7 @@
           <div class="tab-controls">
             <button class="btn secondary active" id="tab-schedule">Schedule</button>
             <button class="btn secondary" id="tab-templates">Templates</button>
+            <button class="btn secondary" id="tab-automation">Automation</button>
           </div>
         </div>
 
@@ -96,8 +97,77 @@
           </div>
           <div class="template-list" id="template-list"></div>
         </div>
+
+        <div id="automation-view" class="hidden">
+          <div class="automation-hero">
+            <div>
+              <h3>PM Automation</h3>
+              <p class="hero-sub">Rules run once per day and create PM records before they are due. Use the wizard to set scope and lead time.</p>
+            </div>
+            <div class="automation-actions">
+              <button class="btn primary" type="button" id="open-automation-wizard">Automation Wizard</button>
+              <button class="btn secondary" type="button" id="run-automation-now">Run Now</button>
+            </div>
+          </div>
+          <div id="automation-rules-list" class="automation-rules-list"></div>
+          <p class="hero-sub" id="automation-status"></p>
+        </div>
       </section>
       <footer class="page-footer" data-settings-footer>MaintainSMIP · SMI Properties Fleet Maintenance</footer>
+    </div>
+
+    <div class="modal hidden" id="automation-wizard-modal" aria-hidden="true">
+      <div class="modal-panel card automation-wizard-panel">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">PM Automation Wizard</span>
+            <h2 id="automation-wizard-title">Create Automation Rule</h2>
+          </div>
+          <button class="btn ghost" type="button" id="automation-wizard-close">Close</button>
+        </div>
+        <div class="automation-steps">
+          <span class="automation-step active" data-step-label="1">Template</span>
+          <span class="automation-step" data-step-label="2">Scope</span>
+          <span class="automation-step" data-step-label="3">Timing</span>
+          <span class="automation-step" data-step-label="4">Review</span>
+        </div>
+        <div id="automation-wizard-step-1" class="automation-wizard-step">
+          <label>Rule Name
+            <input type="text" id="auto-rule-name" placeholder="e.g. Charlotte 90-day inspections" required />
+          </label>
+          <label>PM Template
+            <select id="auto-rule-template" required></select>
+          </label>
+        </div>
+        <div id="automation-wizard-step-2" class="automation-wizard-step hidden">
+          <label>Scope
+            <select id="auto-rule-scope-type">
+              <option value="all">Entire fleet</option>
+              <option value="location">Specific locations</option>
+              <option value="model">Specific models</option>
+            </select>
+          </label>
+          <label id="auto-rule-scope-values-wrap">
+            <span id="auto-rule-scope-values-label">Locations (comma-separated)</span>
+            <input type="text" id="auto-rule-scope-values" placeholder="Charlotte, SMIP" />
+          </label>
+        </div>
+        <div id="automation-wizard-step-3" class="automation-wizard-step hidden">
+          <label>Lead Time (days before due date to create PM record)
+            <input type="number" id="auto-rule-lead-days" min="1" max="365" value="14" />
+          </label>
+          <p class="hero-sub">Example: 14 means the system creates the PM up to two weeks before it is due.</p>
+        </div>
+        <div id="automation-wizard-step-4" class="automation-wizard-step hidden">
+          <div class="automation-review card" id="automation-review-copy"></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn ghost" type="button" id="automation-wizard-back">Back</button>
+          <button class="btn secondary" type="button" id="automation-wizard-next">Next</button>
+          <button class="btn primary hidden" type="button" id="automation-wizard-save">Save Rule</button>
+        </div>
+        <p class="hero-sub" id="automation-wizard-status"></p>
+      </div>
     </div>
 
     <div class="modal hidden" id="pm-modal">

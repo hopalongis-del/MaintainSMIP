@@ -1,4 +1,4 @@
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
 
@@ -35,7 +35,7 @@ const RACING_THEMES = [
   },
 ];
 
-const TECHNICIANS = [
+const TECHNICIAN_FALLBACK = [
   'Gavin Weinmeister',
   'Kevin Stellman',
   'Cory Yeager',
@@ -46,6 +46,38 @@ const TECHNICIANS = [
   'Stephen Hering',
   'Mark Hixson',
 ];
+
+let cachedTeamAssignees = null;
+
+async function loadTeamAssignees() {
+  if (typeof db === 'undefined') return TECHNICIAN_FALLBACK.map((display_name) => ({ display_name }));
+  try {
+    const members = await db.getTeamMembers();
+    if (Array.isArray(members) && members.length) {
+      cachedTeamAssignees = members;
+      return members;
+    }
+  } catch (err) {
+    /* fallback below */
+  }
+  cachedTeamAssignees = TECHNICIAN_FALLBACK.map((display_name) => ({ display_name, role: 'technician' }));
+  return cachedTeamAssignees;
+}
+
+function getTeamAssigneeNames() {
+  const members = cachedTeamAssignees || [];
+  return members.map((member) => member.display_name).filter(Boolean);
+}
+
+async function populateAssigneeSelect(selectEl, { includeUnassigned = true, selected = '' } = {}) {
+  if (!selectEl) return;
+  const members = await loadTeamAssignees();
+  const options = members
+    .map((member) => `<option value="${member.display_name}">${member.display_name}</option>`)
+    .join('');
+  selectEl.innerHTML = `${includeUnassigned ? '<option value="">— Unassigned —</option>' : ''}${options}`;
+  if (selected) selectEl.value = selected;
+}
 
 const DEFAULT_SETTINGS = {
   theme: 'smi-racing',
@@ -223,7 +255,7 @@ function buildSettingsModal() {
             <label>Default Mechanic
               <select id="settings-default-mechanic">
                 <option value="">None</option>
-                ${TECHNICIANS.map((name) => `<option value="${name}">${name}</option>`).join('')}
+                ${getTeamAssigneeNames().map((name) => `<option value="${name}">${name}</option>`).join('')}
               </select>
             </label>
           </form>
@@ -730,10 +762,21 @@ function injectSettingsButton() {
   document.body.appendChild(createSettingsButton({ floating: true }));
 }
 
-function openSettings() {
+async function openSettings() {
   const modal = document.getElementById('settings-modal');
   if (!modal) return;
-  populateSettingsDynamicOptions().then(() => syncSettingsForm());
+  await loadTeamAssignees();
+  const mechanicSelect = document.getElementById('settings-default-mechanic');
+  if (mechanicSelect) {
+    const current = mechanicSelect.value;
+    mechanicSelect.innerHTML = `
+      <option value="">None</option>
+      ${getTeamAssigneeNames().map((name) => `<option value="${name}">${name}</option>`).join('')}
+    `;
+    mechanicSelect.value = current;
+  }
+  await populateSettingsDynamicOptions();
+  syncSettingsForm();
   refreshPushStatusUi();
   modal.classList.remove('hidden');
   modal.setAttribute('aria-hidden', 'false');
@@ -819,6 +862,9 @@ window.MaintainSMIPSettings = {
   getDefaultWoTemplateId: () => getSettings().defaultWoTemplateId || '',
   getDefaultFleetLocation: () => getSettings().defaultFleetLocation || 'all',
   getShopName: () => getSettings().shopName || DEFAULT_SETTINGS.shopName,
+  loadTeamAssignees,
+  populateAssigneeSelect,
+  getTeamAssigneeNames,
 };
 
 async function initPushBackground() {
@@ -838,11 +884,13 @@ async function initPushBackground() {
   }
 }
 
-function initSettings() {
+async function initSettings() {
   buildSettingsModal();
   injectActivityNavLink();
   injectReportsNavLink();
   injectSettingsButton();
+  await loadTeamAssignees();
+  syncSettingsForm();
   wireChangePasswordForm();
   wirePushNotifications();
   applySettings();

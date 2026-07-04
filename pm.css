@@ -216,3 +216,69 @@
     align-items: stretch;
   }
 }
+
+.automation-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.automation-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.automation-rules-list {
+  display: grid;
+  gap: 12px;
+}
+
+.automation-rule-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.automation-wizard-panel {
+  width: min(560px, 100%);
+}
+
+.automation-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.automation-step {
+  text-align: center;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.automation-step.active {
+  color: var(--text);
+  border-color: var(--accent, #e11d29);
+  background: color-mix(in srgb, var(--accent, #e11d29) 10%, transparent);
+}
+
+.automation-wizard-step {
+  display: grid;
+  gap: 14px;
+}
+
+.automation-review {
+  padding: 14px 16px;
+  line-height: 1.5;
+}

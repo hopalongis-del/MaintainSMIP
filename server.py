@@ -1,16 +1,20 @@
 from __future__ import annotations
 import asyncio
 import base64
+import csv
 import hashlib
 import hmac
+import io
 import json
 import os
 import re
 import secrets
 import shutil
+import smtplib
 import sqlite3
 import tempfile
 import time
+from email.message import EmailMessage
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -37,6 +41,26 @@ LEGACY_UPLOADS_DIR = ROOT_DIR / 'uploads'
 APP_PASSWORD = os.environ.get('APP_PASSWORD', 'WeLoveRacing!')
 APP_SECRET = os.environ.get('APP_SECRET', 'maintainsmip-session-secret')
 BACKUP_TOKEN = os.environ.get('BACKUP_TOKEN', '').strip()
+SEED_DEMO_DATA = os.environ.get('SEED_DEMO_DATA', 'false').strip().lower() in ('1', 'true', 'yes')
+SMTP_HOST = os.environ.get('SMTP_HOST', 'smtp.gmail.com').strip()
+SMTP_PORT = int(os.environ.get('SMTP_PORT', '587'))
+SMTP_USER = os.environ.get('SMTP_USER', '').strip()
+SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '').strip()
+SMTP_FROM = os.environ.get('SMTP_FROM', SMTP_USER).strip()
+NOTIFY_EMAIL_RECIPIENTS = [
+    item.strip()
+    for item in os.environ.get('NOTIFY_EMAIL_RECIPIENTS', '').split(',')
+    if item.strip()
+]
+CART_EXTENDED_FIELDS = (
+    'barcode',
+    'vin',
+    'meter_hours',
+    'purchase_date',
+    'warranty_expires',
+    'acquisition_cost',
+    'home_location',
+)
 SESSION_COOKIE = 'ms_session'
 SESSION_MAX_AGE = 7 * 24 * 3600
 MASTER_USERNAME = 'admin'
@@ -552,7 +576,8 @@ async def lifespan(app: FastAPI):
     await seed_wo_templates()
     await ensure_wo_templates_seeded()
     await ensure_users_seeded()
-    await seed_demo_data()
+    if SEED_DEMO_DATA:
+        await seed_demo_data()
     notification_task = asyncio.create_task(notification_loop())
     yield
     notification_task.cancel()
@@ -580,6 +605,13 @@ class CartItem(BaseModel):
     location: Optional[str]
     status: Optional[str]
     notes: Optional[str]
+    barcode: Optional[str] = None
+    vin: Optional[str] = None
+    meter_hours: Optional[float] = None
+    purchase_date: Optional[str] = None
+    warranty_expires: Optional[str] = None
+    acquisition_cost: Optional[float] = None
+    home_location: Optional[str] = None
 
 
 REQUIRED_CART_FIELDS = ('serial', 'model', 'year', 'location', 'status')
@@ -613,6 +645,13 @@ class CartCreate(BaseModel):
     location: str = Field(min_length=1)
     status: str = Field(min_length=1, default='active')
     notes: str = ''
+    barcode: Optional[str] = None
+    vin: Optional[str] = None
+    meter_hours: Optional[float] = None
+    purchase_date: Optional[str] = None
+    warranty_expires: Optional[str] = None
+    acquisition_cost: Optional[float] = None
+    home_location: Optional[str] = None
 
 
 class CartUpdate(BaseModel):
@@ -622,6 +661,13 @@ class CartUpdate(BaseModel):
     location: Optional[str] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+    barcode: Optional[str] = None
+    vin: Optional[str] = None
+    meter_hours: Optional[float] = None
+    purchase_date: Optional[str] = None
+    warranty_expires: Optional[str] = None
+    acquisition_cost: Optional[float] = None
+    home_location: Optional[str] = None
 
     @field_validator('serial', 'model', 'year', 'location', 'status')
     @classmethod
@@ -830,6 +876,8 @@ def cart_row_to_item(row: Any) -> CartItem:
     raw_id = data['id']
     if isinstance(raw_id, str) and raw_id.isdigit():
         raw_id = int(raw_id)
+    meter_hours = data.get('meter_hours')
+    acquisition_cost = data.get('acquisition_cost')
     return CartItem(
         id=raw_id,
         serial=data.get('serial'),
@@ -838,6 +886,13 @@ def cart_row_to_item(row: Any) -> CartItem:
         location=data.get('location'),
         status=data.get('status'),
         notes=data.get('notes'),
+        barcode=data.get('barcode'),
+        vin=data.get('vin'),
+        meter_hours=float(meter_hours) if meter_hours not in (None, '') else None,
+        purchase_date=data.get('purchase_date'),
+        warranty_expires=data.get('warranty_expires'),
+        acquisition_cost=float(acquisition_cost) if acquisition_cost not in (None, '') else None,
+        home_location=data.get('home_location'),
     )
 
 
@@ -845,7 +900,12 @@ async def fetch_all_carts() -> List[CartItem]:
     async with aiosqlite.connect(DB_PATH) as connection:
         connection.row_factory = aiosqlite.Row
         cursor = await connection.execute(
-            'SELECT id, serial, model, year, location, status, notes FROM carts ORDER BY id'
+            '''
+            SELECT id, serial, model, year, location, status, notes,
+                   barcode, vin, meter_hours, purchase_date, warranty_expires,
+                   acquisition_cost, home_location
+            FROM carts ORDER BY id
+            '''
         )
         rows = await cursor.fetchall()
     return [cart_row_to_item(row) for row in rows]
@@ -1108,6 +1168,268 @@ async def fetch_push_enabled_users() -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def normalize_cart_optional_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    for field in CART_EXTENDED_FIELDS:
+        if field not in normalized:
+            continue
+        value = normalized[field]
+        if value in (None, ''):
+            normalized[field] = None
+        elif field in ('meter_hours', 'acquisition_cost'):
+            try:
+                normalized[field] = float(value)
+            except (TypeError, ValueError):
+                normalized[field] = None
+        else:
+            normalized[field] = str(value).strip() or None
+    return normalized
+
+
+def cart_values_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    base = {
+        'serial': str(payload.get('serial', '')).strip(),
+        'model': str(payload.get('model', '')).strip(),
+        'year': str(payload.get('year', '')).strip(),
+        'location': str(payload.get('location', '')).strip(),
+        'status': str(payload.get('status', 'active')).strip(),
+        'notes': str(payload.get('notes', '')).strip(),
+    }
+    extras = normalize_cart_optional_fields(payload)
+    for field in CART_EXTENDED_FIELDS:
+        base[field] = extras.get(field)
+    return base
+
+
+def smtp_configured() -> bool:
+    return bool(SMTP_USER and SMTP_PASSWORD and SMTP_FROM and NOTIFY_EMAIL_RECIPIENTS)
+
+
+def send_email_sync(subject: str, body: str, recipients: list[str]) -> None:
+    message = EmailMessage()
+    message['Subject'] = subject
+    message['From'] = SMTP_FROM
+    message['To'] = ', '.join(recipients)
+    message.set_content(body)
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as smtp:
+        smtp.starttls()
+        smtp.login(SMTP_USER, SMTP_PASSWORD)
+        smtp.send_message(message)
+
+
+async def send_management_digest_email(counts: dict[str, int]) -> None:
+    if not smtp_configured():
+        return
+    lines = [
+        'MaintainSMIP daily operations digest',
+        '',
+        f"Open work orders: {counts['open_wo']}",
+        f"Overdue work orders: {counts['overdue_wo']}",
+        f"PM due soon: {counts['pm_due']}",
+        f"PM overdue: {counts['pm_overdue']}",
+        f"Open accident reports: {counts['open_accidents']}",
+        '',
+        f"Dashboard: https://maintainsmip.onrender.com",
+    ]
+    body = '\n'.join(lines)
+    subject = f"MaintainSMIP digest — {counts['overdue_wo']} overdue WO, {counts['pm_overdue']} overdue PM"
+    try:
+        await asyncio.to_thread(
+            send_email_sync,
+            subject,
+            body,
+            NOTIFY_EMAIL_RECIPIENTS,
+        )
+    except Exception:
+        pass
+
+
+class PmAutomationRuleCreate(BaseModel):
+    name: str = Field(min_length=1)
+    template_id: str = Field(min_length=1)
+    enabled: bool = True
+    scope_type: str = 'all'
+    scope_values: List[str] = Field(default_factory=list)
+    lead_days: int = Field(default=14, ge=1, le=365)
+
+
+class PmAutomationRuleUpdate(BaseModel):
+    name: Optional[str] = None
+    template_id: Optional[str] = None
+    enabled: Optional[bool] = None
+    scope_type: Optional[str] = None
+    scope_values: Optional[List[str]] = None
+    lead_days: Optional[int] = Field(default=None, ge=1, le=365)
+
+
+def parse_pm_rule_row(row: Any) -> dict[str, Any]:
+    data = dict(row)
+    return {
+        'id': data['id'],
+        'name': data['name'],
+        'template_id': data['template_id'],
+        'enabled': bool(data['enabled']),
+        'scope_type': data['scope_type'],
+        'scope_values': json.loads(data.get('scope_values') or '[]'),
+        'lead_days': data['lead_days'],
+        'last_run_at': data.get('last_run_at'),
+        'created_at': data.get('created_at'),
+        'updated_at': data.get('updated_at'),
+    }
+
+
+def cart_matches_pm_scope(cart: CartItem, scope_type: str, scope_values: list[str]) -> bool:
+    if scope_type == 'all' or not scope_type:
+        return True
+    if scope_type == 'location':
+        return cart.location in scope_values
+    if scope_type == 'model':
+        return cart.model in scope_values
+    return False
+
+
+async def fetch_pm_template(template_id: str) -> Optional[dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT * FROM pm_templates WHERE id = ? AND active = 1',
+            (template_id,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def has_open_pm_for_cart_template(cart_id: Any, template_id: str) -> bool:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute(
+            '''
+            SELECT COUNT(*) FROM pm_records
+            WHERE cart_id = ? AND template_id = ?
+              AND status IN ('scheduled', 'in_progress', 'overdue')
+            ''',
+            (cart_id, template_id),
+        )
+        return (await cursor.fetchone())[0] > 0
+
+
+async def latest_pm_record_for_cart_template(cart_id: Any, template_id: str) -> Optional[dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            '''
+            SELECT * FROM pm_records
+            WHERE cart_id = ? AND template_id = ?
+            ORDER BY COALESCE(completed_date, scheduled_date, '') DESC, id DESC
+            LIMIT 1
+            ''',
+            (cart_id, template_id),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+def calculate_next_pm_date(template: dict[str, Any], latest: Optional[dict[str, Any]]) -> datetime:
+    interval_days = int(template.get('interval_value') or 90)
+    if latest and latest.get('status') == 'completed' and latest.get('completed_date'):
+        anchor = datetime.fromisoformat(str(latest['completed_date']).replace('Z', ''))
+    elif latest and latest.get('scheduled_date'):
+        anchor = datetime.fromisoformat(str(latest['scheduled_date']).replace('Z', ''))
+    else:
+        anchor = datetime.utcnow()
+    return anchor + timedelta(days=interval_days)
+
+
+async def create_pm_record_from_template(
+    template: dict[str, Any],
+    cart: CartItem,
+    scheduled_date: datetime,
+) -> None:
+    checklist = json.loads(template.get('checklist') or '[]')
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            '''
+            INSERT INTO pm_records (
+                template_id, template_name, description, cart_id, location,
+                scheduled_date, completed_date, status, checklist_results,
+                tech_name, labor_minutes, linked_wo_ids
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                template['id'],
+                template['name'],
+                template.get('description', ''),
+                cart.id,
+                cart.location,
+                scheduled_date.isoformat(),
+                None,
+                'scheduled',
+                json.dumps([
+                    {
+                        'task_id': item.get('id'),
+                        'task': item.get('task'),
+                        'passed': False,
+                        'note': '',
+                    }
+                    for item in checklist
+                ]),
+                '',
+                int(template.get('estimated_labor_minutes') or 0),
+                json.dumps([]),
+            ),
+        )
+        await connection.commit()
+
+
+async def run_pm_automation(trigger: str = 'scheduled') -> dict[str, int]:
+    created = 0
+    skipped = 0
+    now = datetime.utcnow()
+    today = now.date()
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT * FROM pm_automation_rules WHERE enabled = 1 ORDER BY id',
+        )
+        rules = await cursor.fetchall()
+
+    carts = await fetch_all_carts()
+    for rule_row in rules:
+        rule = parse_pm_rule_row(rule_row)
+        template = await fetch_pm_template(rule['template_id'])
+        if not template:
+            continue
+
+        for cart in carts:
+            if str(cart.status or '').lower() == 'retired':
+                skipped += 1
+                continue
+            if not cart_matches_pm_scope(cart, rule['scope_type'], rule['scope_values']):
+                continue
+            if await has_open_pm_for_cart_template(cart.id, rule['template_id']):
+                skipped += 1
+                continue
+
+            latest = await latest_pm_record_for_cart_template(cart.id, rule['template_id'])
+            next_due = calculate_next_pm_date(template, latest)
+            days_until_due = (next_due.date() - today).days
+            if days_until_due > rule['lead_days']:
+                skipped += 1
+                continue
+
+            await create_pm_record_from_template(template, cart, next_due)
+            created += 1
+
+        async with aiosqlite.connect(DB_PATH) as connection:
+            await connection.execute(
+                'UPDATE pm_automation_rules SET last_run_at = ?, updated_at = ? WHERE id = ?',
+                (now.isoformat(), now.isoformat(), rule['id']),
+            )
+            await connection.commit()
+
+    return {'created': created, 'skipped': skipped, 'trigger': trigger}
+
+
 async def compute_alert_counts() -> dict[str, int]:
     now = datetime.utcnow().isoformat()
     week_end = datetime.utcnow().timestamp() + 7 * 86400
@@ -1156,7 +1478,16 @@ async def compute_alert_counts() -> dict[str, int]:
         )
         open_accidents = (await cursor.fetchone())['total']
 
+        cursor = await connection.execute(
+            '''
+            SELECT COUNT(*) as total FROM work_orders
+            WHERE status NOT IN ('completed', 'closed')
+            '''
+        )
+        open_wo = (await cursor.fetchone())['total']
+
     return {
+        'open_wo': open_wo,
         'overdue_wo': overdue_wo,
         'pm_due': pm_due,
         'pm_overdue': pm_overdue,
@@ -1164,8 +1495,34 @@ async def compute_alert_counts() -> dict[str, int]:
     }
 
 
+async def should_send_system_digest(alert_key: str) -> bool:
+    today = datetime.utcnow().date().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute(
+            'SELECT 1 FROM notification_dedup WHERE user_id = 0 AND alert_key = ? AND sent_date = ?',
+            (alert_key, today),
+        )
+        if await cursor.fetchone():
+            return False
+        await connection.execute(
+            'INSERT INTO notification_dedup (user_id, alert_key, sent_date) VALUES (0, ?, ?)',
+            (alert_key, today),
+        )
+        await connection.commit()
+    return True
+
+
 async def run_scheduled_notifications() -> None:
+    if await should_send_system_digest('pm_automation'):
+        try:
+            await run_pm_automation()
+        except Exception:
+            pass
+
     counts = await compute_alert_counts()
+    if await should_send_system_digest('email_digest'):
+        await send_management_digest_email(counts)
+
     users = await fetch_push_enabled_users()
 
     for user in users:
@@ -1423,7 +1780,44 @@ async def create_tables() -> None:
                 year TEXT,
                 location TEXT,
                 status TEXT,
-                notes TEXT
+                notes TEXT,
+                barcode TEXT,
+                vin TEXT,
+                meter_hours REAL,
+                purchase_date TEXT,
+                warranty_expires TEXT,
+                acquisition_cost REAL,
+                home_location TEXT
+            )
+            '''
+        )
+        cursor = await connection.execute('PRAGMA table_info(carts)')
+        cart_columns = {col[1] for col in await cursor.fetchall()}
+        cart_migrations = {
+            'barcode': 'TEXT',
+            'vin': 'TEXT',
+            'meter_hours': 'REAL',
+            'purchase_date': 'TEXT',
+            'warranty_expires': 'TEXT',
+            'acquisition_cost': 'REAL',
+            'home_location': 'TEXT',
+        }
+        for column, col_type in cart_migrations.items():
+            if column not in cart_columns:
+                await connection.execute(f'ALTER TABLE carts ADD COLUMN {column} {col_type}')
+        await connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS pm_automation_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                template_id TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                scope_type TEXT NOT NULL DEFAULT 'all',
+                scope_values TEXT NOT NULL DEFAULT '[]',
+                lead_days INTEGER NOT NULL DEFAULT 14,
+                last_run_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             )
             '''
         )
@@ -1886,21 +2280,17 @@ async def create_cart(request: Request, item: CartCreate) -> CartItem:
     if await fetch_cart_row(normalized_id):
         raise HTTPException(status_code=409, detail=f'Cart #{normalized_id} already exists')
 
-    cart_values = {
-        'serial': item.serial.strip(),
-        'model': item.model.strip(),
-        'year': item.year.strip(),
-        'location': item.location.strip(),
-        'status': item.status.strip(),
-        'notes': (item.notes or '').strip(),
-    }
+    cart_values = cart_values_from_payload(item.model_dump())
     validate_required_cart_fields(cart_values)
 
     async with aiosqlite.connect(DB_PATH) as connection:
         await connection.execute(
             '''
-            INSERT INTO carts (id, serial, model, year, location, status, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO carts (
+                id, serial, model, year, location, status, notes,
+                barcode, vin, meter_hours, purchase_date, warranty_expires,
+                acquisition_cost, home_location
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
             (
                 normalized_id,
@@ -1910,6 +2300,13 @@ async def create_cart(request: Request, item: CartCreate) -> CartItem:
                 cart_values['location'],
                 cart_values['status'],
                 cart_values['notes'],
+                cart_values['barcode'],
+                cart_values['vin'],
+                cart_values['meter_hours'],
+                cart_values['purchase_date'],
+                cart_values['warranty_expires'],
+                cart_values['acquisition_cost'],
+                cart_values['home_location'],
             ),
         )
         await connection.commit()
@@ -1936,24 +2333,32 @@ async def update_cart(request: Request, cart_id: str, item: CartUpdate) -> CartI
 
     payload = item.model_dump(exclude_unset=True)
     updated = {**existing, **payload}
-    for field in (*REQUIRED_CART_FIELDS, 'notes'):
-        if field in updated and isinstance(updated[field], str):
-            updated[field] = updated[field].strip()
-    validate_required_cart_fields(updated)
+    merged_values = cart_values_from_payload(updated)
+    validate_required_cart_fields(merged_values)
 
     async with aiosqlite.connect(DB_PATH) as connection:
         await connection.execute(
             '''
-            UPDATE carts SET serial = ?, model = ?, year = ?, location = ?, status = ?, notes = ?
+            UPDATE carts SET
+                serial = ?, model = ?, year = ?, location = ?, status = ?, notes = ?,
+                barcode = ?, vin = ?, meter_hours = ?, purchase_date = ?,
+                warranty_expires = ?, acquisition_cost = ?, home_location = ?
             WHERE id = ?
             ''',
             (
-                updated.get('serial', ''),
-                updated.get('model', ''),
-                updated.get('year', ''),
-                updated.get('location', ''),
-                updated.get('status', ''),
-                updated.get('notes', ''),
+                merged_values['serial'],
+                merged_values['model'],
+                merged_values['year'],
+                merged_values['location'],
+                merged_values['status'],
+                merged_values['notes'],
+                merged_values['barcode'],
+                merged_values['vin'],
+                merged_values['meter_hours'],
+                merged_values['purchase_date'],
+                merged_values['warranty_expires'],
+                merged_values['acquisition_cost'],
+                merged_values['home_location'],
                 cart_id_str(cart_id),
             ),
         )
@@ -2840,6 +3245,9 @@ def health() -> dict[str, Any]:
         'db_exists': DB_PATH.exists(),
         'uploads_dir': str(UPLOADS_DIR),
         'persistent_storage': DATA_DIR.resolve() != ROOT_DIR.resolve(),
+        'seed_demo_data': SEED_DEMO_DATA,
+        'smtp_configured': smtp_configured(),
+        'email_recipients': len(NOTIFY_EMAIL_RECIPIENTS),
     }
 
 
@@ -2986,6 +3394,328 @@ async def download_database_backup(request: Request) -> FileResponse:
         media_type='application/x-sqlite3',
         background=BackgroundTask(remove_backup_file, tmp_path),
     )
+
+
+@app.get('/api/users/team-members')
+async def team_members(request: Request) -> List[dict[str, Any]]:
+    require_authenticated_user(request)
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            '''
+            SELECT username, display_name, role
+            FROM users
+            WHERE active = 1
+            ORDER BY display_name
+            ''',
+        )
+        rows = await cursor.fetchall()
+    return [
+        {
+            'username': row['username'],
+            'display_name': row['display_name'],
+            'role': row['role'],
+        }
+        for row in rows
+    ]
+
+
+@app.get('/api/audit/usernames')
+async def audit_usernames(request: Request, days: int = Query(365, ge=1, le=3650)) -> List[dict[str, str]]:
+    require_authenticated_user(request)
+    cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            '''
+            SELECT DISTINCT username, display_name
+            FROM audit_log
+            WHERE created_at >= ? AND username IS NOT NULL AND username != ''
+            ORDER BY display_name
+            ''',
+            (cutoff,),
+        )
+        rows = await cursor.fetchall()
+    return [
+        {'username': row['username'], 'display_name': row['display_name'] or row['username']}
+        for row in rows
+    ]
+
+
+@app.get('/api/pm/automation-rules')
+async def list_pm_automation_rules(request: Request) -> List[dict[str, Any]]:
+    require_write_access(request)
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT * FROM pm_automation_rules ORDER BY name',
+        )
+        rows = await cursor.fetchall()
+    return [parse_pm_rule_row(row) for row in rows]
+
+
+@app.post('/api/pm/automation-rules')
+async def create_pm_automation_rule(request: Request, body: PmAutomationRuleCreate) -> dict[str, Any]:
+    require_write_access(request)
+    if body.scope_type not in ('all', 'location', 'model'):
+        raise HTTPException(status_code=400, detail='Invalid scope_type')
+    template = await fetch_pm_template(body.template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail='PM template not found')
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute(
+            '''
+            INSERT INTO pm_automation_rules (
+                name, template_id, enabled, scope_type, scope_values,
+                lead_days, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                body.name.strip(),
+                body.template_id,
+                1 if body.enabled else 0,
+                body.scope_type,
+                json.dumps(body.scope_values),
+                body.lead_days,
+                now,
+                now,
+            ),
+        )
+        rule_id = cursor.lastrowid
+        await connection.commit()
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT * FROM pm_automation_rules WHERE id = ?',
+            (rule_id,),
+        )
+        row = await cursor.fetchone()
+    await record_audit(
+        request,
+        'created',
+        'pm_automation_rule',
+        rule_id,
+        f'Created PM automation rule {body.name.strip()}',
+    )
+    return parse_pm_rule_row(row)
+
+
+@app.put('/api/pm/automation-rules/{rule_id}')
+async def update_pm_automation_rule(
+    request: Request,
+    rule_id: int,
+    body: PmAutomationRuleUpdate,
+) -> dict[str, Any]:
+    require_write_access(request)
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT * FROM pm_automation_rules WHERE id = ?',
+            (rule_id,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail='Automation rule not found')
+        current = parse_pm_rule_row(row)
+
+    payload = body.model_dump(exclude_unset=True)
+    if 'scope_type' in payload and payload['scope_type'] not in ('all', 'location', 'model'):
+        raise HTTPException(status_code=400, detail='Invalid scope_type')
+    if 'template_id' in payload:
+        template = await fetch_pm_template(payload['template_id'])
+        if not template:
+            raise HTTPException(status_code=404, detail='PM template not found')
+
+    next_rule = {**current, **payload}
+    if 'scope_values' in payload:
+        next_rule['scope_values'] = payload['scope_values']
+    if 'enabled' in payload:
+        next_rule['enabled'] = payload['enabled']
+
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            '''
+            UPDATE pm_automation_rules
+            SET name = ?, template_id = ?, enabled = ?, scope_type = ?,
+                scope_values = ?, lead_days = ?, updated_at = ?
+            WHERE id = ?
+            ''',
+            (
+                next_rule['name'],
+                next_rule['template_id'],
+                1 if next_rule['enabled'] else 0,
+                next_rule['scope_type'],
+                json.dumps(next_rule['scope_values']),
+                next_rule['lead_days'],
+                now,
+                rule_id,
+            ),
+        )
+        await connection.commit()
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT * FROM pm_automation_rules WHERE id = ?',
+            (rule_id,),
+        )
+        row = await cursor.fetchone()
+    await record_audit(request, 'updated', 'pm_automation_rule', rule_id, f'Updated PM automation rule {next_rule["name"]}')
+    return parse_pm_rule_row(row)
+
+
+@app.delete('/api/pm/automation-rules/{rule_id}')
+async def delete_pm_automation_rule(request: Request, rule_id: int) -> dict[str, bool]:
+    require_write_access(request)
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute(
+            'SELECT name FROM pm_automation_rules WHERE id = ?',
+            (rule_id,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail='Automation rule not found')
+        await connection.execute('DELETE FROM pm_automation_rules WHERE id = ?', (rule_id,))
+        await connection.commit()
+    await record_audit(request, 'deleted', 'pm_automation_rule', rule_id, f'Deleted PM automation rule {row[0]}')
+    return {'ok': True}
+
+
+@app.post('/api/pm/automation-rules/run-now')
+async def run_pm_automation_now(request: Request) -> dict[str, Any]:
+    require_admin(request)
+    result = await run_pm_automation(trigger='manual')
+    await record_audit(
+        request,
+        'updated',
+        'pm_automation_rule',
+        'manual',
+        f"Manual PM automation run created {result['created']} record(s)",
+        result,
+    )
+    return result
+
+
+FLEET_IMPORT_COLUMNS = {
+    'id': 'id',
+    'cart_id': 'id',
+    'serial': 'serial',
+    'model': 'model',
+    'year': 'year',
+    'location': 'location',
+    'status': 'status',
+    'notes': 'notes',
+    'barcode': 'barcode',
+    'vin': 'vin',
+    'meter_hours': 'meter_hours',
+    'purchase_date': 'purchase_date',
+    'warranty_expires': 'warranty_expires',
+    'acquisition_cost': 'acquisition_cost',
+    'home_location': 'home_location',
+}
+
+
+@app.post('/api/admin/fleet-import')
+async def import_fleet_csv(request: Request, file: UploadFile = File(...)) -> dict[str, Any]:
+    require_admin(request)
+    if not file.filename or not file.filename.lower().endswith('.csv'):
+        raise HTTPException(status_code=400, detail='Upload a .csv file')
+
+    raw = await file.read()
+    try:
+        text = raw.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        text = raw.decode('latin-1')
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail='CSV has no header row')
+
+    normalized_headers = {
+        (name or '').strip().lower(): name
+        for name in reader.fieldnames
+        if name
+    }
+    created = 0
+    updated = 0
+    errors: list[str] = []
+
+    for line_no, row in enumerate(reader, start=2):
+        payload: dict[str, Any] = {}
+        for source_key, target_key in FLEET_IMPORT_COLUMNS.items():
+            header = normalized_headers.get(source_key)
+            if header and row.get(header) not in (None, ''):
+                payload[target_key] = row.get(header)
+
+        cart_id = cart_id_str(payload.get('id', ''))
+        if not cart_id:
+            errors.append(f'Line {line_no}: missing cart id')
+            continue
+
+        try:
+            values = cart_values_from_payload({
+                'serial': payload.get('serial', ''),
+                'model': payload.get('model', ''),
+                'year': payload.get('year', ''),
+                'location': payload.get('location', ''),
+                'status': payload.get('status', 'active'),
+                'notes': payload.get('notes', ''),
+                **{field: payload.get(field) for field in CART_EXTENDED_FIELDS},
+            })
+            validate_required_cart_fields(values)
+            existing = await fetch_cart_row(cart_id)
+            async with aiosqlite.connect(DB_PATH) as connection:
+                if existing:
+                    await connection.execute(
+                        '''
+                        UPDATE carts SET
+                            serial = ?, model = ?, year = ?, location = ?, status = ?, notes = ?,
+                            barcode = ?, vin = ?, meter_hours = ?, purchase_date = ?,
+                            warranty_expires = ?, acquisition_cost = ?, home_location = ?
+                        WHERE id = ?
+                        ''',
+                        (
+                            values['serial'], values['model'], values['year'], values['location'],
+                            values['status'], values['notes'], values['barcode'], values['vin'],
+                            values['meter_hours'], values['purchase_date'], values['warranty_expires'],
+                            values['acquisition_cost'], values['home_location'], cart_id,
+                        ),
+                    )
+                    updated += 1
+                else:
+                    await connection.execute(
+                        '''
+                        INSERT INTO carts (
+                            id, serial, model, year, location, status, notes,
+                            barcode, vin, meter_hours, purchase_date, warranty_expires,
+                            acquisition_cost, home_location
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''',
+                        (
+                            cart_id, values['serial'], values['model'], values['year'],
+                            values['location'], values['status'], values['notes'],
+                            values['barcode'], values['vin'], values['meter_hours'],
+                            values['purchase_date'], values['warranty_expires'],
+                            values['acquisition_cost'], values['home_location'],
+                        ),
+                    )
+                    created += 1
+                await connection.commit()
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+            errors.append(f'Line {line_no} ({cart_id}): {detail}')
+        except Exception as exc:
+            errors.append(f'Line {line_no} ({cart_id}): {exc}')
+
+    await refresh_carts_cache()
+    await record_audit(
+        request,
+        'updated',
+        'fleet_import',
+        'csv',
+        f'Fleet CSV import: {created} created, {updated} updated',
+        {'created': created, 'updated': updated, 'errors': errors[:20]},
+    )
+    return {'created': created, 'updated': updated, 'errors': errors}
 
 
 @app.get('/api/users', response_model=List[UserPublic])
