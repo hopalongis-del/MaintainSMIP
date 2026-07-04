@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin | MaintainSMIP</title>
+    <link rel="icon" href="logo1.png" type="image/png" />
+    <script>(function(){try{var s=JSON.parse(localStorage.getItem('maintainsmip-settings')||'{}');document.documentElement.setAttribute('data-theme',s.theme||localStorage.getItem('maintainsmip-theme')||'smi-racing');document.documentElement.setAttribute('data-layout',s.layout==='phone'?'phone':'laptop');}catch(e){document.documentElement.setAttribute('data-theme','smi-racing');document.documentElement.setAttribute('data-layout','laptop');}})();</script>
+    <link rel="stylesheet" href="shared.css" />
+    <script src="settings.js"></script>
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="index.html">
+          <div class="brand-mark">
+            <img class="brand-logo" src="logo1.png" alt="MaintainSMIP" />
+          </div>
+          <span>MaintainSMIP</span>
+        </a>
+        <div class="nav-links">
+          <a href="index.html">Dashboard</a>
+          <a href="workorders.html">Work Orders</a>
+          <a href="pm.html">Preventive Maintenance</a>
+          <a href="index.html#fleet">Fleet</a>
+          <a href="accidents.html">Accident Damage</a>
+          <a href="activity.html">Activity</a>
+          <a href="reports.html">Reports</a>
+        </div>
+      </nav>
+
+      <section class="card page-section">
+        <div class="hero-strip">
+          <div>
+            <span class="eyebrow">Administration</span>
+            <h2>Team Accounts</h2>
+            <p class="hero-sub">Add users, reset passwords, and deactivate accounts. You cannot delete yourself or the last active admin.</p>
+          </div>
+        </div>
+
+        <div id="admin-users-list" class="admin-users-list"></div>
+
+        <form class="settings-form" id="admin-create-user-form">
+          <h3 style="margin: 0 0 12px;">Add User</h3>
+          <label>New Username
+            <input type="text" id="admin-new-username" placeholder="firstname.lastname" required />
+          </label>
+          <label>Display Name
+            <input type="text" id="admin-new-display-name" placeholder="Full name" required />
+          </label>
+          <label>Role
+            <select id="admin-new-role">
+              <option value="technician">Technician</option>
+              <option value="manager">Manager</option>
+              <option value="readonly">Read-only</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+          <label>Password
+            <input type="password" id="admin-new-password" minlength="8" required />
+          </label>
+          <button class="btn secondary" type="submit">Add User</button>
+        </form>
+        <p class="hero-sub" id="admin-users-status"></p>
+      </section>
+
+      <footer class="page-footer" data-settings-footer>MaintainSMIP · SMI Properties Fleet Maintenance</footer>
+    </div>
+
+    <div class="modal hidden" id="admin-reset-password-modal" aria-hidden="true">
+      <div class="modal-panel card settings-panel" style="max-width: 420px;">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">Administration</span>
+            <h2 id="admin-reset-password-title">Reset Password</h2>
+          </div>
+          <button class="btn ghost" type="button" id="admin-reset-password-close" aria-label="Close">Close</button>
+        </div>
+        <form class="settings-form" id="admin-reset-password-form">
+          <p class="hero-sub" id="admin-reset-password-copy">Set a new password for this user.</p>
+          <label>New Password
+            <input type="password" id="admin-reset-password-input" minlength="8" required autocomplete="new-password" />
+          </label>
+          <label>Confirm Password
+            <input type="password" id="admin-reset-password-confirm" minlength="8" required autocomplete="new-password" />
+          </label>
+          <button class="btn secondary" type="submit">Save New Password</button>
+          <p class="hero-sub" id="admin-reset-password-status"></p>
+        </form>
+      </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="admin.js"></script>
+  </body>
+</html>

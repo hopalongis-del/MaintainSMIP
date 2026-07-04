@@ -251,6 +251,9 @@ def run_tests(client: TestClient) -> None:
     reports_page = client.get("/reports.html")
     assert reports_page.status_code == 200, reports_page.text
 
+    admin_page = client.get("/admin.html")
+    assert admin_page.status_code == 200, admin_page.text
+
     vapid = client.get("/api/push/vapid-public-key")
     assert vapid.status_code == 200, vapid.text
     assert vapid.json().get("public_key")
