@@ -1,4 +1,4 @@
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.4.1';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
 
@@ -671,6 +671,8 @@ async function injectUserBadge() {
   if (user.role === 'admin') {
     injectAdminNavLink();
   }
+
+  await maybeForcePasswordChange(user);
 }
 
 function wireChangePasswordForm() {
@@ -704,6 +706,13 @@ function wireChangePasswordForm() {
 
     form.reset();
     status.textContent = 'Password updated. Use your new password next time you sign in.';
+
+    const modal = document.getElementById('settings-modal');
+    if (modal?.dataset.forcePassword === 'true') {
+      if (window.__currentUser) window.__currentUser.password_changed = true;
+      exitForcedPasswordMode();
+      status.textContent = 'Password set. You can continue using MaintainSMIP.';
+    }
   });
 }
 
@@ -815,8 +824,76 @@ async function openSettings() {
 function closeSettings() {
   const modal = document.getElementById('settings-modal');
   if (!modal) return;
+  if (modal.dataset.forcePassword === 'true') return;
   modal.classList.add('hidden');
   modal.setAttribute('aria-hidden', 'true');
+}
+
+function enterForcedPasswordMode(user) {
+  const modal = document.getElementById('settings-modal');
+  if (!modal) return;
+
+  modal.dataset.forcePassword = 'true';
+  modal.classList.add('settings-modal--forced');
+
+  const closeBtn = document.getElementById('settings-close');
+  if (closeBtn) closeBtn.classList.add('hidden');
+
+  const headerTitle = modal.querySelector('.modal-header h2');
+  if (headerTitle) headerTitle.textContent = 'Set Your Password';
+
+  const headerEyebrow = modal.querySelector('.modal-header .eyebrow');
+  if (headerEyebrow) headerEyebrow.textContent = 'Required';
+
+  modal.querySelectorAll('.settings-section').forEach((section) => {
+    section.classList.toggle('hidden', section.id !== 'account-settings-section');
+  });
+
+  const accountCopy = document.getElementById('account-signed-in-copy');
+  if (accountCopy) {
+    accountCopy.textContent = `${user.display_name}, choose a personal password before continuing. Use your current sign-in password once, then pick a new one (8+ characters).`;
+  }
+
+  const formHeading = modal.querySelector('#change-password-form h4');
+  if (formHeading) formHeading.textContent = 'Choose a New Password';
+
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  wirePasswordVisibilityToggles(modal);
+  document.getElementById('settings-current-password')?.focus();
+}
+
+function exitForcedPasswordMode() {
+  const modal = document.getElementById('settings-modal');
+  if (!modal) return;
+
+  delete modal.dataset.forcePassword;
+  modal.classList.remove('settings-modal--forced');
+
+  const closeBtn = document.getElementById('settings-close');
+  if (closeBtn) closeBtn.classList.remove('hidden');
+
+  const headerTitle = modal.querySelector('.modal-header h2');
+  if (headerTitle) headerTitle.textContent = 'Customize MaintainSMIP';
+
+  const headerEyebrow = modal.querySelector('.modal-header .eyebrow');
+  if (headerEyebrow) headerEyebrow.textContent = 'Settings';
+
+  modal.querySelectorAll('.settings-section').forEach((section) => {
+    section.classList.remove('hidden');
+  });
+
+  const formHeading = modal.querySelector('#change-password-form h4');
+  if (formHeading) formHeading.textContent = 'Change Password';
+
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+async function maybeForcePasswordChange(user) {
+  if (!user || user.password_changed) return;
+  if ((window.location.pathname.split('/').pop() || '') === 'login.html') return;
+  enterForcedPasswordMode(user);
 }
 
 let sessionTimeoutTimer = null;

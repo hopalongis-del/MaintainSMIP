@@ -381,6 +381,7 @@ async function applyTemplateToFleet(templateId) {
 
   const carts = getFleetCarts().filter((cart) => getTemplateMatches(template, cart));
   let created = 0;
+  let skipped = 0;
 
   for (const cart of carts) {
     const rec = await db.savePmRecord({
@@ -403,11 +404,13 @@ async function applyTemplateToFleet(templateId) {
       linked_wo_ids: []
     });
     if (rec) created += 1;
+    else skipped += 1;
   }
 
   await renderPmSchedule();
   await updatePmDashboard();
-  alert(`Created ${created} PM records from template ${template.name}.`);
+  const skipNote = skipped ? ` Skipped ${skipped} cart(s) that already have an open PM for this template.` : '';
+  alert(`Created ${created} PM records from template ${template.name}.${skipNote}`);
 }
 
 function renderTemplateCard(template) {

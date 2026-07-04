@@ -159,6 +159,7 @@ def user_public(row: dict[str, Any]) -> dict[str, Any]:
         'username': row['username'],
         'display_name': row['display_name'],
         'role': row['role'],
+        'password_changed': bool(row.get('password_changed')),
     }
 
 
@@ -166,7 +167,7 @@ async def fetch_user_by_id(user_id: int) -> Optional[dict[str, Any]]:
     async with aiosqlite.connect(DB_PATH) as connection:
         connection.row_factory = aiosqlite.Row
         cursor = await connection.execute(
-            'SELECT id, username, display_name, role, active FROM users WHERE id = ?',
+            'SELECT id, username, display_name, role, active, password_changed FROM users WHERE id = ?',
             (user_id,),
         )
         row = await cursor.fetchone()
@@ -2699,6 +2700,11 @@ async def create_pm_record(request: Request, item: PMRecordCreate) -> PMRecord:
     user = require_write_access(request)
     if not item.tech_name:
         item = item.model_copy(update={'tech_name': user['display_name']})
+    if item.template_id and await has_open_pm_for_cart_template(item.cart_id, item.template_id):
+        raise HTTPException(
+            status_code=409,
+            detail=f'Cart #{item.cart_id} already has an open PM for template {item.template_name}',
+        )
     async with aiosqlite.connect(DB_PATH) as connection:
         cursor = await connection.execute(
             '''
@@ -3220,6 +3226,7 @@ class UserPublic(BaseModel):
     username: str
     display_name: str
     role: str
+    password_changed: bool = False
 
 
 class UserCreate(BaseModel):
@@ -3750,8 +3757,8 @@ async def create_user(request: Request, body: UserCreate) -> dict[str, Any]:
         connection.row_factory = aiosqlite.Row
         cursor = await connection.execute(
             '''
-            INSERT INTO users (username, display_name, role, password_hash, active, created_date)
-            VALUES (?, ?, ?, ?, 1, ?)
+            INSERT INTO users (username, display_name, role, password_hash, active, password_changed, created_date)
+            VALUES (?, ?, ?, ?, 1, 0, ?)
             ''',
             (username, body.display_name.strip(), body.role, hash_password(body.password), now),
         )

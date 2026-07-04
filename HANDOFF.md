@@ -40,7 +40,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **Live app** | https://maintainsmip.onrender.com |
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\Claude Code` |
-| **App version** | 1.3.0 (`settings.js`) |
+| **App version** | 1.4.1 (`settings.js`) |
 
 ```powershell
 cd "C:\Claude Code"
@@ -191,12 +191,47 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 
 ---
 
-## Pending owner actions (2026-07-04)
+## Pending work (master list — July 4, 2026)
 
-1. **Roles & permissions — meet Chelsie in Charlotte** when back from event. Decide what `manager`, `technician`, and `readonly` should each see/do. Then implement role-based UI hiding (readonly still sees edit buttons today).
-2. **Fleet asset enrichment — data from Chelsie.** Extended cart fields exist (barcode, VIN, meter hours, purchase/warranty dates, cost, home location). Most carts are blank until Chelsie provides export → import via **Admin → Fleet Import** or one-off fill script.
-3. **Parts / inventory — PINNED.** Brian has the good Excel inventory when user returns from event. 24/7 system is hated by shop — do not build parts module until that file is reviewed and scope agreed.
-4. **Gmail for management email demo.** Set Render env vars: `SMTP_USER`, `SMTP_PASSWORD` (Google App Password), `SMTP_FROM`, `NOTIFY_EMAIL_RECIPIENTS` (comma-separated management emails). Uses `smtp.gmail.com:587`. Daily digest runs once per day with open/overdue counts.
+### Done / confirmed
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | Disable demo seed (`SEED_DEMO_DATA=false`) | Shipped |
+| 3 | PM automation wizard + daily scheduler | Shipped |
+| 4 | Extended fleet fields + cart modal + CSV import UI | Shipped (data mostly empty) |
+| 6 | Gmail management email digest | User configured; `smtp_configured: true` |
+| 7 | Admin fleet CSV import | Shipped |
+| 8 | Technician/assignee dropdown sync | Shipped |
+| 9 | Activity user filter fix | Shipped |
+| — | Admin page separate from Settings | Shipped |
+| — | DB backup download + `backup_database.py` | Shipped |
+| — | Password show/hide toggles | Shipped |
+| — | Force password change on first login | Shipped (v1.4.1) |
+| — | PM dedup (no double-book open PM per cart+template) | Shipped (v1.4.1) |
+| — | `DEPLOY.md` synced | Shipped (v1.4.1) |
+
+### Blocked — waiting on people / data
+
+| # | Item | Blocker | Notes |
+|---|------|---------|-------|
+| 2 | Roles & permissions UI | **Chelsie meeting (Charlotte)** | Decide manager/technician/readonly behavior. Readonly still sees edit buttons on WO/PM/accidents (only fleet uses `userCanWrite()` today). |
+| 4b | Fleet bulk data fill | **Chelsie export** | Import via **Admin → Fleet Import** or one-off script when export arrives. |
+| 5 | Parts / inventory module | **Brian Excel + scope** | Pinned until 24/7 replacement scope agreed. |
+| 7b | Box daily backup automation | **Production commitment** | Script exists; schedule Task Scheduler when you commit to production use. |
+
+### Discuss later (audit items 10–12 + Tier 2–4)
+
+| Item | Notes |
+|------|-------|
+| **Pagination** (audit #10) | Client loads full datasets today; fine at ~850 carts. Discuss before building server-side pagination. |
+| **Security hardening** (audit #11) | 2FA, SSO, rate limits, session revoke — discuss scope. |
+| **SQLite restore UI** (audit #12) | Backup download exists; upload/restore with safeguards not built. |
+| **Per-cart history page** (Tier 2) | Timeline of WO + PM + accidents for one cart. |
+| **Manager role meaning** (Tier 2) | Tied to Chelsie meeting. |
+| **Barcode scan** (Tier 3) | Tablet cart lookup — leasing app has pattern. |
+| **Cost tracking** (Tier 3) | Parts/labor/vendor rollups. |
+| **Cosmetic pile** (Tier 4) | Nav injection, skeletons, phone polish, PDF export, dashboard charts. |
 
 ## Shipped recently (2026-07-04)
 
@@ -206,16 +241,10 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 - Technician/assignee dropdowns synced to live users (`/api/users/team-members`)
 - Activity user filter fixed (`/api/audit/usernames`)
 - Admin database backup download + `backup_database.py` for Box/laptop
-
-## Suggested next work
-
-1. **Sync DEPLOY.md** with Admin page, SMTP vars, roles
-2. **Role-based UI** — after Chelsie meeting
-3. **Fleet bulk fill** — after Chelsie export
-4. **Parts inventory** — after Brian Excel review (pinned)
-5. **Force password change on first login**
-6. **Pagination** — see audit notes (discuss with owner)
-7. **Security hardening** — 2FA, SSO, rate limits (discuss with owner)
+- Gmail SMTP daily digest (management demo)
+- Force password change on first login (`password_changed` flag)
+- PM record dedup on create / Apply to Fleet
+- `DEPLOY.md` updated (Admin page, SMTP, roles, backup)
 
 ---
 

@@ -2,7 +2,8 @@
 
 **Live:** https://maintainsmip.onrender.com  
 **Repo:** https://github.com/hopalongis-del/MaintainSMIP  
-**Local path:** `C:\Claude Code`
+**Local path:** `C:\Claude Code`  
+**App version:** 1.4.1 (`settings.js`)
 
 ---
 
@@ -24,7 +25,7 @@ Render watches `main` and redeploys automatically (~2–3 minutes). After push, 
 GET https://maintainsmip.onrender.com/api/health
 ```
 
-Expect `"status": "ok"`, `"persistent_storage": true`, `"db_exists": true`. During rebuild you may see **502** — wait and retry.
+Expect `"status": "ok"`, `"persistent_storage": true`, `"db_exists": true`, `"seed_demo_data": false`. During rebuild you may see **502** — wait and retry.
 
 **Never** give the user a list of commands to run. Execute the loop yourself. See `HANDOFF.md` → *Agent autonomy*.
 
@@ -40,14 +41,22 @@ Expect `"status": "ok"`, `"persistent_storage": true`, `"db_exists": true`. Duri
 | Health check | `/api/health` |
 | Start command | `uvicorn server:app --host 0.0.0.0 --port $PORT` |
 
-**Env vars** (set in Render dashboard on first deploy; do not commit):
+**Env vars** (set in Render dashboard; do not commit secrets):
 
 | Variable | Purpose |
 |----------|---------|
 | `APP_PASSWORD` | Master admin password; seeds team accounts on first boot |
 | `APP_SECRET` | Session cookie signing |
 | `DATA_DIR` | `/var/data` (from `render.yaml`) |
+| `SEED_DEMO_DATA` | `false` in production — demo WO/PM/accident seed only when `true` |
 | `VAPID_EMAIL` | Push notifications contact |
+| `SMTP_HOST` | Mail server (Gmail: `smtp.gmail.com`) |
+| `SMTP_PORT` | Mail port (Gmail TLS: `587`) |
+| `SMTP_USER` | Gmail address (e.g. `maintainsmip@gmail.com`) |
+| `SMTP_PASSWORD` | Gmail **App Password** (not the account login password) |
+| `SMTP_FROM` | From address shown on digest emails |
+| `NOTIFY_EMAIL_RECIPIENTS` | Comma-separated management emails for daily digest |
+| `BACKUP_TOKEN` | Optional — required query param for scripted backup downloads |
 
 **Persistent paths on Render:**
 
@@ -57,18 +66,24 @@ Expect `"status": "ok"`, `"persistent_storage": true`, `"db_exists": true`. Duri
 
 Data survives redeploys. **Do not delete** the `maintainsmip-data` disk unless intentionally wiping production.
 
+**Off-server backups:** use `backup_database.py` with `backup_config.example.json` (Box sync folder on laptop). Admin page also offers one-click DB download.
+
 ---
 
-## User accounts
+## User accounts & roles
 
 Seeded on first boot (`TECHNICIAN_ACCOUNTS` + `admin` in `server.py`):
 
 | Username | Role | Initial password |
 |----------|------|------------------|
 | `admin` | Master admin | `APP_PASSWORD` (demo: `WeLoveRacing!`) |
-| `mike.casady` | **Admin** | `APP_PASSWORD` until changed — **currently `mike`** on production |
+| `mike.casady` | **Admin** | Admin-reset — **currently `mike`** on production |
 | `dusty.hixson`, `brian.lachance`, `chelsie` | Admin | `APP_PASSWORD` until changed |
 | `gavin.weinmeister`, `kevin.stellman`, etc. | Technician | `APP_PASSWORD` until changed |
+
+**Roles:** `admin`, `manager`, `technician`, `readonly`. Write access: admin, manager, technician. Readonly is API-blocked; UI hiding is pending product decisions.
+
+**First-login password:** users with `password_changed = 0` must set a personal password (8+ chars) before using the app. Seeded accounts can still sign in with `APP_PASSWORD` until they change it.
 
 **Lockout safeguards**
 
@@ -77,7 +92,7 @@ Seeded on first boot (`TECHNICIAN_ACCOUNTS` + `admin` in `server.py`):
 - Login as `admin` with `APP_PASSWORD` resets master password to env value
 - Legacy password-only login (no username) signs in as `admin`
 
-**Team Accounts** (Settings, admin only): add users, reset passwords, deactivate accounts. Last active admin cannot be removed.
+**Team Accounts** (`admin.html`, admin only): add users, reset passwords, deactivate/delete accounts. Last active admin cannot be removed. Settings is app preferences only — not admin tools.
 
 ---
 
@@ -87,6 +102,7 @@ Seeded on first boot (`TECHNICIAN_ACCOUNTS` + `admin` in `server.py`):
 cd "C:\Claude Code"
 .\install.bat    # once
 .\start.bat      # http://localhost:8000
+python test_smoke.py
 ```
 
 Local DB: `maintainsmip.db` in repo root (or `DATA_DIR` if set).
@@ -98,7 +114,7 @@ Local DB: `maintainsmip.db` in repo root (or `DATA_DIR` if set).
 Only needed if rebuilding from scratch:
 
 1. Render → **New** → **Blueprint** → connect GitHub repo
-2. Set secret env vars `APP_PASSWORD` and `APP_SECRET`
+2. Set secret env vars (`APP_PASSWORD`, `APP_SECRET`, SMTP vars if using email digest)
 3. Apply; wait for build
 
 Day-to-day updates are **git push only**.

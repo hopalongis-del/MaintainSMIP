@@ -24,7 +24,10 @@ def login(client: TestClient) -> None:
 
     me = client.get("/api/auth/me")
     assert me.status_code == 200, me.text
-    assert me.json()["display_name"] == "Master Admin"
+    me_body = me.json()
+    assert me_body["display_name"] == "Master Admin"
+    assert "password_changed" in me_body
+    assert isinstance(me_body["password_changed"], bool)
 
 
 def test_legacy_password_login(client: TestClient) -> None:
@@ -226,6 +229,64 @@ def test_change_password(client: TestClient) -> None:
     client.post("/api/auth/logout")
 
 
+def test_pm_record_dedup(client: TestClient) -> None:
+    login(client)
+    templates = client.get("/api/pm/templates").json()
+    assert templates, "Need at least one PM template for dedup test"
+    template = templates[0]
+    carts = client.get("/api/carts").json()
+    cart = next((c for c in carts if str(c.get("status", "")).lower() != "retired"), carts[0])
+
+    payload = {
+        "template_id": template["id"],
+        "template_name": template["name"],
+        "description": template.get("description") or "Smoke dedup test",
+        "cart_id": cart["id"],
+        "location": cart.get("location") or "SMIP",
+        "scheduled_date": "2099-01-01T00:00:00",
+        "completed_date": None,
+        "status": "scheduled",
+        "checklist_results": [],
+        "tech_name": "Smoke Tester",
+        "labor_minutes": 0,
+        "linked_wo_ids": [],
+    }
+    first = client.post("/api/pm/records", json=payload)
+    assert first.status_code == 200, first.text
+    record_id = first.json()["id"]
+
+    duplicate = client.post("/api/pm/records", json=payload)
+    assert duplicate.status_code == 409, duplicate.text
+
+    client.delete(f"/api/pm/records/{record_id}")
+
+
+def test_new_user_must_change_password_flag(client: TestClient) -> None:
+    login(client)
+    temp_username = f"smoke.temp.{int(time.time())}"
+    created = client.post(
+        "/api/users",
+        json={
+            "username": temp_username,
+            "display_name": "Smoke Temp",
+            "role": "technician",
+            "password": "TempPass123!",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    client.post("/api/auth/logout")
+    login_resp = client.post(
+        "/api/auth/login",
+        json={"username": temp_username, "password": "TempPass123!"},
+    )
+    assert login_resp.status_code == 200, login_resp.text
+    assert login_resp.json()["user"]["password_changed"] is False
+
+    login(client)
+    client.delete(f"/api/users/{created.json()['id']}")
+
+
 def run_tests(client: TestClient) -> None:
     login(client)
     ensure_mike_test_password(client)
@@ -237,6 +298,8 @@ def run_tests(client: TestClient) -> None:
     test_pm_automation_rules(client)
     test_database_backup(client)
     test_database_backup_token(client)
+    test_pm_record_dedup(client)
+    test_new_user_must_change_password_flag(client)
     login(client)
 
     stats = client.get("/api/stats")

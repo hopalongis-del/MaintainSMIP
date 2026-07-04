@@ -1020,6 +1020,14 @@ h2 {
   margin-bottom: 22px;
 }
 
+.settings-modal--forced .modal-panel {
+  width: min(520px, 100%);
+}
+
+.settings-modal--forced #account-settings-section {
+  margin-bottom: 0;
+}
+
 .grid {
   display: grid;
   gap: 18px;
