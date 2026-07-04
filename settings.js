@@ -212,6 +212,35 @@ function buildThemeOptions() {
   `).join('');
 }
 
+function wirePasswordVisibilityToggles(root = document) {
+  root.querySelectorAll('input[type="password"]').forEach((input) => {
+    if (input.closest('.password-toggle-wrap') || input.dataset.passwordToggleWired === 'true') {
+      return;
+    }
+    input.dataset.passwordToggleWired = 'true';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'password-toggle-wrap';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'password-toggle-btn';
+    button.textContent = 'Show';
+    button.setAttribute('aria-label', 'Show password');
+    button.setAttribute('aria-pressed', 'false');
+    button.addEventListener('click', () => {
+      const revealing = input.type === 'password';
+      input.type = revealing ? 'text' : 'password';
+      button.textContent = revealing ? 'Hide' : 'Show';
+      button.setAttribute('aria-label', revealing ? 'Hide password' : 'Show password');
+      button.setAttribute('aria-pressed', revealing ? 'true' : 'false');
+    });
+    wrap.appendChild(button);
+  });
+}
+
 function buildSettingsModal() {
   if (document.getElementById('settings-modal')) return;
 
@@ -777,6 +806,7 @@ async function openSettings() {
   }
   await populateSettingsDynamicOptions();
   syncSettingsForm();
+  wirePasswordVisibilityToggles(modal);
   refreshPushStatusUi();
   modal.classList.remove('hidden');
   modal.setAttribute('aria-hidden', 'false');
@@ -865,6 +895,7 @@ window.MaintainSMIPSettings = {
   loadTeamAssignees,
   populateAssigneeSelect,
   getTeamAssigneeNames,
+  wirePasswordVisibilityToggles,
 };
 
 async function initPushBackground() {
@@ -886,6 +917,7 @@ async function initPushBackground() {
 
 async function initSettings() {
   buildSettingsModal();
+  wirePasswordVisibilityToggles();
   injectActivityNavLink();
   injectReportsNavLink();
   injectSettingsButton();
