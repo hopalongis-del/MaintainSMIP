@@ -1,0 +1,8 @@
+{
+  "base_url": "https://maintainsmip.onrender.com",
+  "backup_dir": "C:\\Users\\hopal\\Documents\\MaintainSMIP-Backups",
+  "keep_days": 30,
+  "username": "admin",
+  "password": "YOUR_APP_PASSWORD_HERE",
+  "backup_token": ""
+}

@@ -55,6 +55,45 @@ def test_seeded_user_resync_login(client: TestClient) -> None:
     assert response.json()["user"]["role"] == "admin"
 
 
+def test_database_backup(client: TestClient) -> None:
+    login(client)
+
+    info = client.get("/api/admin/backup/info")
+    assert info.status_code == 200, info.text
+    info_data = info.json()
+    assert info_data["exists"] is True
+    assert info_data["size_bytes"] > 0
+
+    backup = client.get("/api/admin/backup")
+    assert backup.status_code == 200, backup.text
+    assert backup.content.startswith(b"SQLite format 3")
+
+    client.post("/api/auth/logout")
+    denied = client.get("/api/admin/backup")
+    assert denied.status_code == 401
+
+
+def test_database_backup_token(client: TestClient) -> None:
+    token = "smoke-backup-token-12345"
+    original = server.BACKUP_TOKEN
+    server.BACKUP_TOKEN = token
+    try:
+        backup = client.get(
+            "/api/admin/backup",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert backup.status_code == 200, backup.text
+        assert backup.content.startswith(b"SQLite format 3")
+
+        bad = client.get(
+            "/api/admin/backup",
+            headers={"Authorization": "Bearer wrong-token"},
+        )
+        assert bad.status_code == 401
+    finally:
+        server.BACKUP_TOKEN = original
+
+
 def test_admin_user_management(client: TestClient) -> None:
     login(client)
 
@@ -156,6 +195,8 @@ def run_tests(client: TestClient) -> None:
     test_seeded_user_resync_login(client)
     test_change_password(client)
     test_admin_user_management(client)
+    test_database_backup(client)
+    test_database_backup_token(client)
     login(client)
 
     stats = client.get("/api/stats")

@@ -6,7 +6,10 @@ import hmac
 import json
 import os
 import re
+import secrets
 import shutil
+import sqlite3
+import tempfile
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -20,6 +23,7 @@ import uuid
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field, field_validator
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -32,6 +36,7 @@ LEGACY_DB_PATH = ROOT_DIR / 'maintainsmip.db'
 LEGACY_UPLOADS_DIR = ROOT_DIR / 'uploads'
 APP_PASSWORD = os.environ.get('APP_PASSWORD', 'WeLoveRacing!')
 APP_SECRET = os.environ.get('APP_SECRET', 'maintainsmip-session-secret')
+BACKUP_TOKEN = os.environ.get('BACKUP_TOKEN', '').strip()
 SESSION_COOKIE = 'ms_session'
 SESSION_MAX_AGE = 7 * 24 * 3600
 MASTER_USERNAME = 'admin'
@@ -440,6 +445,18 @@ def summarize_cart_update(existing: dict[str, Any], payload: dict[str, Any]) -> 
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
+    @staticmethod
+    def _backup_token_valid(request: Request) -> bool:
+        if not BACKUP_TOKEN:
+            return False
+        auth = request.headers.get('Authorization', '')
+        if not auth.startswith('Bearer '):
+            return False
+        provided = auth[7:].strip()
+        if not provided:
+            return False
+        return secrets.compare_digest(provided, BACKUP_TOKEN)
+
     async def dispatch(self, request: Request, call_next):
         request.state.user = None
         if not APP_PASSWORD:
@@ -462,6 +479,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 if user and user.get('active'):
                     request.state.user = user
                     return await call_next(request)
+
+        if (
+            path in ('/api/admin/backup', '/api/admin/backup/info')
+            and BACKUP_TOKEN
+            and self._backup_token_valid(request)
+        ):
+            master = await fetch_user_by_username(MASTER_USERNAME)
+            if master and master.get('active'):
+                request.state.user = master
+                return await call_next(request)
 
         if path.startswith('/api/'):
             return JSONResponse(status_code=401, content={'detail': 'Authentication required'})
@@ -2886,6 +2913,79 @@ async def change_password(request: Request, body: ChangePasswordRequest) -> dict
 def logout(response: Response) -> dict[str, bool]:
     response.delete_cookie(SESSION_COOKIE)
     return {'ok': True}
+
+
+def create_database_backup_file() -> tuple[Path, str]:
+    if not DB_PATH.exists():
+        raise HTTPException(status_code=404, detail='Database file not found')
+
+    timestamp = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+    filename = f'maintainsmip-backup-{timestamp}.db'
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
+    tmp_path = Path(tmp.name)
+    tmp.close()
+
+    src = sqlite3.connect(str(DB_PATH))
+    try:
+        dest = sqlite3.connect(str(tmp_path))
+        try:
+            src.backup(dest)
+            dest.commit()
+        finally:
+            dest.close()
+    finally:
+        src.close()
+
+    return tmp_path, filename
+
+
+def remove_backup_file(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+@app.get('/api/admin/backup/info')
+async def database_backup_info(request: Request) -> dict[str, Any]:
+    require_admin(request)
+    if not DB_PATH.exists():
+        return {
+            'exists': False,
+            'size_bytes': 0,
+            'updated_at': None,
+            'path': str(DB_PATH),
+            'automated_backup_supported': bool(BACKUP_TOKEN),
+        }
+
+    stat = DB_PATH.stat()
+    return {
+        'exists': True,
+        'size_bytes': stat.st_size,
+        'updated_at': datetime.utcfromtimestamp(stat.st_mtime).isoformat() + 'Z',
+        'path': str(DB_PATH),
+        'automated_backup_supported': bool(BACKUP_TOKEN),
+    }
+
+
+@app.get('/api/admin/backup')
+async def download_database_backup(request: Request) -> FileResponse:
+    admin = require_admin(request)
+    tmp_path, filename = create_database_backup_file()
+    await record_audit(
+        request,
+        'exported',
+        'database',
+        'maintainsmip',
+        f'Database backup downloaded by {admin["username"]}',
+        {'filename': filename},
+    )
+    return FileResponse(
+        path=tmp_path,
+        filename=filename,
+        media_type='application/x-sqlite3',
+        background=BackgroundTask(remove_backup_file, tmp_path),
+    )
 
 
 @app.get('/api/users', response_model=List[UserPublic])

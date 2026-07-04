@@ -151,6 +151,70 @@ function wireAdminUserForm() {
   });
 }
 
+function formatBytes(bytes) {
+  const size = Number(bytes) || 0;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function formatBackupTimestamp(value) {
+  if (!value) return 'unknown';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+async function loadBackupInfo() {
+  const infoEl = document.getElementById('admin-backup-info');
+  const automationEl = document.getElementById('admin-backup-automation-copy');
+  const info = await db.getBackupInfo();
+  if (!infoEl) return;
+
+  if (!info?.exists) {
+    infoEl.textContent = 'Database file not found on the server.';
+    return;
+  }
+
+  infoEl.textContent = `Current database: ${formatBytes(info.size_bytes)} · last updated ${formatBackupTimestamp(info.updated_at)}`;
+
+  if (automationEl && info.automated_backup_supported) {
+    automationEl.classList.remove('hidden');
+    automationEl.textContent = 'Automated daily laptop backups are supported. See backup_config.example.json and backup_database.py in the project folder.';
+  } else if (automationEl) {
+    automationEl.classList.remove('hidden');
+    automationEl.textContent = 'To schedule daily backups to your laptop, set BACKUP_TOKEN on Render and use backup_database.py (see backup_config.example.json).';
+  }
+}
+
+function wireBackupDownload() {
+  const button = document.getElementById('admin-download-backup-btn');
+  if (!button || button._wired) return;
+  button._wired = true;
+
+  button.addEventListener('click', async () => {
+    const status = document.getElementById('admin-backup-status');
+    button.disabled = true;
+    if (status) status.textContent = 'Preparing backup…';
+
+    const result = await db.downloadDatabaseBackup();
+    button.disabled = false;
+
+    if (result?.error) {
+      if (status) status.textContent = result.error;
+      return;
+    }
+
+    if (status) status.textContent = `Downloaded ${result.filename}.`;
+  });
+}
+
 async function initAdminPage() {
   const user = await db.getCurrentUser();
   if (!user) return;
@@ -161,9 +225,10 @@ async function initAdminPage() {
     return;
   }
 
+  wireBackupDownload();
   wireAdminUserForm();
   wireAdminUserActions();
-  await refreshAdminUsersList();
+  await Promise.all([loadBackupInfo(), refreshAdminUsersList()]);
 }
 
 if (document.readyState === 'loading') {

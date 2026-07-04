@@ -33,6 +33,22 @@
         <div class="hero-strip">
           <div>
             <span class="eyebrow">Administration</span>
+            <h2>Database Backup</h2>
+            <p class="hero-sub">Download a point-in-time copy of the fleet database. Safe to run while the app is in use — no compacting required at this size.</p>
+          </div>
+        </div>
+        <p class="hero-sub" id="admin-backup-info">Checking database size…</p>
+        <div class="settings-form" style="margin-bottom: 8px;">
+          <button type="button" class="btn secondary" id="admin-download-backup-btn">Download Backup Now</button>
+        </div>
+        <p class="hero-sub" id="admin-backup-status"></p>
+        <p class="hero-sub hidden" id="admin-backup-automation-copy"></p>
+      </section>
+
+      <section class="card page-section">
+        <div class="hero-strip">
+          <div>
+            <span class="eyebrow">Administration</span>
             <h2>Team Accounts</h2>
             <p class="hero-sub">Add users, reset passwords, and deactivate accounts. You cannot delete yourself or the last active admin.</p>
           </div>

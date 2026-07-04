@@ -524,6 +524,37 @@ const db = {
     const r = await fetchApi('/api/users');
     return r.ok ? r.json() : [];
   },
+  async getBackupInfo() {
+    const r = await fetchApi('/api/admin/backup/info');
+    return r.ok ? r.json() : null;
+  },
+  async downloadDatabaseBackup() {
+    const r = await fetchApi('/api/admin/backup');
+    if (!r.ok) {
+      let detail = `Backup failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = body.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+
+    const blob = await r.blob();
+    const disposition = r.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    const filename = match?.[1] || `maintainsmip-backup-${new Date().toISOString().slice(0, 10)}.db`;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    return { ok: true, filename };
+  },
   async changePassword(currentPassword, newPassword) {
     const r = await fetchApi('/api/auth/change-password', {
       method: 'POST',
