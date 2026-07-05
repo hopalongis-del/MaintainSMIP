@@ -64,6 +64,12 @@
       subtitle: 'Valvoline Gold',
       swatches: ['#12100a', '#2a2418', '#ca8a04', '#b91c1c'],
     },
+    {
+      id: 'ross-chastain',
+      name: 'Ross Chastain #1',
+      subtitle: 'The Chaser — Smithfield',
+      swatches: ['#0a0a0a', '#1a1a1a', '#dc2626', '#f8fafc'],
+    },
   ];
 
   const DEFAULT_CUSTOM_THEME = {
