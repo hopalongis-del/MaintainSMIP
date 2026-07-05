@@ -75,6 +75,26 @@ PUBLIC_PATHS = {
     '/logo1.png',
     '/service-worker.js',
 }
+STATIC_PUBLIC_SUFFIXES = (
+    '.js',
+    '.css',
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.gif',
+    '.webp',
+    '.ico',
+    '.svg',
+    '.woff',
+    '.woff2',
+    '.json',
+)
+
+
+def is_public_path(path: str) -> bool:
+    if path in PUBLIC_PATHS:
+        return True
+    return path.endswith(STATIC_PUBLIC_SUFFIXES)
 
 VAPID_EMAIL = os.environ.get('VAPID_EMAIL', 'mailto:support@smiproperties.com')
 VAPID_KEYS_PATH = DATA_DIR / 'vapid_keys.json'
@@ -488,7 +508,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         path = request.url.path
-        if path in PUBLIC_PATHS:
+        if is_public_path(path):
             return await call_next(request)
 
         token = request.cookies.get(SESSION_COOKIE)
@@ -3900,19 +3920,26 @@ async def delete_user(request: Request, user_id: int) -> dict[str, bool]:
     return {'ok': True}
 
 
+def file_response_with_cache_policy(path: str, target: Path) -> FileResponse:
+    response = FileResponse(target)
+    if path.endswith(('.js', '.css', '.html')):
+        response.headers['Cache-Control'] = 'no-cache, must-revalidate'
+    return response
+
+
 @app.get('/')
 def root() -> FileResponse:
     index_html = ROOT_DIR / 'index.html'
     if not index_html.exists():
         raise HTTPException(status_code=404, detail='Index page not found')
-    return FileResponse(index_html)
+    return file_response_with_cache_policy('index.html', index_html)
 
 
 @app.get('/{path:path}')
 def serve_file(path: str) -> FileResponse:
     target = resolve_static_file(path)
     if target:
-        return FileResponse(target)
+        return file_response_with_cache_policy(path, target)
     raise HTTPException(status_code=404, detail='File not found')
 
 
