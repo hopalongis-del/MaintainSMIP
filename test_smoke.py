@@ -436,6 +436,7 @@ def run_tests(client: TestClient) -> None:
     assert client.get("/login.html").status_code == 200
     assert client.get("/logo1.png").status_code == 200
     assert client.get("/shared.css").status_code == 200
+    assert client.get("/themes.js").status_code == 200
     assert client.get("/accidents.html").status_code == 200
 
     accidents = client.get("/api/accidents")

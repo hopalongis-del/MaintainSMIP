@@ -1,39 +1,15 @@
-const APP_VERSION = '1.4.2';
+const APP_VERSION = '1.4.3';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
 
-const RACING_THEMES = [
-  {
-    id: 'dale-earnhardt',
-    name: 'Dale Earnhardt #3',
-    subtitle: 'Intimidator Black',
-    swatches: ['#0a0a0a', '#1f1f1f', '#c41e3a', '#c0c0c0'],
-  },
-  {
-    id: 'jeff-gordon',
-    name: 'Jeff Gordon #24',
-    subtitle: 'Rainbow Warrior',
-    swatches: ['#003087', '#ffd100', '#e4002b', '#00a651'],
-  },
-  {
-    id: 'richard-petty',
-    name: 'Richard Petty #43',
-    subtitle: 'STP Blue & Red',
-    swatches: ['#1e40af', '#dc2626', '#f8fafc', '#0f172a'],
-  },
-  {
-    id: 'daytona-night',
-    name: 'Daytona Night',
-    subtitle: 'Black & Gold',
-    swatches: ['#0b0b0f', '#171717', '#f5c518', '#f8fafc'],
-  },
-  {
-    id: 'smi-racing',
-    name: 'SMI Racing',
-    subtitle: 'Classic RaceDay Red',
-    swatches: ['#0a0e1a', '#1a1f35', '#e11d29', '#e2e8f0'],
-  },
-];
+const {
+  RACING_THEMES,
+  CUSTOM_THEME_ID,
+  DEFAULT_CUSTOM_THEME,
+  normalizeCustomTheme,
+  resolveThemeId,
+  applyDocumentTheme,
+} = window.MaintainSMIPThemes;
 
 const TECHNICIAN_FALLBACK = [
   'Gavin Weinmeister',
@@ -81,6 +57,7 @@ async function populateAssigneeSelect(selectEl, { includeUnassigned = true, sele
 
 const DEFAULT_SETTINGS = {
   theme: 'smi-racing',
+  customTheme: null,
   layout: 'laptop',
   shopName: 'SMI Properties',
   defaultLocation: '',
@@ -129,6 +106,10 @@ function saveSettings(partial) {
 }
 
 function applyTheme(themeId) {
+  if (themeId === CUSTOM_THEME_ID) {
+    saveCustomTheme({ apply: true });
+    return;
+  }
   const valid = RACING_THEMES.some((theme) => theme.id === themeId);
   saveSettings({ theme: valid ? themeId : DEFAULT_SETTINGS.theme });
 }
@@ -138,13 +119,10 @@ function applyLayout(layout) {
 }
 
 function applySettings(settings = getSettings()) {
-  const theme = RACING_THEMES.some((item) => item.id === settings.theme)
-    ? settings.theme
-    : DEFAULT_SETTINGS.theme;
+  const theme = resolveThemeId(settings.theme, settings.customTheme);
   const layout = settings.layout === 'phone' ? 'phone' : 'laptop';
 
-  document.documentElement.setAttribute('data-theme', theme);
-  document.documentElement.setAttribute('data-layout', layout);
+  applyDocumentTheme({ theme: settings.theme, layout, customTheme: settings.customTheme });
 
   document.querySelectorAll('[data-theme-option]').forEach((button) => {
     button.classList.toggle('active', button.dataset.themeOption === theme);
@@ -198,8 +176,13 @@ function getPmDueLabel() {
   return `PM Due (Next ${days} Days)`;
 }
 
+function getCustomThemePreview(settings = getSettings()) {
+  return normalizeCustomTheme(settings.customTheme || DEFAULT_CUSTOM_THEME);
+}
+
 function buildThemeOptions() {
-  return RACING_THEMES.map((theme) => `
+  const customTheme = getCustomThemePreview();
+  const presetHtml = RACING_THEMES.map((theme) => `
     <button type="button" class="theme-option" data-theme-option="${theme.id}">
       <span class="theme-option-top">
         <strong>${theme.name}</strong>
@@ -210,6 +193,81 @@ function buildThemeOptions() {
       </span>
     </button>
   `).join('');
+
+  const customSwatches = [
+    customTheme.colors.bg,
+    customTheme.colors.panel,
+    customTheme.colors.accent,
+    customTheme.colors.text,
+  ];
+
+  const customHtml = `
+    <button type="button" class="theme-option" data-theme-option="${CUSTOM_THEME_ID}">
+      <span class="theme-option-top">
+        <strong>${customTheme.name}</strong>
+        <span class="theme-option-sub">Your custom colors</span>
+      </span>
+      <span class="theme-swatches">
+        ${customSwatches.map((color) => `<span style="background:${color}"></span>`).join('')}
+      </span>
+    </button>
+  `;
+
+  return `${presetHtml}${customHtml}`;
+}
+
+function refreshThemeGrid() {
+  const grid = document.getElementById('theme-grid');
+  if (!grid) return;
+  grid.innerHTML = buildThemeOptions();
+  document.querySelectorAll('[data-theme-option]').forEach((button) => {
+    button.addEventListener('click', () => applyTheme(button.dataset.themeOption));
+  });
+  const activeTheme = resolveThemeId(getSettings().theme, getSettings().customTheme);
+  document.querySelectorAll('[data-theme-option]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.themeOption === activeTheme);
+  });
+}
+
+function syncCustomThemeForm(settings = getSettings()) {
+  const customTheme = getCustomThemePreview(settings);
+  const setValue = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value ?? '';
+  };
+  setValue('custom-theme-name', customTheme.name);
+  setValue('custom-theme-bg', customTheme.colors.bg);
+  setValue('custom-theme-panel', customTheme.colors.panel);
+  setValue('custom-theme-accent', customTheme.colors.accent);
+  setValue('custom-theme-text', customTheme.colors.text);
+}
+
+function collectCustomThemeFromForm() {
+  const readColor = (id, fallback) => {
+    const value = document.getElementById(id)?.value?.trim();
+    return value || fallback;
+  };
+  const base = getCustomThemePreview();
+  return normalizeCustomTheme({
+    name: document.getElementById('custom-theme-name')?.value || base.name,
+    colors: {
+      bg: readColor('custom-theme-bg', base.colors.bg),
+      panel: readColor('custom-theme-panel', base.colors.panel),
+      accent: readColor('custom-theme-accent', base.colors.accent),
+      text: readColor('custom-theme-text', base.colors.text),
+    },
+  });
+}
+
+function saveCustomTheme({ apply = true } = {}) {
+  const customTheme = collectCustomThemeFromForm();
+  saveSettings({
+    customTheme,
+    theme: apply ? CUSTOM_THEME_ID : getSettings().theme,
+  });
+  refreshThemeGrid();
+  syncCustomThemeForm();
+  if (apply) flashSettingsSaved();
 }
 
 function wirePasswordVisibilityToggles(root = document) {
@@ -261,6 +319,31 @@ function buildSettingsModal() {
           <div class="settings-subblock">
             <h4>Racing Theme</h4>
             <div class="theme-grid" id="theme-grid">${buildThemeOptions()}</div>
+          </div>
+          <div class="settings-subblock">
+            <h4>Build Your Own</h4>
+            <p class="hero-sub">Pick four colors and we’ll generate the full theme. Save it to add “My Custom Theme” to the list above.</p>
+            <form class="settings-form custom-theme-form" id="custom-theme-form">
+              <label>Theme Name
+                <input type="text" id="custom-theme-name" placeholder="My Custom Theme" maxlength="48" />
+              </label>
+              <label>Background
+                <input type="color" id="custom-theme-bg" value="#0a0e1a" />
+              </label>
+              <label>Panel
+                <input type="color" id="custom-theme-panel" value="#1a1f35" />
+              </label>
+              <label>Accent
+                <input type="color" id="custom-theme-accent" value="#e11d29" />
+              </label>
+              <label>Text
+                <input type="color" id="custom-theme-text" value="#e2e8f0" />
+              </label>
+            </form>
+            <div class="custom-theme-actions">
+              <button type="button" class="btn primary" id="custom-theme-save-btn">Save &amp; Apply Custom Theme</button>
+              <button type="button" class="btn secondary" id="custom-theme-preview-btn">Preview Without Saving</button>
+            </div>
           </div>
           <div class="settings-subblock">
             <h4>Layout</h4>
@@ -450,6 +533,7 @@ function syncSettingsForm(settings = getSettings()) {
   setChecked('settings-notify-overdue-wo', settings.notifyOverdueWo);
   setChecked('settings-notify-pm-due', settings.notifyPmDue);
   setChecked('settings-notify-accidents', settings.notifyAccidents);
+  syncCustomThemeForm(settings);
 }
 
 async function populateSettingsDynamicOptions() {
@@ -613,8 +697,34 @@ function wireSettingsForm() {
     el.addEventListener('change', persistFromForm);
   });
 
-  document.querySelectorAll('[data-theme-option]').forEach((button) => {
-    button.addEventListener('click', () => applyTheme(button.dataset.themeOption));
+  refreshThemeGrid();
+
+  document.getElementById('custom-theme-save-btn')?.addEventListener('click', () => {
+    saveCustomTheme({ apply: true });
+  });
+
+  document.getElementById('custom-theme-preview-btn')?.addEventListener('click', () => {
+    const customTheme = collectCustomThemeFromForm();
+    applyDocumentTheme({
+      theme: CUSTOM_THEME_ID,
+      layout: getSettings().layout,
+      customTheme,
+    });
+    document.querySelectorAll('[data-theme-option]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.themeOption === CUSTOM_THEME_ID);
+    });
+  });
+
+  document.querySelectorAll('#custom-theme-form input').forEach((input) => {
+    input.addEventListener('input', () => {
+      if (resolveThemeId(getSettings().theme, getSettings().customTheme) !== CUSTOM_THEME_ID) return;
+      applyDocumentTheme({
+        theme: CUSTOM_THEME_ID,
+        layout: getSettings().layout,
+        customTheme: collectCustomThemeFromForm(),
+      });
+      refreshThemeGrid();
+    });
   });
 
   document.querySelectorAll('[data-layout-option]').forEach((button) => {
@@ -815,6 +925,7 @@ async function openSettings() {
   }
   await populateSettingsDynamicOptions();
   syncSettingsForm();
+  refreshThemeGrid();
   wirePasswordVisibilityToggles(modal);
   refreshPushStatusUi();
   modal.classList.remove('hidden');
@@ -827,6 +938,9 @@ function closeSettings() {
   if (modal.dataset.forcePassword === 'true') return;
   modal.classList.add('hidden');
   modal.setAttribute('aria-hidden', 'true');
+  applySettings();
+  syncCustomThemeForm();
+  refreshThemeGrid();
 }
 
 function enterForcedPasswordMode(user) {
