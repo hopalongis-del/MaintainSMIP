@@ -11,6 +11,7 @@ $Files = @(
   'OPENWEBUI.md',
   'settings.js',
   'themes.js',
+  'smi_events.js',
   'db.js',
   'admin.js',
   'admin.html',
@@ -38,6 +39,30 @@ foreach ($rel in $Files) {
   Write-Host "Copied $leaf"
 }
 
+# Single-file digest — upload THIS if RAG struggles with many files
+$digestPath = Join-Path $Dest 'CODEBASE_DIGEST.md'
+$digestParts = @(
+  "# MaintainSMIP codebase digest",
+  "Auto-generated. Search this file for functions, routes, themes.",
+  "Synced: $(Get-Date -Format 'yyyy-MM-dd HH:mm')",
+  ""
+)
+foreach ($rel in $Files) {
+  $src = Join-Path $Root $rel
+  if (-not (Test-Path $src)) { continue }
+  $leaf = Split-Path $rel -Leaf
+  $digestParts += "----- FILE: $leaf -----"
+  $digestParts += Get-Content $src -Raw
+  $digestParts += ""
+}
+Set-Content -Path $digestPath -Value ($digestParts -join "`n") -Encoding UTF8
+Write-Host "Wrote CODEBASE_DIGEST.md ($((Get-Item $digestPath).Length / 1KB | ForEach-Object { '{0:N0}' -f $_ }) KB)"
+
 $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm'
-Set-Content -Path (Join-Path $Dest 'SYNCED_AT.txt') -Value "Last sync: $stamp`nUpload this folder to Open WebUI Knowledge collection MaintainSMIP-Source."
+Set-Content -Path (Join-Path $Dest 'SYNCED_AT.txt') -Value @(
+  "Last sync: $stamp",
+  "Upload ALL files in this folder to Open WebUI Knowledge: MaintainSMIP-Source",
+  "Minimum: CODEBASE_DIGEST.md + settings.js + themes.js + server.py",
+  "Attach MaintainSMIP-Source to EVERY maintainsmip-guru chat."
+) -Encoding UTF8
 Write-Host "Done. Upload open-webui-knowledge\ to Open WebUI."
