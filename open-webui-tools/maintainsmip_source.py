@@ -3,7 +3,7 @@ title: MaintainSMIP Source Reader
 description: |
   CRITICAL: You DO have full access to MaintainSMIP source code via this tool.
   You MUST call read_local_file or grep_local BEFORE saying you lack code access.
-  Local root: C:\MaintainSMIP. GitHub fallback is public (no auth).
+  Local root: C:/MaintainSMIP. GitHub fallback is public (no auth).
 author: MaintainSMIP
 version: 1.0.0
 """
