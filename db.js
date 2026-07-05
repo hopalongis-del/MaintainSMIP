@@ -645,6 +645,25 @@ const db = {
     URL.revokeObjectURL(url);
     return { ok: true, filename };
   },
+  async restoreDatabaseBackup(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const r = await fetchApi('/api/admin/restore', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!r.ok) {
+      let detail = `Restore failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = body.detail || detail;
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
   async changePassword(currentPassword, newPassword) {
     const r = await fetchApi('/api/auth/change-password', {
       method: 'POST',

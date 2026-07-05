@@ -41,7 +41,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\MaintainSMIP` |
 | **Local AI** | `maintainsmip-guru` — prompt: `ollama/SYSTEM_PROMPT.md`, updates: `ollama/MODEL_UPDATES.md` |
-| **App version** | 1.4.5 (`settings.js`) |
+| **App version** | 1.5.0 (`settings.js`) |
 
 ```powershell
 cd "C:\MaintainSMIP"
@@ -233,7 +233,7 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 |------|-------|
 | **Pagination** (audit #10) | Client loads full datasets today; fine at ~850 carts. Discuss before building server-side pagination. |
 | **Security hardening** (audit #11) | 2FA, SSO, rate limits, session revoke — discuss scope. |
-| **SQLite restore UI** (audit #12) | Backup download exists; upload/restore with safeguards not built. |
+| **SQLite restore UI** (audit #12) | Shipped v1.5.0 — Admin restore with validation, pre-restore `.bak`, audit log. |
 | **Per-cart history page** (Tier 2) | Timeline of WO + PM + accidents for one cart. |
 | **Manager role meaning** (Tier 2) | Tied to Chelsie meeting. |
 | **Barcode scan** (Tier 3) | Tablet cart lookup — leasing app has pattern. |
@@ -242,6 +242,7 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 
 ## Shipped recently (2026-07-05)
 
+- Admin database restore: `POST /api/admin/restore` with SQLite validation, integrity check, pre-restore backup, audit trail (v1.5.0)
 - Open WebUI source bundle: `scripts/sync-open-webui-knowledge.ps1` + `open-webui-knowledge/` for guru code search
 - Training case (open bug): theme resets on Admin — see `training/TRAINING-theme-admin-reset.md`
 

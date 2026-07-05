@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin | MaintainSMIP</title>
     <link rel="icon" href="logo1.png" type="image/png" />
-    <script src="themes.js?v=1.4.5"></script>
-    <link rel="stylesheet" href="shared.css?v=1.4.5" />
-    <script src="smi_events.js?v=1.4.5"></script>
-    <script src="settings.js?v=1.4.5"></script>
+    <script src="themes.js?v=1.5.0"></script>
+    <link rel="stylesheet" href="shared.css?v=1.5.0" />
+    <script src="smi_events.js?v=1.5.0"></script>
+    <script src="settings.js?v=1.5.0"></script>
   </head>
   <body>
     <div class="page">
@@ -44,6 +44,20 @@
         </div>
         <p class="hero-sub" id="admin-backup-status"></p>
         <p class="hero-sub hidden" id="admin-backup-automation-copy"></p>
+
+        <div class="hero-strip" style="margin-top: 24px;">
+          <div>
+            <h3 style="margin: 0 0 8px;">Restore from Backup</h3>
+            <p class="hero-sub" style="margin: 0;">Replace the live database with a downloaded <code>.db</code> backup. The current database is copied to a <code>.pre-restore-*.bak</code> file on the server before restore.</p>
+          </div>
+        </div>
+        <form class="settings-form" id="admin-restore-form" style="margin-top: 12px;">
+          <label>SQLite Backup File
+            <input type="file" id="admin-restore-file" accept=".db,application/x-sqlite3" required />
+          </label>
+          <button class="btn secondary danger" type="submit">Restore Database</button>
+        </form>
+        <p class="hero-sub" id="admin-restore-status"></p>
       </section>
 
       <section class="card page-section">
@@ -125,7 +139,7 @@
       </div>
     </div>
 
-    <script src="db.js?v=1.4.5"></script>
-    <script src="admin.js?v=1.4.5"></script>
+    <script src="db.js?v=1.5.0"></script>
+    <script src="admin.js?v=1.5.0"></script>
   </body>
 </html>

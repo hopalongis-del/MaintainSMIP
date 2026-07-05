@@ -3381,6 +3381,49 @@ def remove_backup_file(path: Path) -> None:
         pass
 
 
+RESTORE_REQUIRED_TABLES = (
+    'users',
+    'carts',
+    'work_orders',
+    'audit_log',
+    'pm_templates',
+    'pm_records',
+    'accident_reports',
+)
+RESTORE_MAX_BYTES = 50 * 1024 * 1024
+
+
+def validate_restore_database(path: Path) -> None:
+    header = path.read_bytes()[:16]
+    if not header.startswith(b'SQLite format 3'):
+        raise HTTPException(status_code=400, detail='File is not a valid SQLite database')
+
+    conn = sqlite3.connect(f'file:{path}?mode=ro', uri=True)
+    try:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+            )
+        }
+        missing = [table for table in RESTORE_REQUIRED_TABLES if table not in tables]
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f'Backup is missing required tables: {", ".join(missing)}',
+            )
+
+        user_count = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+        if user_count < 1:
+            raise HTTPException(status_code=400, detail='Backup has no user accounts')
+
+        integrity = conn.execute('PRAGMA integrity_check').fetchone()[0]
+        if integrity != 'ok':
+            raise HTTPException(status_code=400, detail=f'Backup failed integrity check: {integrity}')
+    finally:
+        conn.close()
+
+
 @app.get('/api/admin/backup/info')
 async def database_backup_info(request: Request) -> dict[str, Any]:
     require_admin(request)
@@ -3421,6 +3464,63 @@ async def download_database_backup(request: Request) -> FileResponse:
         media_type='application/x-sqlite3',
         background=BackgroundTask(remove_backup_file, tmp_path),
     )
+
+
+@app.post('/api/admin/restore')
+async def restore_database_backup(request: Request, file: UploadFile = File(...)) -> dict[str, Any]:
+    admin = require_admin(request)
+    if not file.filename or not file.filename.lower().endswith('.db'):
+        raise HTTPException(status_code=400, detail='Upload a .db SQLite backup file')
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail='Uploaded file is empty')
+    if len(raw) > RESTORE_MAX_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Backup file exceeds {RESTORE_MAX_BYTES // (1024 * 1024)} MB limit',
+        )
+    if not raw.startswith(b'SQLite format 3'):
+        raise HTTPException(status_code=400, detail='File is not a valid SQLite database')
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
+    tmp_path = Path(tmp.name)
+    moved = False
+    try:
+        tmp.write(raw)
+        tmp.close()
+        validate_restore_database(tmp_path)
+
+        pre_restore_backup: Optional[Path] = None
+        if DB_PATH.exists():
+            timestamp = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+            pre_restore_backup = DB_PATH.with_name(f'{DB_PATH.name}.pre-restore-{timestamp}.bak')
+            shutil.copy2(DB_PATH, pre_restore_backup)
+
+        os.replace(str(tmp_path), str(DB_PATH))
+        moved = True
+
+        await record_audit(
+            request,
+            'restored',
+            'database',
+            'maintainsmip',
+            f'Database restored from {file.filename} by {admin["username"]}',
+            {
+                'filename': file.filename,
+                'size_bytes': len(raw),
+                'pre_restore_backup': pre_restore_backup.name if pre_restore_backup else None,
+            },
+        )
+        return {
+            'ok': True,
+            'filename': file.filename,
+            'size_bytes': len(raw),
+            'pre_restore_backup': pre_restore_backup.name if pre_restore_backup else None,
+        }
+    finally:
+        if not moved and tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
 
 
 @app.get('/api/users/team-members')

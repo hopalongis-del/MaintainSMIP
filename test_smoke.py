@@ -114,6 +114,37 @@ def test_database_backup(client: TestClient) -> None:
     assert denied.status_code == 401
 
 
+def test_database_restore(client: TestClient) -> None:
+    login(client)
+
+    backup = client.get("/api/admin/backup")
+    assert backup.status_code == 200, backup.text
+    backup_bytes = backup.content
+
+    restored = client.post(
+        "/api/admin/restore",
+        files={"file": ("restore-test.db", backup_bytes, "application/x-sqlite3")},
+    )
+    assert restored.status_code == 200, restored.text
+    data = restored.json()
+    assert data["ok"] is True
+    assert data["size_bytes"] == len(backup_bytes)
+    assert data.get("pre_restore_backup")
+
+    bad = client.post(
+        "/api/admin/restore",
+        files={"file": ("bad.db", b"not sqlite", "application/octet-stream")},
+    )
+    assert bad.status_code == 400
+
+    client.post("/api/auth/logout")
+    denied = client.post(
+        "/api/admin/restore",
+        files={"file": ("restore-test.db", backup_bytes, "application/x-sqlite3")},
+    )
+    assert denied.status_code == 401
+
+
 def test_database_backup_token(client: TestClient) -> None:
     token = "smoke-backup-token-12345"
     original = server.BACKUP_TOKEN
@@ -297,6 +328,7 @@ def run_tests(client: TestClient) -> None:
     test_team_members_and_audit_users(client)
     test_pm_automation_rules(client)
     test_database_backup(client)
+    test_database_restore(client)
     test_database_backup_token(client)
     test_pm_record_dedup(client)
     test_new_user_must_change_password_flag(client)

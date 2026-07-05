@@ -222,6 +222,55 @@ function wireFleetImport() {
   });
 }
 
+function wireDatabaseRestore() {
+  const form = document.getElementById('admin-restore-form');
+  if (!form || form._wired) return;
+  form._wired = true;
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const status = document.getElementById('admin-restore-status');
+    const fileInput = document.getElementById('admin-restore-file');
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      if (status) status.textContent = 'Choose a .db backup file first.';
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith('.db')) {
+      if (status) status.textContent = 'Upload a .db SQLite backup file.';
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Restore will replace ALL current fleet, work order, and user data with the uploaded backup.\n\n'
+      + 'A pre-restore copy of the current database is saved on the server first.\n\n'
+      + 'Continue?',
+    );
+    if (!confirmed) return;
+
+    const button = form.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+    if (status) status.textContent = 'Validating and restoring backup…';
+
+    const result = await db.restoreDatabaseBackup(file);
+    if (button) button.disabled = false;
+
+    if (result?.error) {
+      if (status) status.textContent = result.error;
+      return;
+    }
+
+    fileInput.value = '';
+    const backupNote = result.pre_restore_backup
+      ? ` Pre-restore copy: ${result.pre_restore_backup}.`
+      : '';
+    if (status) {
+      status.textContent = `Database restored from ${result.filename || file.name}.${backupNote}`;
+    }
+    await loadBackupInfo();
+  });
+}
+
 function wireBackupDownload() {
   const button = document.getElementById('admin-download-backup-btn');
   if (!button || button._wired) return;
@@ -255,6 +304,7 @@ async function initAdminPage() {
   }
 
   wireBackupDownload();
+  wireDatabaseRestore();
   wireFleetImport();
   wireAdminUserForm();
   wireAdminUserActions();

@@ -1,4 +1,4 @@
-const APP_VERSION = '1.4.5';
+const APP_VERSION = '1.5.0';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
 
