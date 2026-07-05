@@ -157,4 +157,5 @@ Keep these out of `SYSTEM_PROMPT.md` (they belong in HANDOFF only or nowhere in 
 | Render env / disk | `DEPLOY.md` | No | Yes | Yes |
 | 2026 events list | `smi_events.js` | No | No | Yes (+ bump APP_VERSION) |
 | New racing theme | `themes.js` + `shared.css` | No | No | Yes (+ bump APP_VERSION) |
-| UI/settings behavior | code + `HANDOFF.md` if major | No | If HANDOFF changed | Yes |
+| UI/settings behavior | code + `HANDOFF.md` + `APP_VERSION` bump | No | If HANDOFF changed | Yes |
+| Any production ship | `HANDOFF.md` + version per `SYSTEM_PROMPT.md` | No | Re-upload HANDOFF | Yes |

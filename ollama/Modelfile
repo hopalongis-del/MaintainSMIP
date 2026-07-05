@@ -40,10 +40,43 @@ Before large tasks, read `HANDOFF.md` and `OPENWEBUI.md` in `C:\MaintainSMIP`. C
 Run this yourself when tools/shell are available. Never hand commands to the user when you can execute them.
 
 1. Implement in `C:\MaintainSMIP`
-2. `python test_smoke.py` â†’ `ALL TESTS PASSED`
-3. `git add` only intentional files â†’ `git commit -m "..."` â†’ `git push origin main`
-4. Poll `GET https://maintainsmip.onrender.com/api/health` until `persistent_storage: true` (502 during rebuild is normal â€” retry)
-5. Spot-check production if auth or schema changed
+2. Bump `APP_VERSION` per the versioning rules below (required for every production ship)
+3. Update `HANDOFF.md` in the same change (required â€” never skip)
+4. `python test_smoke.py` â†’ `ALL TESTS PASSED`
+5. `git add` only intentional files (include `HANDOFF.md`, `settings.js`, and HTML if version/cache-bust changed) â†’ `git commit -m "..."` â†’ `git push origin main`
+6. Poll `GET https://maintainsmip.onrender.com/api/health` until `persistent_storage: true` (502 during rebuild is normal â€” retry)
+7. Spot-check production if auth or schema changed
+
+## Versioning (required on every production ship)
+
+Live app version lives in `settings.js` as `const APP_VERSION = 'X.Y.Z'`. Users see it in Settings. Production cache-busting uses `?v=X.Y.Z` on script/CSS tags in all HTML pages â€” update those strings to match when you bump the version.
+
+Use semantic versioning `MAJOR.MINOR.PATCH`:
+
+| Bump | When | Example |
+|------|------|---------|
+| **Major** | Breaking change, removed feature, auth/DB overhaul users must know about | `1.4.5` â†’ `2.0.0` |
+| **Minor** | New feature, new page, new setting, visible capability added | `1.4.5` â†’ `1.5.0` |
+| **Patch** | Bug fix, small tweak, copy/CSS fix, no new features | `1.4.5` â†’ `1.4.6` |
+
+Rules:
+- **Every push to `main` that changes app code must include a version bump.** No silent deploys.
+- Update `HANDOFF.md` app version line and add a line under "Shipped recently" describing what changed.
+- If only docs/model files change (no app code), do not bump `APP_VERSION`.
+
+## HANDOFF.md (required on every app change)
+
+`HANDOFF.md` is the living project record. **Always update it in the same commit** as code changes â€” never leave it stale.
+
+When you ship, update as applicable:
+- **Last updated** date at the top
+- **App version** in the Quick start table
+- **Shipped recently** â€” one line per change (newest first)
+- **Pending work** tables â€” move items to Done when completed
+- **Credentials** â€” if passwords or roles changed
+- **Recent git history** â€” optional summary if a major milestone
+
+Re-read `HANDOFF.md` before large tasks. After every ship, leave it accurate enough that the next agent needs no oral history.
 
 ## Hard rules
 
@@ -56,7 +89,8 @@ Run this yourself when tools/shell are available. Never hand commands to the use
 7. **Default location** in Settings is a dropdown of 2026 SMI events from `smi_events.js` (sourced from Logistics Guru schedule). Do not revert to free-text or fleet cart locations.
 8. **Themes:** 10 preset racing themes in `themes.js` + custom theme builder in `settings.js`. Custom themes use `data-theme='custom'` with CSS vars injected by JS.
 9. Static `.js` and `.css` files are public (no auth redirect). HTML pages require login.
-10. HTML assets use cache-busting query strings (`?v=APP_VERSION`). Bump `APP_VERSION` in `settings.js` when shipping UI changes.
+10. HTML assets use cache-busting query strings (`?v=APP_VERSION`). When you bump `APP_VERSION`, update every `?v=` in `*.html` to match.
+11. **Never push app code without bumping `APP_VERSION` and updating `HANDOFF.md`** in the same commit.
 
 ## Key files
 
