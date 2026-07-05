@@ -2,8 +2,8 @@
 
 **Live:** https://maintainsmip.onrender.com  
 **Repo:** https://github.com/hopalongis-del/MaintainSMIP  
-**Local path:** `C:\Claude Code`  
-**App version:** 1.4.1 (`settings.js`)
+**Local path:** `C:\MaintainSMIP`  
+**App version:** 1.4.5 (`settings.js`)
 
 ---
 
@@ -12,7 +12,7 @@
 Infrastructure is **already live**. For normal code changes you do **not** need the user or the Render dashboard.
 
 ```powershell
-cd "C:\Claude Code"
+cd "C:\MaintainSMIP"
 python test_smoke.py
 git add <files>
 git commit -m "Describe the change"
@@ -99,7 +99,7 @@ Seeded on first boot (`TECHNICIAN_ACCOUNTS` + `admin` in `server.py`):
 ## Local dev
 
 ```powershell
-cd "C:\Claude Code"
+cd "C:\MaintainSMIP"
 .\install.bat    # once
 .\start.bat      # http://localhost:8000
 python test_smoke.py

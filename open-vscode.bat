@@ -1,3 +1,3 @@
 @echo off
-cd /d "C:\Claude Code"
-code "C:\Claude Code\Claude Code.code-workspace"
+cd /d "C:\MaintainSMIP"
+code "C:\MaintainSMIP\MaintainSMIP.code-workspace"

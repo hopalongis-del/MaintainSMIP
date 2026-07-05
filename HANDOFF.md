@@ -23,7 +23,7 @@
 
 **Standard ship loop** (end every feature/fix with this unless the user says local-only):
 
-1. Implement in `C:\Claude Code`
+1. Implement in `C:\MaintainSMIP`
 2. `python test_smoke.py` — must print `ALL TESTS PASSED`
 3. `git add` only intentional files → `git commit -m "..."` → `git push origin main`
 4. Poll `https://maintainsmip.onrender.com/api/health` until deploy is live (502s during rebuild are normal; retry)
@@ -39,11 +39,12 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 |---|---|
 | **Live app** | https://maintainsmip.onrender.com |
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
-| **Local path** | `C:\Claude Code` |
-| **App version** | 1.4.1 (`settings.js`) |
+| **Local path** | `C:\MaintainSMIP` |
+| **Local AI** | `maintainsmip-guru` in Open WebUI — see `OPENWEBUI.md` |
+| **App version** | 1.4.5 (`settings.js`) |
 
 ```powershell
-cd "C:\Claude Code"
+cd "C:\MaintainSMIP"
 .\install.bat          # first time: pip install -r requirements.txt
 .\start.bat            # http://localhost:8000
 python test_smoke.py   # API smoke tests (must pass before deploy)
@@ -151,7 +152,7 @@ Roles: `WRITE_ROLES = admin, manager, technician`. Readonly cannot mutate data. 
 
 ## Data & persistence
 
-- **Local DB:** `C:\Claude Code\maintainsmip.db` (also legacy copy at repo root; app prefers `DATA_DIR/maintainsmip.db`)
+- **Local DB:** `C:\MaintainSMIP\maintainsmip.db` (also legacy copy at repo root; app prefers `DATA_DIR/maintainsmip.db`)
 - **Render DB:** `/var/data/maintainsmip.db` (`DATA_DIR=/var/data`)
 - **Uploads:** `/var/data/uploads/accidents/` on Render
 - **VAPID keys:** `/var/data/vapid_keys.json` (auto-generated on first push subscribe)
@@ -163,7 +164,7 @@ Re-seed fleet from CSV: `reseed_fleet_demo.py` (uses `APP_PASSWORD` for auth con
 ## Testing
 
 ```powershell
-cd "C:\Claude Code"
+cd "C:\MaintainSMIP"
 pip install -r requirements.txt   # if aiosqlite missing
 python test_smoke.py
 ```
