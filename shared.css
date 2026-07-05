@@ -472,6 +472,12 @@ a {
   font-size: 0.88rem;
 }
 
+.settings-form input.readonly-field,
+.settings-form input:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
 .theme-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

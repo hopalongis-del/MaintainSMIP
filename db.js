@@ -116,6 +116,10 @@ function userCanWrite() {
   return Boolean(role && role !== 'readonly');
 }
 
+function userIsAdmin() {
+  return currentUser?.role === 'admin';
+}
+
 const API_FIELD_LABELS = {
   id: 'Cart ID',
   serial: 'Serial',
@@ -314,6 +318,7 @@ const db = {
   loadCartData,
   resetCartCache,
   userCanWrite,
+  userIsAdmin,
   loadCurrentUser,
   getCurrentUser: loadCurrentUser,
   getCachedUser() {

@@ -1,4 +1,4 @@
-const APP_VERSION = '1.4.3';
+const APP_VERSION = '1.4.4';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
 
@@ -358,11 +358,14 @@ function buildSettingsModal() {
           <h3>Shop</h3>
           <p class="hero-sub">Defaults for your track and crew.</p>
           <form class="settings-form" id="shop-settings-form">
-            <label>Shop Name
+            <label id="settings-shop-name-field">Shop Name
               <input type="text" id="settings-shop-name" placeholder="SMI Properties" />
             </label>
-            <label>Default Location
-              <input type="text" id="settings-default-location" list="settings-location-options" placeholder="e.g. Charlotte Motor Speedway" />
+            <p class="hero-sub hidden" id="settings-shop-name-note">Only admins can change the shop name.</p>
+            <label>Default Event
+              <select id="settings-default-location">
+                <option value="">None</option>
+              </select>
             </label>
             <label>Default Mechanic
               <select id="settings-default-mechanic">
@@ -371,7 +374,6 @@ function buildSettingsModal() {
               </select>
             </label>
           </form>
-          <datalist id="settings-location-options"></datalist>
         </section>
 
         <section class="settings-section">
@@ -509,6 +511,39 @@ function buildSettingsModal() {
   `);
 }
 
+function userIsAdmin() {
+  const user = window.__currentUser || db?.getCachedUser?.();
+  return user?.role === 'admin';
+}
+
+function syncShopNameAccess() {
+  const isAdmin = userIsAdmin();
+  const input = document.getElementById('settings-shop-name');
+  const note = document.getElementById('settings-shop-name-note');
+  if (!input) return;
+  input.disabled = !isAdmin;
+  input.classList.toggle('readonly-field', !isAdmin);
+  if (note) note.classList.toggle('hidden', isAdmin);
+}
+
+function populateDefaultEventOptions(selected = '') {
+  const select = document.getElementById('settings-default-location');
+  if (!select || !window.MaintainSMIPEvents) return;
+  const options = window.MaintainSMIPEvents.getSmiEventOptions();
+  const current = selected || getSettings().defaultLocation || '';
+  select.innerHTML = `
+    <option value="">None</option>
+    ${options.map((event) => `<option value="${event.value.replace(/"/g, '&quot;')}">${event.label}</option>`).join('')}
+  `;
+  if (current && !options.some((event) => event.value === current)) {
+    const legacy = document.createElement('option');
+    legacy.value = current;
+    legacy.textContent = `${current} (saved)`;
+    select.appendChild(legacy);
+  }
+  select.value = current;
+}
+
 function syncSettingsForm(settings = getSettings()) {
   const setValue = (id, value) => {
     const el = document.getElementById(id);
@@ -520,7 +555,8 @@ function syncSettingsForm(settings = getSettings()) {
   };
 
   setValue('settings-shop-name', settings.shopName);
-  setValue('settings-default-location', settings.defaultLocation);
+  populateDefaultEventOptions(settings.defaultLocation);
+  syncShopNameAccess();
   setValue('settings-default-mechanic', settings.defaultMechanic);
   setValue('settings-default-template', settings.defaultWoTemplateId);
   setValue('settings-default-priority', settings.defaultPriority);
@@ -537,7 +573,7 @@ function syncSettingsForm(settings = getSettings()) {
 }
 
 async function populateSettingsDynamicOptions() {
-  const locationList = document.getElementById('settings-location-options');
+  populateDefaultEventOptions();
   const fleetSelect = document.getElementById('settings-fleet-location');
   const templateSelect = document.getElementById('settings-default-template');
 
@@ -552,10 +588,6 @@ async function populateSettingsDynamicOptions() {
     } catch (err) {
       /* settings can open before fleet loads */
     }
-  }
-
-  if (locationList) {
-    locationList.innerHTML = locations.map((loc) => `<option value="${loc}"></option>`).join('');
   }
 
   if (fleetSelect) {
@@ -583,8 +615,11 @@ async function populateSettingsDynamicOptions() {
 }
 
 function collectSettingsFromForm() {
+  const current = getSettings();
   return {
-    shopName: document.getElementById('settings-shop-name')?.value.trim() || DEFAULT_SETTINGS.shopName,
+    shopName: userIsAdmin()
+      ? (document.getElementById('settings-shop-name')?.value.trim() || DEFAULT_SETTINGS.shopName)
+      : current.shopName,
     defaultLocation: document.getElementById('settings-default-location')?.value.trim() || '',
     defaultMechanic: document.getElementById('settings-default-mechanic')?.value || '',
     defaultWoTemplateId: document.getElementById('settings-default-template')?.value || '',
@@ -690,7 +725,7 @@ function wireSettingsForm() {
     wireSessionTimeout();
   };
 
-  document.querySelectorAll('#shop-settings-form input, #wo-settings-form select, #fleet-settings-form select, #behavior-settings-form select')
+  document.querySelectorAll('#shop-settings-form input, #shop-settings-form select, #wo-settings-form select, #fleet-settings-form select, #behavior-settings-form select')
     .forEach((el) => el.addEventListener('change', persistFromForm));
 
   document.querySelectorAll('.settings-check-row input').forEach((el) => {
@@ -782,6 +817,7 @@ async function injectUserBadge() {
     injectAdminNavLink();
   }
 
+  syncShopNameAccess();
   await maybeForcePasswordChange(user);
 }
 
