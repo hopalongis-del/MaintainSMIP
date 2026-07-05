@@ -153,8 +153,8 @@
 
         <div class="filter-bar fleet-filter-bar">
           <div class="filter-group">
-            <label for="fleet-filter-location">Location</label>
-            <select id="fleet-filter-location"><option value="all">All</option></select>
+            <label for="fleet-filter-status">Status</label>
+            <select id="fleet-filter-status"><option value="all">All</option></select>
           </div>
           <div class="filter-group">
             <label for="fleet-filter-model">Model</label>
@@ -169,7 +169,7 @@
         <div class="fleet-table-wrap">
           <table class="fleet-table">
             <thead>
-              <tr><th>ID</th><th>Serial</th><th>Model</th><th>Year</th><th>Location</th><th>Status</th><th id="fleet-actions-col" class="hidden">Actions</th></tr>
+              <tr><th>ID</th><th>Serial</th><th>Model</th><th>Year</th><th>Status</th><th id="fleet-actions-col" class="hidden">Actions</th></tr>
             </thead>
             <tbody id="fleet-table-body"></tbody>
           </table>
@@ -390,31 +390,33 @@
         list.innerHTML = db.renderAuditActivityHtml(entries);
       }
 
+      // Cart location is from a one-time logistics import and goes stale after venue moves;
+      // keep it in the DB but do not surface it on the dashboard.
       async function loadFleetSummary() {
         allCarts = await db.getCarts();
-        const byLocation = allCarts.reduce((acc, cart) => {
-          const loc = cart.location || 'Unknown';
-          acc[loc] = (acc[loc] || 0) + 1;
+        const byStatus = allCarts.reduce((acc, cart) => {
+          const status = cart.status || 'Unknown';
+          acc[status] = (acc[status] || 0) + 1;
           return acc;
         }, {});
-        const topLocations = Object.entries(byLocation)
+        const topStatuses = Object.entries(byStatus)
           .sort((a, b) => b[1] - a[1])
           .slice(0, 6);
 
         document.getElementById('hero-sub').textContent =
-          `${allCarts.length.toLocaleString()} carts tracked · ${Object.keys(byLocation).length} active venues · Live maintenance data`;
+          `${allCarts.length.toLocaleString()} carts in fleet · maintenance tracking`;
 
-        document.getElementById('fleet-grid').innerHTML = topLocations
-          .map(([location, count]) => `
-            <button type="button" class="fleet-pill" data-fleet-location="${location.replace(/"/g, '&quot;')}">
+        document.getElementById('fleet-grid').innerHTML = topStatuses
+          .map(([status, count]) => `
+            <button type="button" class="fleet-pill" data-fleet-status="${status.replace(/"/g, '&quot;')}">
               <strong>${count}</strong>
-              <span>${location}</span>
+              <span>${status}</span>
             </button>
           `).join('');
 
-        document.querySelectorAll('[data-fleet-location]').forEach(btn => {
+        document.querySelectorAll('[data-fleet-status]').forEach(btn => {
           btn.addEventListener('click', () => {
-            document.getElementById('fleet-filter-location').value = btn.dataset.fleetLocation;
+            document.getElementById('fleet-filter-status').value = btn.dataset.fleetStatus;
             document.querySelectorAll('.fleet-pill').forEach(el => el.classList.remove('active'));
             btn.classList.add('active');
             renderFleetTable();
@@ -422,18 +424,14 @@
           });
         });
 
-        const locationSelect = document.getElementById('fleet-filter-location');
-        getUniqueSorted(allCarts.map(c => c.location)).forEach(loc => {
+        const statusSelect = document.getElementById('fleet-filter-status');
+        statusSelect.innerHTML = '<option value="all">All</option>';
+        getUniqueSorted(allCarts.map(c => c.status)).forEach(status => {
           const opt = document.createElement('option');
-          opt.value = loc;
-          opt.textContent = loc;
-          locationSelect.appendChild(opt);
+          opt.value = status;
+          opt.textContent = status;
+          statusSelect.appendChild(opt);
         });
-
-        const defaultFleetLocation = window.MaintainSMIPSettings?.getDefaultFleetLocation?.() || 'all';
-        if (defaultFleetLocation !== 'all') {
-          locationSelect.value = defaultFleetLocation;
-        }
 
         const modelSelect = document.getElementById('fleet-filter-model');
         getUniqueSorted(allCarts.map(c => c.model)).forEach(model => {
@@ -454,12 +452,12 @@
       }
 
       function renderFleetTable() {
-        const locationFilter = document.getElementById('fleet-filter-location').value;
+        const statusFilter = document.getElementById('fleet-filter-status').value;
         const modelFilter = document.getElementById('fleet-filter-model').value;
         const searchTerm = document.getElementById('fleet-filter-search').value.trim().toLowerCase();
 
         const filtered = allCarts.filter(cart => {
-          if (locationFilter !== 'all' && cart.location !== locationFilter) return false;
+          if (statusFilter !== 'all' && cart.status !== statusFilter) return false;
           if (modelFilter !== 'all' && cart.model !== modelFilter) return false;
           if (searchTerm) {
             const target = `${cart.id} ${cart.serial || ''} ${cart.status || ''} ${cart.notes || ''}`.toLowerCase();
@@ -473,7 +471,7 @@
         const actionCell = fleetWriteEnabled
           ? (cart) => `<td><button type="button" class="btn ghost fleet-edit-btn" data-edit-cart="${String(cart.id).replace(/"/g, '&quot;')}">Edit</button></td>`
           : () => '';
-        const colSpan = fleetWriteEnabled ? 7 : 6;
+        const colSpan = fleetWriteEnabled ? 6 : 5;
 
         body.innerHTML = filtered.length
           ? filtered.slice(0, SHOWN_LIMIT).map(cart => `
@@ -482,7 +480,6 @@
                 <td>${cart.serial || '—'}</td>
                 <td>${cart.model || '—'}</td>
                 <td>${cart.year || '—'}</td>
-                <td>${cart.location || '—'}</td>
                 <td>${cart.status || '—'}</td>
                 ${actionCell(cart)}
               </tr>
@@ -650,7 +647,7 @@
         await loadFleetSummary();
       });
 
-      document.getElementById('fleet-filter-location').addEventListener('change', () => {
+      document.getElementById('fleet-filter-status').addEventListener('change', () => {
         document.querySelectorAll('.fleet-pill').forEach(el => el.classList.remove('active'));
         renderFleetTable();
       });
