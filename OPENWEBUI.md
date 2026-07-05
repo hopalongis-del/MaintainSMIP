@@ -29,8 +29,10 @@ python test_smoke.py
 
 ```powershell
 cd C:\MaintainSMIP
-ollama create maintainsmip-guru -f ollama\Modelfile
+.\ollama\build.ps1
 ```
+
+The system prompt lives in **`ollama/SYSTEM_PROMPT.md`**. See **`ollama/MODEL_UPDATES.md`** for what to edit and when.
 
 ### Alternatives
 
@@ -60,7 +62,8 @@ To rebuild on a different base, edit `ollama/Modelfile` line 1 (`FROM ...`) and 
    - `HANDOFF.md`
    - `OPENWEBUI.md`
    - `DEPLOY.md`
-   - `ollama/Modelfile` (optional — shows the agent rules)
+   - `ollama/SYSTEM_PROMPT.md`
+   - `ollama/MODEL_UPDATES.md`
 4. In chat settings, attach the **MaintainSMIP** knowledge collection
 5. Pin this as a favorite or save as a **Preset** named "MaintainSMIP Dev"
 
@@ -103,8 +106,8 @@ Expected: mentions `C:\MaintainSMIP`, `test_smoke.py`, `git push origin main`, R
 
 ## 6. Updating the guru
 
-When HANDOFF.md or architecture changes materially:
+See **`ollama/MODEL_UPDATES.md`** for the full checklist. Short version:
 
-1. Edit `ollama/Modelfile` SYSTEM block if rules changed
-2. `ollama create maintainsmip-guru -f ollama\Modelfile`
+1. Edit **`ollama/SYSTEM_PROMPT.md`** (below the `---` line)
+2. Run **`.\ollama\build.ps1`**
 3. Re-upload changed docs to the Open WebUI Knowledge collection

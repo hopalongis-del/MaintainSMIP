@@ -40,7 +40,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **Live app** | https://maintainsmip.onrender.com |
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\MaintainSMIP` |
-| **Local AI** | `maintainsmip-guru` in Open WebUI — see `OPENWEBUI.md` |
+| **Local AI** | `maintainsmip-guru` — prompt: `ollama/SYSTEM_PROMPT.md`, updates: `ollama/MODEL_UPDATES.md` |
 | **App version** | 1.4.5 (`settings.js`) |
 
 ```powershell
