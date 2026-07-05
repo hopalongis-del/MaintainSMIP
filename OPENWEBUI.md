@@ -58,14 +58,19 @@ To rebuild on a different base, edit `ollama/Modelfile` line 1 (`FROM ...`) and 
 
 1. **New Chat** → select model **maintainsmip-guru**
 2. **Workspace** → **Knowledge** → **Create Collection** named `MaintainSMIP`
-3. Upload these files to the collection:
+3. Create a second collection **`MaintainSMIP-Source`** for code (required for debugging):
+   ```powershell
+   cd C:\MaintainSMIP
+   .\scripts\sync-open-webui-knowledge.ps1
+   ```
+   Upload everything in `open-webui-knowledge\` to that collection. Re-run after code changes.
+
+4. Upload to collection **`MaintainSMIP`** (living docs only):
    - `HANDOFF.md`
    - `OPENWEBUI.md`
    - `DEPLOY.md`
-   - `ollama/SYSTEM_PROMPT.md`
-   - `ollama/MODEL_UPDATES.md`
-4. In chat settings, attach the **MaintainSMIP** knowledge collection
-5. Pin this as a favorite or save as a **Preset** named "MaintainSMIP Dev"
+5. In chat settings, attach **both** knowledge collections: `MaintainSMIP` + `MaintainSMIP-Source`
+6. Pin this as a favorite or save as a **Preset** named "MaintainSMIP Dev"
 
 ### Suggested preset system add-on (optional)
 

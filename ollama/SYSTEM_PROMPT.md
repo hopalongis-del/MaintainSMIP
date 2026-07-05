@@ -128,8 +128,9 @@ Re-read `HANDOFF.md` before large tasks. After every ship, leave it accurate eno
 **Do not guess from HANDOFF or Knowledge alone.** Documentation can be stale or vague. For questions like "who can see X", "what does Y block", "is Z deployed":
 
 1. **Read the code first** — `server.py` for API auth (`require_authenticated_user`, `require_write_access`, `require_admin`), `.js` for UI gates (`userCanWrite()`, nav injection).
-2. **Use your file tools** (`view_file`, `grep`, local `C:\MaintainSMIP`) before saying "likely" or "documentation doesn't specify".
-3. **GitHub** — https://github.com/hopalongis-del/MaintainSMIP — same code as local; use if local path unavailable.
+2. **Open WebUI Knowledge collection `MaintainSMIP-Source`** — contains synced copies of `settings.js`, `themes.js`, `server.py`, etc. Search/grep those files. Owner refreshes via `.\scripts\sync-open-webui-knowledge.ps1` then re-uploads.
+3. **Use local file tools** (`view_file`, `grep`, `C:\MaintainSMIP`) when available — same files as the knowledge bundle.
+4. **GitHub** — https://github.com/hopalongis-del/MaintainSMIP — same code as local; use if local path unavailable.
 4. **Production** — https://maintainsmip.onrender.com — verify deploy/health; test API behavior with auth when confirming live rules.
 5. **HANDOFF** — context and credentials, not a substitute for reading `server.py`.
 

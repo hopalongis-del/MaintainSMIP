@@ -11,6 +11,10 @@ backup_config.local.json
 uploads/
 imports/*.png
 
+# Open WebUI knowledge sync copies (regenerate with scripts/sync-open-webui-knowledge.ps1)
+open-webui-knowledge/*
+!open-webui-knowledge/README.md
+
 # IDE / agent tooling
 .vscode/
 .continue/

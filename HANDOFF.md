@@ -1,6 +1,6 @@
 # MaintainSMIP — Handoff
 
-**Last updated:** July 4, 2026  
+**Last updated:** July 5, 2026  
 **Purpose:** Onboard the next developer or agent with current state, credentials, architecture, and what to do next.
 
 ---
@@ -41,7 +41,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\MaintainSMIP` |
 | **Local AI** | `maintainsmip-guru` — prompt: `ollama/SYSTEM_PROMPT.md`, updates: `ollama/MODEL_UPDATES.md` |
-| **App version** | 1.4.5 (`settings.js`) |
+| **App version** | 1.4.6 (`settings.js`) |
 
 ```powershell
 cd "C:\MaintainSMIP"
@@ -239,6 +239,11 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 | **Barcode scan** (Tier 3) | Tablet cart lookup — leasing app has pattern. |
 | **Cost tracking** (Tier 3) | Parts/labor/vendor rollups. |
 | **Cosmetic pile** (Tier 4) | Nav injection, skeletons, phone polish, PDF export, dashboard charts. |
+
+## Shipped recently (2026-07-05)
+
+- Theme cache-mismatch fix: `themes.js` + `settings.js` v1.4.6, stale-script banner, `applySettings` passes resolved theme
+- Open WebUI source bundle: `scripts/sync-open-webui-knowledge.ps1` + `open-webui-knowledge/` for code search in guru
 
 ## Shipped recently (2026-07-04)
 
