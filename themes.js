@@ -196,16 +196,13 @@
     };
   }
 
-  // All presets with CSS in shared.css — keep in sync when adding themes.
-  const PRESET_THEME_IDS = new Set(RACING_THEMES.map((theme) => theme.id));
-
   function isPresetTheme(themeId) {
-    return PRESET_THEME_IDS.has(themeId);
+    return RACING_THEMES.some((theme) => theme.id === themeId);
   }
 
   function resolveThemeId(themeId, customTheme) {
     if (themeId === CUSTOM_THEME_ID && customTheme) return CUSTOM_THEME_ID;
-    if (themeId && PRESET_THEME_IDS.has(themeId)) return themeId;
+    if (isPresetTheme(themeId)) return themeId;
     return 'smi-racing';
   }
 

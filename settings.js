@@ -1,11 +1,6 @@
-const APP_VERSION = '1.4.6';
+const APP_VERSION = '1.4.5';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
-
-if (!window.MaintainSMIPThemes) {
-  console.error('[MaintainSMIP] themes.js did not load before settings.js. Hard-refresh (Ctrl+Shift+R).');
-  showStaleScriptBanner();
-}
 
 const {
   RACING_THEMES,
@@ -14,39 +9,7 @@ const {
   normalizeCustomTheme,
   resolveThemeId,
   applyDocumentTheme,
-} = window.MaintainSMIPThemes || {
-  RACING_THEMES: [],
-  CUSTOM_THEME_ID: 'custom',
-  DEFAULT_CUSTOM_THEME: { name: 'My Custom Theme', colors: {} },
-  normalizeCustomTheme: (value) => value || {},
-  resolveThemeId: (themeId) => themeId || 'smi-racing',
-  applyDocumentTheme: () => {},
-};
-
-function showStaleScriptBanner() {
-  const show = () => {
-    if (document.getElementById('maintainsmip-stale-script-banner')) return;
-    const banner = document.createElement('div');
-    banner.id = 'maintainsmip-stale-script-banner';
-    banner.setAttribute('role', 'alert');
-    banner.textContent = 'MaintainSMIP scripts are out of date in your browser. Press Ctrl+Shift+R to hard-refresh.';
-    banner.style.cssText = [
-      'position:fixed',
-      'top:0',
-      'left:0',
-      'right:0',
-      'z-index:99999',
-      'padding:12px 16px',
-      'background:#b91c1c',
-      'color:#fff',
-      'font:600 0.95rem Inter,Segoe UI,sans-serif',
-      'text-align:center',
-    ].join(';');
-    document.body.appendChild(banner);
-  };
-  if (document.body) show();
-  else document.addEventListener('DOMContentLoaded', show);
-}
+} = window.MaintainSMIPThemes;
 
 const TECHNICIAN_FALLBACK = [
   'Gavin Weinmeister',
@@ -159,8 +122,7 @@ function applySettings(settings = getSettings()) {
   const theme = resolveThemeId(settings.theme, settings.customTheme);
   const layout = settings.layout === 'phone' ? 'phone' : 'laptop';
 
-  // Pass resolved theme so a stale settings bundle cannot reset a valid stored preset.
-  applyDocumentTheme({ theme, layout, customTheme: settings.customTheme });
+  applyDocumentTheme({ theme: settings.theme, layout, customTheme: settings.customTheme });
 
   document.querySelectorAll('[data-theme-option]').forEach((button) => {
     button.classList.toggle('active', button.dataset.themeOption === theme);

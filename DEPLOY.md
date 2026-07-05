@@ -3,7 +3,7 @@
 **Live:** https://maintainsmip.onrender.com  
 **Repo:** https://github.com/hopalongis-del/MaintainSMIP  
 **Local path:** `C:\MaintainSMIP`  
-**App version:** 1.4.6 (`settings.js`)
+**App version:** 1.4.5 (`settings.js`)
 
 ---
 

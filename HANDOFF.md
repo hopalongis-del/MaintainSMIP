@@ -41,7 +41,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\MaintainSMIP` |
 | **Local AI** | `maintainsmip-guru` — prompt: `ollama/SYSTEM_PROMPT.md`, updates: `ollama/MODEL_UPDATES.md` |
-| **App version** | 1.4.6 (`settings.js`) |
+| **App version** | 1.4.5 (`settings.js`) |
 
 ```powershell
 cd "C:\MaintainSMIP"
@@ -242,8 +242,8 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 
 ## Shipped recently (2026-07-05)
 
-- Theme cache-mismatch fix: `themes.js` + `settings.js` v1.4.6, stale-script banner, `applySettings` passes resolved theme
-- Open WebUI source bundle: `scripts/sync-open-webui-knowledge.ps1` + `open-webui-knowledge/` for code search in guru
+- Open WebUI source bundle: `scripts/sync-open-webui-knowledge.ps1` + `open-webui-knowledge/` for guru code search
+- Training case (open bug): theme resets on Admin — see `training/TRAINING-theme-admin-reset.md`
 
 ## Shipped recently (2026-07-04)
 

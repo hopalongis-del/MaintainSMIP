@@ -21,7 +21,8 @@ $Files = @(
   'shared.css',
   'test_smoke.py',
   'ollama\SYSTEM_PROMPT.md',
-  'ollama\MODEL_UPDATES.md'
+  'ollama\MODEL_UPDATES.md',
+  'training\TRAINING-theme-admin-reset.md'
 )
 
 New-Item -ItemType Directory -Force -Path $Dest | Out-Null
