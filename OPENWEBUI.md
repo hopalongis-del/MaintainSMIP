@@ -21,8 +21,8 @@ python test_smoke.py
 
 | | |
 |---|---|
-| **Base** | `qwen2.5-coder:14b` (9 GB) |
-| **Why** | Coding-specialized, right-sized for HTML/JS/Python edits — not a 70B "NASCAR" |
+| **Base** | `maxwell1500/ornith-35b:IQ3_M` (15 GB) |
+| **Why** | Ornith is coding/agentic-tuned (MoE 35B) — reads code first, minimal diffs, error recovery |
 | **Ollama name** | `maintainsmip-guru:latest` |
 
 ### Build it (one time)
@@ -32,13 +32,13 @@ cd C:\MaintainSMIP
 ollama create maintainsmip-guru -f ollama\Modelfile
 ```
 
-### Alternatives if you want more brain / have VRAM
+### Alternatives
 
 | Model | Size | When to use |
 |-------|------|-------------|
-| `qwen2.5:32b` | 19 GB | Same family as logistics-guru; stronger reasoning, slower |
-| `qwen2.5-coder:14b` | 9 GB | **Default** — best balance for daily MaintainSMIP work |
-| `deepseek-r1:14b` | 9 GB | Better step-by-step reasoning; slower on codegen |
+| `maxwell1500/ornith-35b:IQ3_M` | 15 GB | **Default** — agentic coding, tools + thinking |
+| `qwen2.5-coder:14b` | 9 GB | Lighter fallback if VRAM is tight |
+| `qwen2.5:32b` | 19 GB | Same family as logistics-guru / monday-guru |
 
 To rebuild on a different base, edit `ollama/Modelfile` line 1 (`FROM ...`) and run `ollama create` again.
 
