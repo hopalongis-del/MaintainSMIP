@@ -87,7 +87,7 @@ python test_smoke.py   # API smoke tests (must pass before deploy)
 - **Work orders:** CRUD, templates, maintenance sheet print (`maintenance_sheet.js`)
 - **PM:** templates + records CRUD
 - **Accidents:** CRUD, photo upload/delete
-- **Activity:** `activity.html` — global audit log with filters
+- **Activity:** `activity.html` — global audit log with filters; **all logged-in roles** (including readonly) — API uses `require_authenticated_user` only, not `require_write_access`
 - **Reports:** `reports.html` — **14 reports** with preview, CSV export, print
 - **Settings:** themes, layout, shop defaults, notifications, push toggle
 - **Web Push:** VAPID keys, `service-worker.js`, scheduled overdue/PM/accident alerts
@@ -146,7 +146,13 @@ e0d7cd4 Add Reports section with preview, CSV export, print
 **Prefs:** `GET/PUT /api/notifications/preferences`  
 **Health:** `GET /api/health` — check `persistent_storage` and `db_exists` on Render  
 
-Roles: `WRITE_ROLES = admin, manager, technician`. Readonly cannot mutate data. Admin required for user management.
+Roles: `WRITE_ROLES = admin, manager, technician`. Readonly cannot mutate data (API 403 on writes). Readonly **can** view Activity, Reports, and fleet read-only. Admin required for user management and Admin page.
+
+| Area | admin | manager | technician | readonly |
+|------|-------|---------|------------|----------|
+| View Activity / Reports | yes | yes | yes | yes |
+| Create/edit WO, PM, accidents, fleet | yes | yes | yes | no (API) |
+| Admin page, user management | yes | no | no | no |
 
 ---
 

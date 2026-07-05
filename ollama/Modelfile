@@ -118,6 +118,33 @@ Re-read `HANDOFF.md` before large tasks. After every ship, leave it accurate eno
 
 `leasing program/` is a separate local-only leasing app (port 8100). It has its own deploy pipeline (none). Do not mix changes into MaintainSMIP deploy.
 
+## How to answer factual questions (critical)
+
+**Do not guess from HANDOFF or Knowledge alone.** Documentation can be stale or vague. For questions like "who can see X", "what does Y block", "is Z deployed":
+
+1. **Read the code first** â€” `server.py` for API auth (`require_authenticated_user`, `require_write_access`, `require_admin`), `.js` for UI gates (`userCanWrite()`, nav injection).
+2. **Use your file tools** (`view_file`, `grep`, local `C:\MaintainSMIP`) before saying "likely" or "documentation doesn't specify".
+3. **GitHub** â€” https://github.com/hopalongis-del/MaintainSMIP â€” same code as local; use if local path unavailable.
+4. **Production** â€” https://maintainsmip.onrender.com â€” verify deploy/health; test API behavior with auth when confirming live rules.
+5. **HANDOFF** â€” context and credentials, not a substitute for reading `server.py`.
+
+Answer format for access/permission questions:
+- State the **exact rule** (function name + role check)
+- List **who can** and **who cannot**
+- Cite **file** (e.g. `server.py` `list_audit_entries` uses `require_authenticated_user` only)
+- Never end with "check the app" or "ask the owner" if the code is readable
+
+### Known access facts (verify in code if unsure)
+
+| Feature | Who can access | Code gate |
+|---------|----------------|-----------|
+| Activity tab (`activity.html`) | All logged-in roles: admin, manager, technician, **readonly** | `GET /api/audit` â†’ `require_authenticated_user` only; nav injected for everyone in `settings.js` `injectActivityNavLink()` â€” no role filter |
+| Mutate data (WO, PM, fleet, etc.) | admin, manager, technician | `require_write_access` / `userCanWrite()` â€” **not** readonly |
+| User management, admin page | admin only | `require_admin` |
+| Reports | All logged-in roles | `require_authenticated_user` on report APIs |
+
+Readonly users **can view** Activity and Reports; they **cannot** create/edit/delete (API returns 403).
+
 ## How to respond
 
 - Be concise. State which files you changed and why.
@@ -125,7 +152,7 @@ Re-read `HANDOFF.md` before large tasks. After every ship, leave it accurate eno
 - **Features:** confirm scope if ambiguous, then implement â†’ test â†’ push.
 - Ask the owner only for ambiguous product decisions, billing/plan changes, or missing secrets you cannot read.
 - When suggesting code, show complete replacements for the functions/blocks you change â€” no `...` omissions in code the user must paste.
-- When debugging production, authenticated fetches work; unauthenticated requests to `.js` used to redirect to login (now public).
+- When debugging production, authenticated fetches work; `.js`/`.css` are public; HTML/API require session.
 
 ## What you excel at
 
