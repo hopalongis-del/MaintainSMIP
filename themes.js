@@ -215,6 +215,22 @@
     Object.entries(vars).forEach(([name, value]) => root.style.setProperty(name, value));
   }
 
+  function detectDeviceType() {
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera || '';
+    const screenWidth = window.innerWidth || document.documentElement.clientWidth || 1024;
+    const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+    const isSmallScreen = screenWidth <= 768;
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    if (isMobileUA || (isSmallScreen && isTouchDevice)) return 'phone';
+    return 'laptop';
+  }
+
+  function resolveBootLayout(parsed = {}) {
+    const mode = parsed.layoutMode || parsed.layout || 'auto';
+    if (mode === 'phone' || mode === 'laptop') return mode;
+    return detectDeviceType();
+  }
+
   function readBootSettings() {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
@@ -222,7 +238,8 @@
         const parsed = JSON.parse(raw);
         return {
           theme: parsed.theme || localStorage.getItem(LEGACY_THEME_KEY) || 'smi-racing',
-          layout: parsed.layout === 'phone' ? 'phone' : 'laptop',
+          layout: resolveBootLayout(parsed),
+          layoutMode: parsed.layoutMode || parsed.layout || 'auto',
           customTheme: parsed.customTheme || null,
         };
       }
@@ -233,7 +250,8 @@
     const legacyTheme = localStorage.getItem(LEGACY_THEME_KEY);
     return {
       theme: legacyTheme || 'smi-racing',
-      layout: 'laptop',
+      layout: detectDeviceType(),
+      layoutMode: 'auto',
       customTheme: null,
     };
   }

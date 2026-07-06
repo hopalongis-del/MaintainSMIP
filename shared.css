@@ -1298,8 +1298,10 @@ html[data-layout='phone'] .nav {
 }
 
 html[data-layout='phone'] .nav-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  font-size: 0.88rem;
+  width: 100%;
 }
 
 html[data-layout='phone'] .dash-strip {
@@ -1381,8 +1383,43 @@ html[data-layout='phone'] .page-section {
 }
 
 html[data-layout='phone'] .nav-links a {
-  padding: 8px 0;
-  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--panel-strong);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+html[data-layout='phone'] .nav-links a:hover,
+html[data-layout='phone'] .nav-links a.active {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--text);
+}
+
+html[data-layout='phone'] .nav-actions {
+  width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+html[data-layout='phone'] .nav-actions .nav-links {
+  order: 2;
+}
+
+html[data-layout='phone'] .nav-actions .nav-settings-btn {
+  order: 1;
+  align-self: flex-end;
+  margin-bottom: 4px;
 }
 
 html[data-layout='phone'] .filter-bar {

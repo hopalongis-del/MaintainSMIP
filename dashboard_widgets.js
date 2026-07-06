@@ -57,8 +57,7 @@
 
   const ADDABLE_WIDGET_TYPES = [
     { type: 'weather', label: 'Weather', description: 'Local forecast by city or device location.' },
-    { type: 'nascar', label: 'NASCAR Top 10', description: 'Cup Series driver standings.' },
-    { type: 'custom', label: 'Custom Website', description: 'Embed a site you choose (when allowed).' },
+    { type: 'nascar', label: 'NASCAR Cup Standings', description: 'Top 10 Cup Series drivers.' },
   ];
 
   let customizing = false;
@@ -89,7 +88,11 @@
       byId.delete(def.id);
     });
 
-    byId.forEach((widget) => merged.push(normalizeExtraWidget(widget)));
+    byId.forEach((widget) => {
+      if (widget.type === 'custom') return;
+      const normalized = normalizeExtraWidget(widget);
+      if (normalized) merged.push(normalized);
+    });
     return merged.map((widget) => ({ ...widget, enabled: widget.enabled !== false }));
   }
 
@@ -112,17 +115,7 @@
         title: widget.title || 'NASCAR Cup Top 10',
       };
     }
-    if (widget.type === 'custom') {
-      return {
-        id: widget.id,
-        type: 'custom',
-        enabled: widget.enabled !== false,
-        title: widget.title || 'Custom Widget',
-        url: widget.url || '',
-        height: Number(widget.height) || 280,
-      };
-    }
-    return widget;
+    return null;
   }
 
   function enabledWidgets() {
@@ -147,15 +140,6 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
-  }
-
-  function isSafeUrl(url) {
-    try {
-      const parsed = new URL(url);
-      return parsed.protocol === 'https:' || parsed.protocol === 'http:';
-    } catch (err) {
-      return false;
-    }
   }
 
   function renderStatWidget(widget) {
@@ -248,28 +232,6 @@
     `;
   }
 
-  function renderCustomBody(widget) {
-    if (!widget.url || !isSafeUrl(widget.url)) {
-      return '<p class="dashboard-widget-empty">Add a valid http(s) URL in dashboard settings.</p>';
-    }
-    const height = Math.max(180, Math.min(720, Number(widget.height) || 280));
-    return `
-      <iframe
-        class="dashboard-widget-embed"
-        src="${escapeHtml(widget.url)}"
-        title="${escapeHtml(widget.title)}"
-        height="${height}"
-        loading="lazy"
-        referrerpolicy="no-referrer-when-downgrade"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-      ></iframe>
-      <div class="dashboard-widget-embed-fallback">
-        <p class="dashboard-widget-empty">If the preview is blank, the site may block embedding.</p>
-        <a class="btn ghost" href="${escapeHtml(widget.url)}" target="_blank" rel="noopener noreferrer">Open ${escapeHtml(widget.title)}</a>
-      </div>
-    `;
-  }
-
   async function hydratePanelWidget(container, widget) {
     const body = container.querySelector('[data-widget-body]');
     if (!body) return;
@@ -287,8 +249,6 @@
         }
         const link = container.querySelector('[data-widget-link]');
         if (link && data.live_url) link.href = data.live_url;
-      } else if (widget.type === 'custom') {
-        body.innerHTML = renderCustomBody(widget);
       }
     } catch (err) {
       body.innerHTML = `<p class="dashboard-widget-empty">${escapeHtml(err.message || 'Widget failed to load.')}</p>`;
@@ -300,7 +260,7 @@
     const isNascar = widget.type === 'nascar';
     const subtitle = isWeather
       ? (widget.useDeviceLocation ? 'Using your device location' : (widget.location || 'Default event location'))
-      : (isNascar ? 'Cup Series standings' : escapeHtml(widget.url || ''));
+      : 'Cup Series top 10';
 
     return `
       <article class="dashboard-widget is-panel" data-widget-id="${escapeHtml(widget.id)}">
@@ -370,21 +330,6 @@
         enabled: true,
         title: 'NASCAR Cup Top 10',
       });
-    } else if (type === 'custom') {
-      const titleInput = document.getElementById('dashboard-custom-title');
-      const urlInput = document.getElementById('dashboard-custom-url');
-      const heightInput = document.getElementById('dashboard-custom-height');
-      const title = titleInput?.value.trim() || 'Custom Widget';
-      const url = urlInput?.value.trim() || '';
-      const height = Number(heightInput?.value) || 280;
-      if (!isSafeUrl(url)) {
-        window.alert('Enter a valid http(s) website URL for the custom widget.');
-        return;
-      }
-      widgets.push({ id, type: 'custom', enabled: true, title, url, height });
-      if (titleInput) titleInput.value = '';
-      if (urlInput) urlInput.value = '';
-      if (heightInput) heightInput.value = '280';
     }
     saveWidgets(widgets);
     render();
@@ -414,7 +359,7 @@
     const widgets = getWidgets();
     panel.innerHTML = `
       <h3>Dashboard widgets</h3>
-      <p class="hero-sub">Show, hide, and reorder widgets. Add weather, NASCAR standings, or a custom website preview.</p>
+      <p class="hero-sub">Show, hide, and reorder widgets. Add weather or NASCAR Cup standings.</p>
       <div class="dashboard-widget-picker">
         ${ADDABLE_WIDGET_TYPES.map((item) => `
           <button type="button" class="btn secondary" data-add-widget="${item.type}">+ ${escapeHtml(item.label)}</button>
@@ -436,19 +381,8 @@
             ${widget.type === 'weather' ? `
               <label><input type="checkbox" data-widget-field="useDeviceLocation" data-widget-id="${escapeHtml(widget.id)}" ${widget.useDeviceLocation ? 'checked' : ''} /> Use my location</label>
             ` : ''}
-            ${widget.type === 'custom' ? `
-              <input type="text" data-widget-field="title" data-widget-id="${escapeHtml(widget.id)}" value="${escapeHtml(widget.title || '')}" placeholder="Title" />
-              <input type="url" data-widget-field="url" data-widget-id="${escapeHtml(widget.id)}" value="${escapeHtml(widget.url || '')}" placeholder="https://..." />
-            ` : ''}
           </div>
         `).join('')}
-      </div>
-      <div class="dashboard-widget-custom-form">
-        <h4>Create custom website widget</h4>
-        <label>Title <input type="text" id="dashboard-custom-title" placeholder="My Dashboard Site" /></label>
-        <label>Website URL <input type="url" id="dashboard-custom-url" placeholder="https://example.com" /></label>
-        <label>Height (px) <input type="number" id="dashboard-custom-height" min="180" max="720" value="280" /></label>
-        <button type="button" class="btn primary" data-add-widget="custom">Add Custom Widget</button>
       </div>
     `;
   }
@@ -519,7 +453,7 @@
       : '<p class="dashboard-widget-empty">No widgets enabled. Click Customize Widgets to add some.</p>';
 
     widgets.forEach((widget) => {
-      if (widget.type === 'weather' || widget.type === 'nascar' || widget.type === 'custom') {
+      if (widget.type === 'weather' || widget.type === 'nascar') {
         const container = grid.querySelector(`[data-widget-id="${widget.id}"]`);
         if (container) hydratePanelWidget(container, widget);
       }

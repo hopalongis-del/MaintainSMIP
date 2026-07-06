@@ -1,4 +1,4 @@
-const APP_VERSION = '1.6.1';
+const APP_VERSION = '1.6.2';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
 
@@ -59,6 +59,7 @@ const DEFAULT_SETTINGS = {
   theme: 'smi-racing',
   customTheme: null,
   layout: 'laptop',
+  layoutMode: 'auto',
   shopName: 'SMI Properties',
   defaultLocation: '',
   defaultMechanic: '',
@@ -76,10 +77,30 @@ const DEFAULT_SETTINGS = {
   dashboardWidgets: [],
 };
 
+function detectDeviceType() {
+  const userAgent = navigator.userAgent || navigator.vendor || window.opera || '';
+  const screenWidth = window.innerWidth || document.documentElement.clientWidth || 1024;
+  const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+  const isSmallScreen = screenWidth <= 768;
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  if (isMobileUA || (isSmallScreen && isTouchDevice)) return 'phone';
+  return 'laptop';
+}
+
+function resolveLayout(settings = getSettings()) {
+  const mode = settings.layoutMode || settings.layout || 'auto';
+  if (mode === 'phone' || mode === 'laptop') return mode;
+  return detectDeviceType();
+}
+
 function readStoredSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    if (raw) {
+      const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+      if (!parsed.layoutMode && parsed.layout) parsed.layoutMode = parsed.layout;
+      return parsed;
+    }
   } catch (err) {
     /* ignore malformed settings */
   }
@@ -115,21 +136,23 @@ function applyTheme(themeId) {
   saveSettings({ theme: valid ? themeId : DEFAULT_SETTINGS.theme });
 }
 
-function applyLayout(layout) {
-  saveSettings({ layout: layout === 'phone' ? 'phone' : 'laptop' });
+function applyLayout(layoutMode) {
+  const mode = layoutMode === 'phone' || layoutMode === 'laptop' ? layoutMode : 'auto';
+  saveSettings({ layoutMode: mode, layout: mode === 'auto' ? resolveLayout({ layoutMode: 'auto' }) : mode });
 }
 
 function applySettings(settings = getSettings()) {
   const theme = resolveThemeId(settings.theme, settings.customTheme);
-  const layout = settings.layout === 'phone' ? 'phone' : 'laptop';
+  const layout = resolveLayout(settings);
 
-  applyDocumentTheme({ theme: settings.theme, layout, customTheme: settings.customTheme });
+  applyDocumentTheme({ theme: settings.theme, layout, layoutMode: settings.layoutMode, customTheme: settings.customTheme });
 
   document.querySelectorAll('[data-theme-option]').forEach((button) => {
     button.classList.toggle('active', button.dataset.themeOption === theme);
   });
+  const activeLayoutMode = settings.layoutMode || 'auto';
   document.querySelectorAll('[data-layout-option]').forEach((button) => {
-    button.classList.toggle('active', button.dataset.layoutOption === layout);
+    button.classList.toggle('active', button.dataset.layoutOption === activeLayoutMode);
   });
 
   document.querySelectorAll('[data-settings-shop-name]').forEach((el) => {
@@ -383,9 +406,11 @@ function buildSettingsModal() {
           </div>
           <div class="settings-subblock">
             <h4>Layout</h4>
+            <p class="hero-sub">Auto detects phone vs laptop. Override if the app should always use one layout.</p>
             <div class="settings-toggle-group" id="layout-toggle">
-              <button type="button" class="settings-toggle" data-layout-option="phone">Optimized for Phone</button>
-              <button type="button" class="settings-toggle" data-layout-option="laptop">Optimized for Laptop</button>
+              <button type="button" class="settings-toggle" data-layout-option="auto">Auto Detect</button>
+              <button type="button" class="settings-toggle" data-layout-option="phone">Phone</button>
+              <button type="button" class="settings-toggle" data-layout-option="laptop">Laptop</button>
             </div>
           </div>
         </section>
@@ -460,8 +485,7 @@ function buildSettingsModal() {
 
         <section class="settings-section">
           <h3>Dashboard</h3>
-          <p class="hero-sub">Customize widgets from the dashboard with <strong>Customize Widgets</strong>. Weather uses Open-Meteo — set a city or enable device location per widget.</p>
-          <p class="hero-sub">Built-ins: fleet stat cards, weather, NASCAR Cup top 10, and custom website embeds.</p>
+          <p class="hero-sub">Customize widgets from the dashboard with <strong>Customize Widgets</strong>. Add weather or NASCAR Cup standings alongside the fleet stat cards.</p>
         </section>
 
         <section class="settings-section">
@@ -1182,6 +1206,8 @@ window.MaintainSMIPSettings = {
   getDefaultWoTemplateId: () => getSettings().defaultWoTemplateId || '',
   getDefaultFleetLocation: () => getSettings().defaultFleetLocation || 'all',
   getShopName: () => getSettings().shopName || DEFAULT_SETTINGS.shopName,
+  detectDeviceType,
+  resolveLayout,
   loadTeamAssignees,
   populateAssigneeSelect,
   getTeamAssigneeNames,
@@ -1230,6 +1256,13 @@ async function initSettings() {
   document.getElementById('settings-close')?.addEventListener('click', closeSettings);
   document.getElementById('settings-modal')?.addEventListener('click', (event) => {
     if (event.target.id === 'settings-modal') closeSettings();
+  });
+
+  let layoutResizeTimer;
+  window.addEventListener('resize', () => {
+    if ((getSettings().layoutMode || 'auto') !== 'auto') return;
+    clearTimeout(layoutResizeTimer);
+    layoutResizeTimer = setTimeout(() => applySettings(), 150);
   });
 }
 

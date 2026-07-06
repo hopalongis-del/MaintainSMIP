@@ -41,7 +41,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\MaintainSMIP` |
 | **Local AI** | `maintainsmip-guru` — prompt: `ollama/SYSTEM_PROMPT.md`, updates: `ollama/MODEL_UPDATES.md` |
-| **App version** | 1.6.1 (`settings.js`) |
+| **App version** | 1.6.2 (`settings.js`) |
 
 ```powershell
 cd "C:\MaintainSMIP"
@@ -242,8 +242,10 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 
 ## Shipped recently (2026-07-06)
 
+- Simplify dashboard widgets — remove custom website embeds; weather + NASCAR Cup only (v1.6.2)
+- Phone nav as tap-friendly buttons; auto-detect phone vs laptop layout (v1.6.2)
 - Fix dashboard stuck on loading — `woList` ReferenceError broke all dashboard JS (v1.6.1)
-- Customizable dashboard widgets — stat cards, weather (city or device GPS), NASCAR Cup top 10, custom website embeds + widget maker (v1.6.0)
+- Customizable dashboard widgets — stat cards, weather, NASCAR Cup top 10 (v1.6.0)
 - Parts placeholder page — ocean zen “enjoy the zen while we build” + nav link (v1.5.4)
 - Fix missing Settings button — restore `settings.js` nav injection (`injectSettingsButton`, team accounts, push) gutted in v1.5.2 (v1.5.3)
 

@@ -153,19 +153,6 @@
   font-size: 0.86rem;
 }
 
-.dashboard-widget-embed {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #fff;
-}
-
-.dashboard-widget-embed-fallback {
-  display: grid;
-  gap: 8px;
-  place-items: start;
-}
-
 .dashboard-widget-empty {
   color: var(--muted);
   font-size: 0.9rem;
@@ -212,14 +199,6 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-}
-
-.dashboard-widget-custom-form {
-  display: grid;
-  gap: 10px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
 }
 
 @media (max-width: 900px) {
