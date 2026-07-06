@@ -1333,3 +1333,166 @@ html[data-layout='laptop'] .page {
 html[data-layout='laptop'] .dash-strip {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
+
+/* Mobile-optimized styles */
+html[data-layout='phone'] .btn {
+  min-height: 48px;
+  padding: 14px 20px;
+  font-size: 1rem;
+}
+
+html[data-layout='phone'] .nav-settings-btn {
+  min-width: 48px;
+  min-height: 48px;
+}
+
+html[data-layout='phone'] .fleet-table th,
+html[data-layout='phone'] .fleet-table td {
+  padding: 12px 10px;
+  font-size: 0.9rem;
+}
+
+html[data-layout='phone'] .stat-card,
+html[data-layout='phone'] a.stat-card {
+  padding: 16px;
+}
+
+html[data-layout='phone'] .stat-card strong,
+html[data-layout='phone'] .stat-num {
+  font-size: 1.8rem;
+}
+
+html[data-layout='phone'] .stat-card span,
+html[data-layout='phone'] .stat-label {
+  font-size: 0.9rem;
+}
+
+html[data-layout='phone'] .section-title {
+  font-size: 1.15rem;
+  margin: 24px 0 10px;
+}
+
+html[data-layout='phone'] .hero-sub {
+  font-size: 0.95rem;
+}
+
+html[data-layout='phone'] .page-section {
+  padding: 16px;
+}
+
+html[data-layout='phone'] .nav-links a {
+  padding: 8px 0;
+  font-size: 1rem;
+}
+
+html[data-layout='phone'] .filter-bar {
+  gap: 12px;
+}
+
+html[data-layout='phone'] .filter-group {
+  min-width: 100%;
+}
+
+html[data-layout='phone'] input,
+html[data-layout='phone'] select {
+  min-height: 44px;
+  font-size: 16px; /* Prevents zoom on iOS */
+}
+
+html[data-layout='phone'] textarea {
+  min-height: 120px;
+  font-size: 16px;
+}
+
+/* Visual focus indicators */
+*:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Enhanced touch targets for mobile */
+@media (max-width: 768px) {
+  .btn {
+    min-height: 48px;
+    padding: 14px 20px;
+  }
+  
+  .nav-settings-btn {
+    min-width: 48px;
+    min-height: 48px;
+  }
+  
+  input, select, textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  
+  .fleet-table th,
+  .fleet-table td {
+    padding: 12px 10px;
+  }
+  
+  .stat-card,
+  a.stat-card {
+    padding: 16px;
+  }
+}
+
+/* Work order modal styles */
+.wo-modal-panel {
+  width: min(600px, 100%);
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.wo-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.wo-modal-content {
+  display: grid;
+  gap: 16px;
+}
+
+.wo-modal-field {
+  display: grid;
+  gap: 6px;
+}
+
+.wo-modal-field label {
+  font-size: 0.88rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.wo-modal-field .value {
+  font-size: 0.95rem;
+  color: var(--text);
+  padding: 10px 12px;
+  background: var(--surface);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.wo-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}

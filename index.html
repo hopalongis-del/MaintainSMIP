@@ -515,12 +515,12 @@
             woList.innerHTML = '<div class="empty-state"><h3>No work orders yet</h3><p><a class="section-title-link" href="workorders.html">Go to Work Orders</a> to create one.</p></div>';
           } else {
             woList.innerHTML = wos.map(wo => `
-              <a class="recent-row" href="workorders.html?id=${wo.id}">
+              <div class="recent-row wo-clickable" data-wo-id="${wo.id}" tabindex="0" role="button" aria-label="View work order ${wo.id}">
                 <span class="recent-id">WO-${wo.id}</span>
                 <span class="recent-title">${wo.title}</span>
                 ${priorityBadge(wo.priority)}
                 <span class="recent-meta">Cart #${wo.cart_id} · ${wo.location} · ${wo.assigned_to || 'Unassigned'} · Due ${formatDate(wo.due_date)}</span>
-              </a>
+              </div>
             `).join('');
           }
 
@@ -569,6 +569,117 @@
         if (!row) return;
         window.location.href = `workorders.html?search=${encodeURIComponent(row.dataset.cartId)}`;
       });
+
+      // Work order modal handler
+      woList.addEventListener('click', async (event) => {
+        const woClickable = event.target.closest('.wo-clickable');
+        if (!woClickable) return;
+        
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const woId = woClickable.dataset.woId;
+        const wo = wos.find(w => String(w.id) === woId);
+        if (!wo) return;
+        
+        openWorkOrderModal(wo);
+      });
+      
+      // Also handle keyboard navigation
+      woList.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          const woClickable = event.target.closest('.wo-clickable');
+          if (woClickable) {
+            event.preventDefault();
+            const woId = woClickable.dataset.woId;
+            const wo = wos.find(w => String(w.id) === woId);
+            if (wo) openWorkOrderModal(wo);
+          }
+        }
+      });
+      
+      // Work order modal functions
+      function openWorkOrderModal(wo) {
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.setAttribute('aria-hidden', 'false');
+        modal.innerHTML = `
+          <div class="modal-panel wo-modal-panel">
+            <div class="wo-modal-header">
+              <div>
+                <span class="eyebrow">Work Order</span>
+                <h2>WO-${wo.id}</h2>
+              </div>
+              <button class="btn ghost" type="button" id="wo-modal-close" aria-label="Close work order">Close</button>
+            </div>
+            <div class="wo-modal-content">
+              <div class="wo-modal-field">
+                <label>Title</label>
+                <div class="value">${wo.title}</div>
+              </div>
+              <div class="wo-modal-field">
+                <label>Status</label>
+                <div class="value">${statusBadge(wo.status)}</div>
+              </div>
+              <div class="wo-modal-field">
+                <label>Priority</label>
+                <div class="value">${priorityBadge(wo.priority)}</div>
+              </div>
+              <div class="wo-modal-field">
+                <label>Cart</label>
+                <div class="value">Cart #${wo.cart_id}</div>
+              </div>
+              <div class="wo-modal-field">
+                <label>Location</label>
+                <div class="value">${wo.location || '—'}</div>
+              </div>
+              <div class="wo-modal-field">
+                <label>Assigned To</label>
+                <div class="value">${wo.assigned_to || 'Unassigned'}</div>
+              </div>
+              <div class="wo-modal-field">
+                <label>Due Date</label>
+                <div class="value">${formatDate(wo.due_date)}</div>
+              </div>
+              ${wo.notes ? `
+              <div class="wo-modal-field">
+                <label>Notes</label>
+                <div class="value">${wo.notes}</div>
+              </div>
+              ` : ''}
+            </div>
+            <div class="wo-modal-actions">
+              <a class="btn primary" href="workorders.html?id=${wo.id}">View Full Details</a>
+              <button class="btn secondary" id="wo-modal-edit">Edit Work Order</button>
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Close handlers
+        document.getElementById('wo-modal-close').addEventListener('click', () => {
+          modal.remove();
+        });
+        
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.remove();
+          }
+        });
+        
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && modal.contains(document.activeElement)) {
+            modal.remove();
+          }
+        });
+        
+        // Edit button handler
+        document.getElementById('wo-modal-edit').addEventListener('click', () => {
+          modal.remove();
+          window.location.href = `workorders.html?id=${wo.id}&edit=1`;
+        });
+      }
 
       document.getElementById('fleet-add-btn')?.addEventListener('click', () => openCartModal('add'));
       document.getElementById('cart-modal-close')?.addEventListener('click', closeCartModal);
