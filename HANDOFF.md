@@ -41,7 +41,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\MaintainSMIP` |
 | **Local AI** | `maintainsmip-guru` — prompt: `ollama/SYSTEM_PROMPT.md`, updates: `ollama/MODEL_UPDATES.md` |
-| **App version** | 1.5.3 (`settings.js`) |
+| **App version** | 1.5.4 (`settings.js`) |
 
 ```powershell
 cd "C:\MaintainSMIP"
@@ -224,7 +224,7 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 |---|------|---------|-------|
 | 2 | Roles & permissions UI | **Chelsie meeting (Charlotte)** | Decide manager/technician/readonly behavior. Readonly still sees edit buttons on WO/PM/accidents (only fleet uses `userCanWrite()` today). |
 | 4b | Fleet bulk data fill | **Chelsie export** | Import via **Admin → Fleet Import** or one-off script when export arrives. |
-| 5 | Parts / inventory module | **Brian Excel + scope** | Pinned until 24/7 replacement scope agreed. |
+| 5 | Parts / inventory module | **Brian Excel + scope** | Placeholder page shipped (`parts.html`); full inventory pinned until 24/7 replacement scope agreed. |
 | 7b | Box daily backup automation | **Production commitment** | Script exists; schedule Task Scheduler when you commit to production use. |
 
 ### Discuss later (audit items 10–12 + Tier 2–4)
@@ -242,6 +242,7 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 
 ## Shipped recently (2026-07-06)
 
+- Parts placeholder page — ocean zen “enjoy the zen while we build” + nav link (v1.5.4)
 - Fix missing Settings button — restore `settings.js` nav injection (`injectSettingsButton`, team accounts, push) gutted in v1.5.2 (v1.5.3)
 
 ## Shipped recently (2026-07-05)

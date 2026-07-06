@@ -427,6 +427,10 @@ def run_tests(client: TestClient) -> None:
     reports_page = client.get("/reports.html")
     assert reports_page.status_code == 200, reports_page.text
 
+    parts_page = client.get("/parts.html")
+    assert parts_page.status_code == 200, parts_page.text
+    assert "Enjoy the zen while we build" in parts_page.text
+
     admin_page = client.get("/admin.html")
     assert admin_page.status_code == 200, admin_page.text
 

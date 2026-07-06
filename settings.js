@@ -1,4 +1,4 @@
-const APP_VERSION = '1.5.3';
+const APP_VERSION = '1.5.4';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
 
@@ -955,6 +955,27 @@ function injectReportsNavLink() {
   }
 }
 
+function injectPartsNavLink() {
+  const navLinks = document.querySelector('.nav-links');
+  if (!navLinks || navLinks.querySelector('[data-nav-parts]')) return;
+
+  const link = document.createElement('a');
+  link.href = 'parts.html';
+  link.dataset.navParts = 'true';
+  link.textContent = 'Parts';
+  if (window.location.pathname.endsWith('parts.html')) {
+    link.classList.add('active');
+  }
+
+  const reportsLink = navLinks.querySelector('[data-nav-reports]')
+    || [...navLinks.querySelectorAll('a')].find((anchor) => anchor.getAttribute('href')?.includes('reports'));
+  if (reportsLink) {
+    reportsLink.insertAdjacentElement('afterend', link);
+  } else {
+    navLinks.appendChild(link);
+  }
+}
+
 function injectSettingsButton() {
   if (document.getElementById('open-settings-btn')) return;
 
@@ -1182,6 +1203,7 @@ async function initSettings() {
   wirePasswordVisibilityToggles();
   injectActivityNavLink();
   injectReportsNavLink();
+  injectPartsNavLink();
   injectSettingsButton();
   await loadTeamAssignees();
   syncSettingsForm();
