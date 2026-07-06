@@ -1,6 +1,6 @@
 # MaintainSMIP — Handoff
 
-**Last updated:** July 5, 2026  
+**Last updated:** July 6, 2026  
 **Purpose:** Onboard the next developer or agent with current state, credentials, architecture, and what to do next.
 
 ---
@@ -41,7 +41,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\MaintainSMIP` |
 | **Local AI** | `maintainsmip-guru` — prompt: `ollama/SYSTEM_PROMPT.md`, updates: `ollama/MODEL_UPDATES.md` |
-| **App version** | 1.5.1 (`settings.js`) |
+| **App version** | 1.5.2 (`settings.js`) |
 
 ```powershell
 cd "C:\MaintainSMIP"
