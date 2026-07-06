@@ -54,6 +54,41 @@ python test_smoke.py   # API smoke tests (must pass before deploy)
 
 ---
 
+## Local copy vs production
+
+**Yes — a complete, up-to-date app copy exists locally.** `C:\MaintainSMIP` is the single source for shipped code; production deploys from `main` on GitHub.
+
+| | Local | Production |
+|---|---|---|
+| **App code** | `C:\MaintainSMIP` @ `APP_VERSION` in `settings.js` | https://maintainsmip.onrender.com (auto-deploy from `main`) |
+| **Git** | `main` should match `origin/main` | Same commit as local after push |
+| **Database** | `C:\MaintainSMIP\maintainsmip.db` (your machine’s data) | `/var/data/maintainsmip.db` on Render (separate) |
+| **Run locally** | `.\start.bat` → http://localhost:8000 | N/A |
+
+**Verify local is current:**
+
+```powershell
+cd C:\MaintainSMIP
+git status -sb          # expect: ## main...origin/main (no ahead/behind)
+git log --oneline -1    # should match latest commit on GitHub
+```
+
+Check `APP_VERSION` in `settings.js` matches the version in the Quick start table above.
+
+**In git (deployed app)** — everything needed to run and ship: `server.py`, HTML/JS/CSS, `test_smoke.py`, `data/nascar_standings_snapshot.json`, etc.
+
+**Local-only (not on Render / do not commit unless asked):**
+
+| Kind | Examples | Notes |
+|------|----------|--------|
+| Modified, uncommitted | `ollama/` (guru model, `num_ctx`), `OPENWEBUI_SETUP_CHECKLIST.md`, some `scripts/` | Local AI setup; may differ from last commit |
+| Untracked | `vapid_keys.json`, `*.db.pre-restore-*.bak`, `open-webui-tools/`, large CSVs, `parse_fleet.py` | Secrets, backups, Open WebUI helpers |
+| Sibling project | `C:\Claude Code\leasing program\` | Different app — not MaintainSMIP |
+
+Local guru/Open WebUI files are **extras** for development assistance, not a second out-of-date app tree. If `git status` shows `main...origin/main` with no ahead/behind, the **MaintainSMIP web app** matches production even when `ollama/` has local edits.
+
+---
+
 ## What this app is
 
 **MaintainSMIP** is SMI Properties’ fleet maintenance web app: work orders, preventive maintenance, accidents, fleet inventory (~846 carts), audit trail, reports, and Web Push notifications. Tablet/laptop-friendly vanilla JS UI with racing-themed settings.
