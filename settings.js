@@ -1,4 +1,4 @@
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.5.1';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
 
@@ -216,6 +216,40 @@ function buildThemeOptions() {
   return `${presetHtml}${customHtml}`;
 }
 
+const DALE_EARNHARDT_THEME_ID = 'dale-earnhardt';
+let daleEarnhardtClickCount = 0;
+let daleEarnhardtClickTimer = null;
+
+function launchSnakeEasterEgg() {
+  if (window.MaintainSMIPSnake) {
+    window.MaintainSMIPSnake.open();
+    return;
+  }
+  const script = document.createElement('script');
+  script.src = `snake.js?v=${APP_VERSION}`;
+  script.onload = () => window.MaintainSMIPSnake?.open();
+  document.head.appendChild(script);
+}
+
+function wireDaleEarnhardtEasterEgg() {
+  document.querySelectorAll(`[data-theme-option="${DALE_EARNHARDT_THEME_ID}"]`).forEach((button) => {
+    if (button.dataset.daleEggWired === 'true') return;
+    button.dataset.daleEggWired = 'true';
+    button.addEventListener('click', () => {
+      daleEarnhardtClickCount += 1;
+      clearTimeout(daleEarnhardtClickTimer);
+      if (daleEarnhardtClickCount >= 5) {
+        daleEarnhardtClickCount = 0;
+        launchSnakeEasterEgg();
+        return;
+      }
+      daleEarnhardtClickTimer = setTimeout(() => {
+        daleEarnhardtClickCount = 0;
+      }, 2000);
+    });
+  });
+}
+
 function refreshThemeGrid() {
   const grid = document.getElementById('theme-grid');
   if (!grid) return;
@@ -223,6 +257,7 @@ function refreshThemeGrid() {
   document.querySelectorAll('[data-theme-option]').forEach((button) => {
     button.addEventListener('click', () => applyTheme(button.dataset.themeOption));
   });
+  wireDaleEarnhardtEasterEgg();
   const activeTheme = resolveThemeId(getSettings().theme, getSettings().customTheme);
   document.querySelectorAll('[data-theme-option]').forEach((button) => {
     button.classList.toggle('active', button.dataset.themeOption === activeTheme);

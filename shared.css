@@ -1191,6 +1191,69 @@ h2 {
   margin-bottom: 0;
 }
 
+.snake-panel {
+  width: min(360px, 100%);
+  text-align: center;
+}
+
+.snake-tagline {
+  margin: 0 0 12px;
+}
+
+.snake-hud {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 0.95rem;
+}
+
+#snake-canvas {
+  display: block;
+  margin: 0 auto;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  image-rendering: pixelated;
+  background: #0a0a0a;
+}
+
+.snake-dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(3, 44px);
+  gap: 6px;
+  justify-content: center;
+  margin: 14px auto 0;
+}
+
+.snake-dpad-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 1rem;
+}
+
+.snake-dpad-btn[data-dir='up'] {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.snake-dpad-btn[data-dir='left'] {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.snake-dpad-btn[data-dir='down'] {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.snake-dpad-btn[data-dir='right'] {
+  grid-column: 3;
+  grid-row: 2;
+}
+
 .grid {
   display: grid;
   gap: 18px;
