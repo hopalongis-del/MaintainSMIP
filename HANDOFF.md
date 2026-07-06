@@ -41,7 +41,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\MaintainSMIP` |
 | **Local AI** | `maintainsmip-guru` — prompt: `ollama/SYSTEM_PROMPT.md`, updates: `ollama/MODEL_UPDATES.md` |
-| **App version** | 1.5.2 (`settings.js`) |
+| **App version** | 1.5.3 (`settings.js`) |
 
 ```powershell
 cd "C:\MaintainSMIP"
@@ -239,6 +239,10 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 | **Barcode scan** (Tier 3) | Tablet cart lookup — leasing app has pattern. |
 | **Cost tracking** (Tier 3) | Parts/labor/vendor rollups. |
 | **Cosmetic pile** (Tier 4) | Nav injection, skeletons, phone polish, PDF export, dashboard charts. |
+
+## Shipped recently (2026-07-06)
+
+- Fix missing Settings button — restore `settings.js` nav injection (`injectSettingsButton`, team accounts, push) gutted in v1.5.2 (v1.5.3)
 
 ## Shipped recently (2026-07-05)
 

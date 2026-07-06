@@ -1,4 +1,4 @@
-const APP_VERSION = '1.5.2';
+const APP_VERSION = '1.5.3';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
 
@@ -59,7 +59,6 @@ const DEFAULT_SETTINGS = {
   theme: 'smi-racing',
   customTheme: null,
   layout: 'laptop',
-  layoutMode: 'auto', // 'auto', 'phone', 'laptop'
   shopName: 'SMI Properties',
   defaultLocation: '',
   defaultMechanic: '',
@@ -75,38 +74,6 @@ const DEFAULT_SETTINGS = {
   notifyPmDue: true,
   notifyAccidents: true,
 };
-
-// Device detection utility
-function detectDeviceType() {
-  const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-  const screenWidth = window.innerWidth || document.documentElement.clientWidth;
-  
-  // Check if it's a mobile device based on user agent
-  const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
-  
-  // Check screen width (mobile if <= 768px)
-  const isSmallScreen = screenWidth <= 768;
-  
-  // Check if touch device
-  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  
-  // Determine if mobile
-  if (isMobileUA || (isSmallScreen && isTouchDevice)) {
-    return 'phone';
-  }
-  
-  return 'laptop';
-}
-
-function resolveLayout(settings = getSettings()) {
-  // If user manually set layout, use that
-  if (settings.layoutMode !== 'auto') {
-    return settings.layoutMode;
-  }
-  
-  // Otherwise, auto-detect
-  return detectDeviceType();
-}
 
 function readStoredSettings() {
   try {
@@ -148,13 +115,12 @@ function applyTheme(themeId) {
 }
 
 function applyLayout(layout) {
-  saveSettings({ layoutMode: layout === 'phone' ? 'phone' : 'laptop' });
+  saveSettings({ layout: layout === 'phone' ? 'phone' : 'laptop' });
 }
 
 function applySettings(settings = getSettings()) {
   const theme = resolveThemeId(settings.theme, settings.customTheme);
-  const resolvedLayout = resolveLayout(settings);
-  const layout = resolvedLayout;
+  const layout = settings.layout === 'phone' ? 'phone' : 'laptop';
 
   applyDocumentTheme({ theme: settings.theme, layout, customTheme: settings.customTheme });
 
@@ -391,7 +357,7 @@ function buildSettingsModal() {
           </div>
           <div class="settings-subblock">
             <h4>Build Your Own</h4>
-            <p class="hero-sub">Pick four colors and we'll generate the full theme. Save it to add "My Custom Theme" to the list above.</p>
+            <p class="hero-sub">Pick four colors and we’ll generate the full theme. Save it to add “My Custom Theme” to the list above.</p>
             <form class="settings-form custom-theme-form" id="custom-theme-form">
               <label>Theme Name
                 <input type="text" id="custom-theme-name" placeholder="My Custom Theme" maxlength="48" />
@@ -416,10 +382,9 @@ function buildSettingsModal() {
           </div>
           <div class="settings-subblock">
             <h4>Layout</h4>
-            <p class="hero-sub">Auto-detects your device, but you can override it here.</p>
             <div class="settings-toggle-group" id="layout-toggle">
-              <button type="button" class="settings-toggle" data-layout-option="phone">Phone</button>
-              <button type="button" class="settings-toggle" data-layout-option="laptop">Laptop</button>
+              <button type="button" class="settings-toggle" data-layout-option="phone">Optimized for Phone</button>
+              <button type="button" class="settings-toggle" data-layout-option="laptop">Optimized for Laptop</button>
             </div>
           </div>
         </section>
@@ -521,7 +486,7 @@ function buildSettingsModal() {
 
         <section class="settings-section">
           <h3>Notifications</h3>
-          <p class="hero-sub" id="push-status-copy">Checking push notification status...</p>
+          <p class="hero-sub" id="push-status-copy">Checking push notification status…</p>
           <div class="settings-checklist">
             <label class="settings-check-row">
               <input type="checkbox" id="settings-notify-overdue-wo" />
@@ -640,12 +605,6 @@ function syncSettingsForm(settings = getSettings()) {
   setChecked('settings-notify-pm-due', settings.notifyPmDue);
   setChecked('settings-notify-accidents', settings.notifyAccidents);
   syncCustomThemeForm(settings);
-  
-  // Sync layout toggle
-  const resolvedLayout = resolveLayout(settings);
-  document.querySelectorAll('[data-layout-option]').forEach((button) => {
-    button.classList.toggle('active', button.dataset.layoutOption === resolvedLayout);
-  });
 }
 
 async function populateSettingsDynamicOptions() {
@@ -659,247 +618,594 @@ async function populateSettingsDynamicOptions() {
     locations = Array.from(new Set(carts.map((cart) => cart.location).filter(Boolean))).sort();
   } else if (typeof db !== 'undefined') {
     try {
-      const dbCarts = await db.getCarts();
-      locations = Array.from(new Set(dbCarts.map((c) => c.location).filter(Boolean))).sort();
-    } catch (e) {
-      /* ignore */
+      const loaded = await db.getCarts();
+      locations = Array.from(new Set(loaded.map((cart) => cart.location).filter(Boolean))).sort();
+    } catch (err) {
+      /* settings can open before fleet loads */
     }
   }
 
   if (fleetSelect) {
+    const current = getSettings().defaultFleetLocation || 'all';
     fleetSelect.innerHTML = `
       <option value="all">All locations</option>
       ${locations.map((loc) => `<option value="${loc}">${loc}</option>`).join('')}
     `;
+    fleetSelect.value = current;
   }
 
-  if (templateSelect && window.MaintainSMIPEvents) {
-    const templates = window.MaintainSMIPEvents.getTemplates();
-    templateSelect.innerHTML = `
-      <option value="">Use system default</option>
-      ${templates.map((t) => `<option value="${t.id}">${t.name}</option>`).join('')}
-    `;
+  if (templateSelect && typeof db !== 'undefined') {
+    try {
+      const templates = await db.getWoTemplates();
+      const current = getSettings().defaultWoTemplateId || '';
+      templateSelect.innerHTML = `
+        <option value="">Use system default</option>
+        ${templates.map((template) => `<option value="${template.id}">${template.name}</option>`).join('')}
+      `;
+      templateSelect.value = current;
+    } catch (err) {
+      /* templates load when API is ready */
+    }
   }
+}
+
+function collectSettingsFromForm() {
+  const current = getSettings();
+  return {
+    shopName: userIsAdmin()
+      ? (document.getElementById('settings-shop-name')?.value.trim() || DEFAULT_SETTINGS.shopName)
+      : current.shopName,
+    defaultLocation: document.getElementById('settings-default-location')?.value.trim() || '',
+    defaultMechanic: document.getElementById('settings-default-mechanic')?.value || '',
+    defaultWoTemplateId: document.getElementById('settings-default-template')?.value || '',
+    defaultPriority: document.getElementById('settings-default-priority')?.value || DEFAULT_SETTINGS.defaultPriority,
+    defaultServiceType: document.getElementById('settings-default-service-type')?.value || DEFAULT_SETTINGS.defaultServiceType,
+    pmDueWindowDays: Number(document.getElementById('settings-pm-window')?.value || DEFAULT_SETTINGS.pmDueWindowDays),
+    defaultFleetLocation: document.getElementById('settings-fleet-location')?.value || 'all',
+    defaultLandingPage: document.getElementById('settings-landing-page')?.value || DEFAULT_SETTINGS.defaultLandingPage,
+    dateFormat: document.getElementById('settings-date-format')?.value || DEFAULT_SETTINGS.dateFormat,
+    sessionTimeoutMinutes: Number(document.getElementById('settings-session-timeout')?.value ?? DEFAULT_SETTINGS.sessionTimeoutMinutes),
+    notifyOverdueWo: Boolean(document.getElementById('settings-notify-overdue-wo')?.checked),
+    notifyPmDue: Boolean(document.getElementById('settings-notify-pm-due')?.checked),
+    notifyAccidents: Boolean(document.getElementById('settings-notify-accidents')?.checked),
+  };
 }
 
 function flashSettingsSaved() {
   const status = document.getElementById('settings-save-status');
   if (!status) return;
-  status.textContent = 'Saved!';
-  status.style.color = 'var(--success)';
-  setTimeout(() => {
+  status.textContent = 'Saved.';
+  window.clearTimeout(flashSettingsSaved._timer);
+  flashSettingsSaved._timer = window.setTimeout(() => {
     status.textContent = 'Settings save automatically.';
-    status.style.color = '';
-  }, 1500);
+  }, 1600);
+}
+
+async function syncNotificationPrefsToServer() {
+  if (typeof db === 'undefined') return;
+  const prefs = collectSettingsFromForm();
+  try {
+    await db.syncNotificationPrefs(prefs);
+  } catch (err) {
+    /* server sync is best-effort while offline */
+  }
+}
+
+async function refreshPushStatusUi() {
+  const statusCopy = document.getElementById('push-status-copy');
+  const enableBtn = document.getElementById('enable-push-btn');
+  const disableBtn = document.getElementById('disable-push-btn');
+  const testBtn = document.getElementById('test-push-btn');
+  if (!statusCopy || typeof db === 'undefined') return;
+
+  if (!db.isPushSupported()) {
+    statusCopy.textContent = 'Push requires HTTPS in Chrome, Edge, or Firefox. On iPhone, add the app to your Home Screen first.';
+    enableBtn?.classList.add('hidden');
+    disableBtn?.classList.add('hidden');
+    testBtn?.classList.add('hidden');
+    return;
+  }
+
+  const status = await db.getPushStatus();
+  if (status.subscribed) {
+    statusCopy.textContent = 'Push notifications are on for this device. You will receive alerts based on the options below.';
+    enableBtn?.classList.add('hidden');
+    disableBtn?.classList.remove('hidden');
+    testBtn?.classList.remove('hidden');
+  } else {
+    statusCopy.textContent = 'Turn on push to get overdue work order, PM, and accident alerts on this device.';
+    enableBtn?.classList.remove('hidden');
+    disableBtn?.classList.add('hidden');
+    testBtn?.classList.add('hidden');
+  }
+}
+
+function wirePushNotifications() {
+  document.getElementById('enable-push-btn')?.addEventListener('click', async () => {
+    const statusEl = document.getElementById('push-action-status');
+    if (typeof db === 'undefined') return;
+    statusEl.textContent = 'Enabling push…';
+    await syncNotificationPrefsToServer();
+    const result = await db.subscribePush();
+    if (result?.error) {
+      statusEl.textContent = result.error;
+      return;
+    }
+    statusEl.textContent = 'Push notifications enabled on this device.';
+    await refreshPushStatusUi();
+  });
+
+  document.getElementById('disable-push-btn')?.addEventListener('click', async () => {
+    const statusEl = document.getElementById('push-action-status');
+    if (typeof db === 'undefined') return;
+    await db.unsubscribePush();
+    statusEl.textContent = 'Push notifications turned off for this device.';
+    await refreshPushStatusUi();
+  });
+
+  document.getElementById('test-push-btn')?.addEventListener('click', async () => {
+    const statusEl = document.getElementById('push-action-status');
+    if (typeof db === 'undefined') return;
+    statusEl.textContent = 'Sending test alert…';
+    const result = await db.sendTestPush();
+    statusEl.textContent = result?.error || 'Test alert sent — check your device notifications.';
+  });
 }
 
 function wireSettingsForm() {
-  document.getElementById('settings-shop-name')?.addEventListener('change', (e) => {
-    saveSettings({ shopName: e.target.value });
-  });
-  document.getElementById('settings-default-location')?.addEventListener('change', (e) => {
-    saveSettings({ defaultLocation: e.target.value });
-  });
-  document.getElementById('settings-default-mechanic')?.addEventListener('change', (e) => {
-    saveSettings({ defaultMechanic: e.target.value });
-  });
-  document.getElementById('settings-default-template')?.addEventListener('change', (e) => {
-    saveSettings({ defaultWoTemplateId: e.target.value });
-  });
-  document.getElementById('settings-default-priority')?.addEventListener('change', (e) => {
-    saveSettings({ defaultPriority: e.target.value });
-  });
-  document.getElementById('settings-default-service-type')?.addEventListener('change', (e) => {
-    saveSettings({ defaultServiceType: e.target.value });
-  });
-  document.getElementById('settings-pm-window')?.addEventListener('change', (e) => {
-    saveSettings({ pmDueWindowDays: Number(e.target.value) });
-  });
-  document.getElementById('settings-fleet-location')?.addEventListener('change', (e) => {
-    saveSettings({ defaultFleetLocation: e.target.value });
-  });
-  document.getElementById('settings-landing-page')?.addEventListener('change', (e) => {
-    saveSettings({ defaultLandingPage: e.target.value });
-  });
-  document.getElementById('settings-date-format')?.addEventListener('change', (e) => {
-    saveSettings({ dateFormat: e.target.value });
-  });
-  document.getElementById('settings-session-timeout')?.addEventListener('change', (e) => {
-    saveSettings({ sessionTimeoutMinutes: Number(e.target.value) });
-  });
-  document.getElementById('settings-notify-overdue-wo')?.addEventListener('change', (e) => {
-    saveSettings({ notifyOverdueWo: e.target.checked });
-  });
-  document.getElementById('settings-notify-pm-due')?.addEventListener('change', (e) => {
-    saveSettings({ notifyPmDue: e.target.checked });
-  });
-  document.getElementById('settings-notify-accidents')?.addEventListener('change', (e) => {
-    saveSettings({ notifyAccidents: e.target.checked });
+  const persistFromForm = () => {
+    saveSettings(collectSettingsFromForm());
+    syncNotificationPrefsToServer();
+    flashSettingsSaved();
+    wireSessionTimeout();
+  };
+
+  document.querySelectorAll('#shop-settings-form input, #shop-settings-form select, #wo-settings-form select, #fleet-settings-form select, #behavior-settings-form select')
+    .forEach((el) => el.addEventListener('change', persistFromForm));
+
+  document.querySelectorAll('.settings-check-row input').forEach((el) => {
+    el.addEventListener('change', persistFromForm);
   });
 
-  // Layout toggle
+  refreshThemeGrid();
+
+  document.getElementById('custom-theme-save-btn')?.addEventListener('click', () => {
+    saveCustomTheme({ apply: true });
+  });
+
+  document.getElementById('custom-theme-preview-btn')?.addEventListener('click', () => {
+    const customTheme = collectCustomThemeFromForm();
+    applyDocumentTheme({
+      theme: CUSTOM_THEME_ID,
+      layout: getSettings().layout,
+      customTheme,
+    });
+    document.querySelectorAll('[data-theme-option]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.themeOption === CUSTOM_THEME_ID);
+    });
+  });
+
+  document.querySelectorAll('#custom-theme-form input').forEach((input) => {
+    input.addEventListener('input', () => {
+      if (resolveThemeId(getSettings().theme, getSettings().customTheme) !== CUSTOM_THEME_ID) return;
+      applyDocumentTheme({
+        theme: CUSTOM_THEME_ID,
+        layout: getSettings().layout,
+        customTheme: collectCustomThemeFromForm(),
+      });
+      refreshThemeGrid();
+    });
+  });
+
   document.querySelectorAll('[data-layout-option]').forEach((button) => {
     button.addEventListener('click', () => applyLayout(button.dataset.layoutOption));
   });
 }
 
-function wireSettingsModal() {
-  const modal = document.getElementById('settings-modal');
-  if (!modal) return;
-
-  document.getElementById('settings-close')?.addEventListener('click', () => {
-    modal.classList.add('hidden');
-    modal.setAttribute('aria-hidden', 'true');
-  });
-
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) {
-      modal.classList.add('hidden');
-      modal.setAttribute('aria-hidden', 'true');
-    }
-  });
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
-      modal.classList.add('hidden');
-      modal.setAttribute('aria-hidden', 'true');
-    }
-  });
+function createSettingsButton({ floating = false } = {}) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = floating ? 'nav-settings-btn nav-settings-btn--floating' : 'nav-settings-btn';
+  button.id = 'open-settings-btn';
+  button.setAttribute('aria-label', 'Open settings');
+  button.innerHTML = `<img src="img.icons8.png" alt="" class="nav-settings-icon" width="22" height="22" />`;
+  return button;
 }
 
-function wirePasswordChangeForm() {
-  const form = document.getElementById('change-password-form');
-  if (!form) return;
+async function injectUserBadge() {
+  if (document.getElementById('nav-user') || typeof db === 'undefined') return;
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
+  const user = await db.getCurrentUser();
+  if (!user) return;
+
+  window.__currentUser = user;
+
+  const nav = document.querySelector('.nav');
+  if (!nav) return;
+
+  const navActions = nav.querySelector('.nav-actions') || nav;
+  const badge = document.createElement('div');
+  badge.className = 'nav-user';
+  badge.id = 'nav-user';
+  badge.innerHTML = `
+    <span class="nav-user-name">${user.display_name}</span>
+    <span class="nav-user-role">${user.role.replace('_', ' ')}</span>
+    <button type="button" class="btn ghost nav-logout-btn" id="nav-logout-btn">Sign out</button>
+  `;
+  navActions.appendChild(badge);
+
+  document.getElementById('nav-logout-btn')?.addEventListener('click', async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch (err) {
+      /* still redirect */
+    }
+    window.location.href = '/login.html';
+  });
+
+  const accountCopy = document.getElementById('account-signed-in-copy');
+  if (accountCopy) {
+    accountCopy.textContent = `Signed in as ${user.display_name} (${user.role.replace('_', ' ')}).`;
+  }
+
+  if (user.role === 'admin') {
+    injectAdminNavLink();
+  }
+
+  syncShopNameAccess();
+  await maybeForcePasswordChange(user);
+}
+
+function wireChangePasswordForm() {
+  const form = document.getElementById('change-password-form');
+  if (!form || form._wired) return;
+  form._wired = true;
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const status = document.getElementById('settings-password-status');
     const currentPassword = document.getElementById('settings-current-password').value;
     const newPassword = document.getElementById('settings-new-password').value;
     const confirmPassword = document.getElementById('settings-confirm-password').value;
-    const statusEl = document.getElementById('settings-password-status');
+    const button = document.getElementById('settings-save-password');
 
     if (newPassword !== confirmPassword) {
-      statusEl.textContent = 'New passwords do not match.';
-      statusEl.style.color = 'var(--danger, #dc2626)';
+      status.textContent = 'New passwords do not match.';
       return;
     }
 
-    if (newPassword.length < 8) {
-      statusEl.textContent = 'Password must be at least 8 characters.';
-      statusEl.style.color = 'var(--danger, #dc2626)';
+    button.disabled = true;
+    status.textContent = 'Saving…';
+
+    const result = await db.changePassword(currentPassword, newPassword);
+    button.disabled = false;
+
+    if (result?.error) {
+      status.textContent = result.error;
       return;
     }
 
-    try {
-      const result = await db.changePassword(currentPassword, newPassword);
-      if (result?.error) {
-        statusEl.textContent = result.error;
-        statusEl.style.color = 'var(--danger, #dc2626)';
-      } else {
-        statusEl.textContent = 'Password updated successfully.';
-        statusEl.style.color = 'var(--success)';
-        form.reset();
-      }
-    } catch (err) {
-      statusEl.textContent = 'Error updating password.';
-      statusEl.style.color = 'var(--danger, #dc2626)';
+    form.reset();
+    status.textContent = 'Password updated. Use your new password next time you sign in.';
+
+    const modal = document.getElementById('settings-modal');
+    if (modal?.dataset.forcePassword === 'true') {
+      if (window.__currentUser) window.__currentUser.password_changed = true;
+      exitForcedPasswordMode();
+      status.textContent = 'Password set. You can continue using MaintainSMIP.';
     }
   });
 }
 
-async function initSettings() {
-  const settings = getSettings();
-  applySettings(settings);
-  syncSettingsForm(settings);
-  refreshThemeGrid();
-  wireSettingsForm();
-  wireSettingsModal();
-  wirePasswordVisibilityToggles();
-  wirePasswordChangeForm();
-  await populateSettingsDynamicOptions();
+function injectAdminNavLink() {
+  const navLinks = document.querySelector('.nav-links');
+  if (!navLinks || navLinks.querySelector('[data-nav-admin]')) return;
 
-  // Push notification setup
-  const pushStatusCopy = document.getElementById('push-status-copy');
-  const enableBtn = document.getElementById('enable-push-btn');
-  const disableBtn = document.getElementById('disable-push-btn');
-  const testBtn = document.getElementById('test-push-btn');
-  const pushStatus = document.getElementById('push-action-status');
+  const link = document.createElement('a');
+  link.href = 'admin.html';
+  link.dataset.navAdmin = 'true';
+  link.textContent = 'Admin';
+  if (window.location.pathname.endsWith('admin.html')) {
+    link.classList.add('active');
+  }
 
-  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-    if (pushStatusCopy) pushStatusCopy.textContent = 'Push notifications are enabled.';
-    if (enableBtn) enableBtn.classList.add('hidden');
-    if (disableBtn) disableBtn.classList.remove('hidden');
-    if (testBtn) testBtn.classList.remove('hidden');
-  } else if (typeof Notification !== 'undefined' && Notification.permission !== 'denied') {
-    if (pushStatusCopy) pushStatusCopy.textContent = 'Push notifications are not enabled yet.';
+  navLinks.appendChild(link);
+}
+
+function injectActivityNavLink() {
+  const navLinks = document.querySelector('.nav-links');
+  if (!navLinks || navLinks.querySelector('[data-nav-activity]')) return;
+
+  const link = document.createElement('a');
+  link.href = 'activity.html';
+  link.dataset.navActivity = 'true';
+  link.textContent = 'Activity';
+  if (window.location.pathname.endsWith('activity.html')) {
+    link.classList.add('active');
+  }
+
+  const accidentLink = [...navLinks.querySelectorAll('a')].find((anchor) => (
+    anchor.getAttribute('href')?.includes('accidents')
+  ));
+  if (accidentLink) {
+    accidentLink.insertAdjacentElement('afterend', link);
   } else {
-    if (pushStatusCopy) pushStatusCopy.textContent = 'Push notifications are blocked. Enable them in your browser settings.';
-  }
-
-  enableBtn?.addEventListener('click', async () => {
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        if (pushStatusCopy) pushStatusCopy.textContent = 'Push notifications are enabled.';
-        if (enableBtn) enableBtn.classList.add('hidden');
-        if (disableBtn) disableBtn.classList.remove('hidden');
-        if (testBtn) testBtn.classList.remove('hidden');
-      } else {
-        if (pushStatusCopy) pushStatusCopy.textContent = 'Push notifications were denied.';
-      }
-    } catch (err) {
-      if (pushStatusCopy) pushStatusCopy.textContent = 'Error enabling push notifications.';
-    }
-  });
-
-  disableBtn?.addEventListener('click', async () => {
-    try {
-      if ('serviceWorker' in navigator && 'getRegistration' in navigator.serviceWorker) {
-        const reg = await navigator.serviceWorker.getRegistration();
-        if (reg?.showNotification) {
-          await reg.unregister();
-        }
-      }
-      if (pushStatusCopy) pushStatusCopy.textContent = 'Push notifications turned off.';
-      if (enableBtn) enableBtn.classList.remove('hidden');
-      if (disableBtn) disableBtn.classList.add('hidden');
-      if (testBtn) testBtn.classList.add('hidden');
-    } catch (err) {
-      if (pushStatusCopy) pushStatusCopy.textContent = 'Error turning off push notifications.';
-    }
-  });
-
-  testBtn?.addEventListener('click', () => {
-    if (pushStatus) pushStatus.textContent = 'Test alert sent!';
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      new Notification('MaintainSMIP Test', { body: 'Push notifications are working!' });
-    }
-  });
-
-  // Account section
-  const accountCopy = document.getElementById('account-signed-in-copy');
-  const currentUser = window.__currentUser || db?.getCachedUser?.();
-  if (accountCopy && currentUser) {
-    accountCopy.textContent = `Signed in as ${currentUser.display_name} (${currentUser.role})`;
+    navLinks.appendChild(link);
   }
 }
 
-// Export for use in other files
+function injectReportsNavLink() {
+  const navLinks = document.querySelector('.nav-links');
+  if (!navLinks || navLinks.querySelector('[data-nav-reports]')) return;
+
+  const link = document.createElement('a');
+  link.href = 'reports.html';
+  link.dataset.navReports = 'true';
+  link.textContent = 'Reports';
+  if (window.location.pathname.endsWith('reports.html')) {
+    link.classList.add('active');
+  }
+
+  const activityLink = navLinks.querySelector('[data-nav-activity]')
+    || [...navLinks.querySelectorAll('a')].find((anchor) => anchor.getAttribute('href')?.includes('activity'));
+  if (activityLink) {
+    activityLink.insertAdjacentElement('afterend', link);
+  } else {
+    navLinks.appendChild(link);
+  }
+}
+
+function injectSettingsButton() {
+  if (document.getElementById('open-settings-btn')) return;
+
+  const nav = document.querySelector('.nav');
+  if (nav) {
+    const navLinks = nav.querySelector('.nav-links');
+    let navActions = nav.querySelector('.nav-actions');
+
+    if (!navActions) {
+      navActions = document.createElement('div');
+      navActions.className = 'nav-actions';
+      if (navLinks) {
+        nav.insertBefore(navActions, navLinks);
+        navActions.appendChild(navLinks);
+      } else {
+        nav.appendChild(navActions);
+      }
+    }
+
+    navActions.appendChild(createSettingsButton());
+    return;
+  }
+
+  document.body.appendChild(createSettingsButton({ floating: true }));
+}
+
+async function openSettings() {
+  const modal = document.getElementById('settings-modal');
+  if (!modal) return;
+  await loadTeamAssignees();
+  const mechanicSelect = document.getElementById('settings-default-mechanic');
+  if (mechanicSelect) {
+    const current = mechanicSelect.value;
+    mechanicSelect.innerHTML = `
+      <option value="">None</option>
+      ${getTeamAssigneeNames().map((name) => `<option value="${name}">${name}</option>`).join('')}
+    `;
+    mechanicSelect.value = current;
+  }
+  await populateSettingsDynamicOptions();
+  syncSettingsForm();
+  refreshThemeGrid();
+  wirePasswordVisibilityToggles(modal);
+  refreshPushStatusUi();
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeSettings() {
+  const modal = document.getElementById('settings-modal');
+  if (!modal) return;
+  if (modal.dataset.forcePassword === 'true') return;
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+  applySettings();
+  syncCustomThemeForm();
+  refreshThemeGrid();
+}
+
+function enterForcedPasswordMode(user) {
+  const modal = document.getElementById('settings-modal');
+  if (!modal) return;
+
+  modal.dataset.forcePassword = 'true';
+  modal.classList.add('settings-modal--forced');
+
+  const closeBtn = document.getElementById('settings-close');
+  if (closeBtn) closeBtn.classList.add('hidden');
+
+  const headerTitle = modal.querySelector('.modal-header h2');
+  if (headerTitle) headerTitle.textContent = 'Set Your Password';
+
+  const headerEyebrow = modal.querySelector('.modal-header .eyebrow');
+  if (headerEyebrow) headerEyebrow.textContent = 'Required';
+
+  modal.querySelectorAll('.settings-section').forEach((section) => {
+    section.classList.toggle('hidden', section.id !== 'account-settings-section');
+  });
+
+  const accountCopy = document.getElementById('account-signed-in-copy');
+  if (accountCopy) {
+    accountCopy.textContent = `${user.display_name}, choose a personal password before continuing. Use your current sign-in password once, then pick a new one (8+ characters).`;
+  }
+
+  const formHeading = modal.querySelector('#change-password-form h4');
+  if (formHeading) formHeading.textContent = 'Choose a New Password';
+
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  wirePasswordVisibilityToggles(modal);
+  document.getElementById('settings-current-password')?.focus();
+}
+
+function exitForcedPasswordMode() {
+  const modal = document.getElementById('settings-modal');
+  if (!modal) return;
+
+  delete modal.dataset.forcePassword;
+  modal.classList.remove('settings-modal--forced');
+
+  const closeBtn = document.getElementById('settings-close');
+  if (closeBtn) closeBtn.classList.remove('hidden');
+
+  const headerTitle = modal.querySelector('.modal-header h2');
+  if (headerTitle) headerTitle.textContent = 'Customize MaintainSMIP';
+
+  const headerEyebrow = modal.querySelector('.modal-header .eyebrow');
+  if (headerEyebrow) headerEyebrow.textContent = 'Settings';
+
+  modal.querySelectorAll('.settings-section').forEach((section) => {
+    section.classList.remove('hidden');
+  });
+
+  const formHeading = modal.querySelector('#change-password-form h4');
+  if (formHeading) formHeading.textContent = 'Change Password';
+
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+async function maybeForcePasswordChange(user) {
+  if (!user || user.password_changed) return;
+  if ((window.location.pathname.split('/').pop() || '') === 'login.html') return;
+  enterForcedPasswordMode(user);
+}
+
+let sessionTimeoutTimer = null;
+
+async function logoutForTimeout() {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+  } catch (err) {
+    /* still redirect */
+  }
+  window.location.href = '/login.html';
+}
+
+function wireSessionTimeout() {
+  if (sessionTimeoutTimer) {
+    window.clearTimeout(sessionTimeoutTimer);
+    sessionTimeoutTimer = null;
+  }
+
+  const minutes = Number(getSettings().sessionTimeoutMinutes);
+  if (!minutes) return;
+
+  const resetTimer = () => {
+    window.clearTimeout(sessionTimeoutTimer);
+    sessionTimeoutTimer = window.setTimeout(logoutForTimeout, minutes * 60 * 1000);
+  };
+
+  if (!wireSessionTimeout._wired) {
+    ['click', 'keydown', 'scroll', 'touchstart'].forEach((eventName) => {
+      document.addEventListener(eventName, resetTimer, { passive: true });
+    });
+    wireSessionTimeout._wired = true;
+  }
+
+  resetTimer();
+}
+
+function maybeRedirectLandingPage() {
+  const path = window.location.pathname.split('/').pop() || 'index.html';
+  if (path !== 'index.html') return;
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('id') || params.has('status') || params.has('due') || params.has('next')) return;
+
+  const landing = getSettings().defaultLandingPage;
+  if (landing && landing !== 'index.html') {
+    window.location.replace(landing);
+  }
+}
+
+function applyStoredSettingsEarly() {
+  applySettings(readStoredSettings());
+}
+
 window.MaintainSMIPSettings = {
-  getSettings,
-  saveSettings,
-  applyTheme,
-  applyLayout,
-  applySettings,
-  formatAppDate,
+  APP_VERSION,
+  get: getSettings,
+  save: saveSettings,
+  apply: applySettings,
+  formatDate: formatAppDate,
   getPmDueWindowDays,
   isPmDueSoon,
   getPmDueLabel,
-  detectDeviceType,
-  resolveLayout,
+  getCurrentUser: () => window.__currentUser || db?.getCachedUser?.() || null,
+  getDefaultMechanic: () => {
+    const settingsMechanic = getSettings().defaultMechanic || '';
+    if (settingsMechanic) return settingsMechanic;
+    return window.__currentUser?.display_name || db?.getCachedUser?.()?.display_name || '';
+  },
+  getDefaultLocation: () => getSettings().defaultLocation || '',
+  getDefaultPriority: () => getSettings().defaultPriority || DEFAULT_SETTINGS.defaultPriority,
+  getDefaultServiceType: () => getSettings().defaultServiceType || DEFAULT_SETTINGS.defaultServiceType,
+  getDefaultWoTemplateId: () => getSettings().defaultWoTemplateId || '',
+  getDefaultFleetLocation: () => getSettings().defaultFleetLocation || 'all',
+  getShopName: () => getSettings().shopName || DEFAULT_SETTINGS.shopName,
+  loadTeamAssignees,
+  populateAssigneeSelect,
+  getTeamAssigneeNames,
+  wirePasswordVisibilityToggles,
 };
 
-// Initialize when DOM is ready
+async function initPushBackground() {
+  if (typeof db === 'undefined' || !db.isPushSupported()) return;
+  try {
+    await db.ensureServiceWorker();
+    const serverPrefs = await db.getNotificationPrefs();
+    if (serverPrefs) {
+      saveSettings({
+        notifyOverdueWo: serverPrefs.notify_overdue_wo,
+        notifyPmDue: serverPrefs.notify_pm_due,
+        notifyAccidents: serverPrefs.notify_accidents,
+      });
+    }
+  } catch (err) {
+    /* push warms up when user opens settings */
+  }
+}
+
+async function initSettings() {
+  buildSettingsModal();
+  wirePasswordVisibilityToggles();
+  injectActivityNavLink();
+  injectReportsNavLink();
+  injectSettingsButton();
+  await loadTeamAssignees();
+  syncSettingsForm();
+  wireChangePasswordForm();
+  wirePushNotifications();
+  applySettings();
+  syncSettingsForm();
+  wireSettingsForm();
+  wireSessionTimeout();
+  maybeRedirectLandingPage();
+  injectUserBadge();
+  window.addEventListener('load', () => {
+    if (typeof db !== 'undefined') initPushBackground();
+  });
+
+  document.getElementById('open-settings-btn')?.addEventListener('click', openSettings);
+  document.getElementById('settings-close')?.addEventListener('click', closeSettings);
+  document.getElementById('settings-modal')?.addEventListener('click', (event) => {
+    if (event.target.id === 'settings-modal') closeSettings();
+  });
+}
+
+applyStoredSettingsEarly();
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initSettings);
 } else {
