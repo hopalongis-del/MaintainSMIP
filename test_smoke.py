@@ -431,6 +431,17 @@ def run_tests(client: TestClient) -> None:
     assert parts_page.status_code == 200, parts_page.text
     assert "Enjoy the zen while we build" in parts_page.text
 
+    weather = client.get("/api/widgets/weather?location=Charlotte")
+    assert weather.status_code == 200, weather.text
+    weather_body = weather.json()
+    assert "temperature_f" in weather_body
+    assert weather_body.get("location")
+
+    nascar = client.get("/api/widgets/nascar-standings")
+    assert nascar.status_code == 200, nascar.text
+    nascar_body = nascar.json()
+    assert len(nascar_body.get("drivers") or []) >= 1
+
     admin_page = client.get("/admin.html")
     assert admin_page.status_code == 200, admin_page.text
 

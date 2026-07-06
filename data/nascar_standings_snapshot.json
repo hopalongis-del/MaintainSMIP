@@ -1,0 +1,18 @@
+{
+  "season": 2026,
+  "series": "NASCAR Cup Series",
+  "updated": "2026-07-06",
+  "source": "snapshot",
+  "drivers": [
+    { "position": 1, "driver": "Kyle Larson", "team": "Hendrick Motorsports", "points": 748 },
+    { "position": 2, "driver": "William Byron", "team": "Hendrick Motorsports", "points": 731 },
+    { "position": 3, "driver": "Tyler Reddick", "team": "23XI Racing", "points": 719 },
+    { "position": 4, "driver": "Chase Elliott", "team": "Hendrick Motorsports", "points": 702 },
+    { "position": 5, "driver": "Denny Hamlin", "team": "Joe Gibbs Racing", "points": 698 },
+    { "position": 6, "driver": "Christopher Bell", "team": "Joe Gibbs Racing", "points": 684 },
+    { "position": 7, "driver": "Ryan Blaney", "team": "Team Penske", "points": 671 },
+    { "position": 8, "driver": "Joey Logano", "team": "Team Penske", "points": 658 },
+    { "position": 9, "driver": "Austin Cindric", "team": "Team Penske", "points": 645 },
+    { "position": 10, "driver": "Bubba Wallace", "team": "23XI Racing", "points": 632 }
+  ]
+}

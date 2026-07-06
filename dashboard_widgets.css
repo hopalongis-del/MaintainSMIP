@@ -1,0 +1,233 @@
+.dashboard-widget-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 14px;
+  flex-wrap: wrap;
+}
+
+.dashboard-widget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.dashboard-widget-grid.is-customizing .dashboard-widget {
+  outline: 1px dashed var(--border);
+  outline-offset: 2px;
+}
+
+.dashboard-widget {
+  position: relative;
+  min-height: 108px;
+}
+
+.dashboard-widget.is-panel {
+  grid-column: span 2;
+  min-height: 220px;
+}
+
+.dashboard-widget-controls {
+  display: none;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  gap: 4px;
+}
+
+.dashboard-widget-grid.is-customizing .dashboard-widget-controls {
+  display: flex;
+}
+
+.dashboard-widget-control {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-strong);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.dashboard-widget-control:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.dashboard-widget-panel {
+  height: 100%;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel-strong);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dashboard-widget-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dashboard-widget-panel-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.dashboard-widget-panel-header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.dashboard-widget-badge {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.dashboard-widget-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.dashboard-widget-list li {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dashboard-widget-rank {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.dashboard-widget-driver {
+  font-weight: 600;
+}
+
+.dashboard-widget-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.dashboard-widget-points {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.dashboard-widget-weather-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.dashboard-widget-weather-temp {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dashboard-widget-weather-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.dashboard-widget-embed {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.dashboard-widget-embed-fallback {
+  display: grid;
+  gap: 8px;
+  place-items: start;
+}
+
+.dashboard-widget-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.dashboard-widget-customize-panel {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel-strong);
+  padding: 16px;
+  margin-bottom: 18px;
+}
+
+.dashboard-widget-customize-panel h3 {
+  margin: 0 0 8px;
+}
+
+.dashboard-widget-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.dashboard-widget-catalog {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dashboard-widget-catalog-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dashboard-widget-catalog-row label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.dashboard-widget-custom-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 900px) {
+  .dashboard-widget.is-panel {
+    grid-column: span 1;
+  }
+
+  .dashboard-widget-catalog-row {
+    grid-template-columns: 1fr;
+  }
+}

@@ -19,7 +19,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, List, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
+from urllib.request import Request as UrlRequest, urlopen
 
 import aiosqlite
 import uuid
@@ -3229,6 +3230,167 @@ async def get_stats() -> dict:
         'pm_overdue': pm_overdue,
         'open_accidents': open_accidents,
     }
+
+
+NASCAR_SNAPSHOT_PATH = ROOT_DIR / 'data' / 'nascar_standings_snapshot.json'
+WEATHER_CODES = {
+    0: 'Clear sky',
+    1: 'Mainly clear',
+    2: 'Partly cloudy',
+    3: 'Overcast',
+    45: 'Fog',
+    48: 'Depositing rime fog',
+    51: 'Light drizzle',
+    53: 'Drizzle',
+    55: 'Dense drizzle',
+    61: 'Slight rain',
+    63: 'Rain',
+    65: 'Heavy rain',
+    71: 'Slight snow',
+    73: 'Snow',
+    75: 'Heavy snow',
+    80: 'Rain showers',
+    81: 'Rain showers',
+    82: 'Violent rain showers',
+    95: 'Thunderstorm',
+    96: 'Thunderstorm with hail',
+    99: 'Thunderstorm with heavy hail',
+}
+
+
+def _fetch_json_url(url: str, timeout: int = 12) -> Any:
+    request = UrlRequest(
+        url,
+        headers={
+            'User-Agent': 'MaintainSMIP/1.6 (+https://maintainsmip.onrender.com)',
+            'Accept': 'application/json',
+        },
+    )
+    with urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode('utf-8'))
+
+
+def _load_nascar_snapshot() -> dict[str, Any]:
+    if NASCAR_SNAPSHOT_PATH.exists():
+        return json.loads(NASCAR_SNAPSHOT_PATH.read_text(encoding='utf-8'))
+    return {
+        'season': datetime.utcnow().year,
+        'series': 'NASCAR Cup Series',
+        'updated': datetime.utcnow().date().isoformat(),
+        'source': 'snapshot',
+        'drivers': [],
+    }
+
+
+def _try_live_nascar_standings() -> Optional[dict[str, Any]]:
+    season = datetime.utcnow().year
+    candidates = [
+        f'https://cf.nascar.com/cacher/{season}/1/cup-series-standings-feed.json',
+        f'https://cf.nascar.com/cacher/{season - 1}/1/cup-series-standings-feed.json',
+    ]
+    for url in candidates:
+        try:
+            payload = _fetch_json_url(url, timeout=8)
+            standings = payload.get('standings') or []
+            if not standings:
+                continue
+            drivers_raw = standings[0].get('driver_standings') or []
+            drivers = []
+            for row in drivers_raw[:10]:
+                drivers.append({
+                    'position': row.get('position') or row.get('rank') or len(drivers) + 1,
+                    'driver': row.get('driver_name') or row.get('full_name') or 'Unknown',
+                    'team': row.get('owner_name') or row.get('team') or '',
+                    'points': row.get('points') or 0,
+                })
+            if drivers:
+                return {
+                    'season': season,
+                    'series': 'NASCAR Cup Series',
+                    'updated': datetime.utcnow().date().isoformat(),
+                    'source': 'live',
+                    'drivers': drivers,
+                }
+        except Exception:
+            continue
+    return None
+
+
+@app.get('/api/widgets/weather')
+async def widget_weather(
+    request: Request,
+    location: str = Query(''),
+    lat: Optional[float] = Query(None),
+    lon: Optional[float] = Query(None),
+) -> dict[str, Any]:
+    require_authenticated_user(request)
+    resolved_lat = lat
+    resolved_lon = lon
+    resolved_name = location.strip()
+
+    if resolved_lat is None or resolved_lon is None:
+        if not resolved_name:
+            raise HTTPException(status_code=400, detail='Provide a location or latitude/longitude.')
+        resolved_name = re.sub(r'\s*,\s*', ', ', resolved_name)
+        geo_url = (
+            'https://geocoding-api.open-meteo.com/v1/search?'
+            + urlencode({'name': resolved_name, 'count': 1, 'language': 'en', 'format': 'json'})
+        )
+        try:
+            geo = await asyncio.to_thread(_fetch_json_url, geo_url, 10)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f'Weather lookup failed: {exc}') from exc
+        results = geo.get('results') or []
+        if not results:
+            raise HTTPException(status_code=404, detail=f'No location found for "{resolved_name}".')
+        hit = results[0]
+        resolved_lat = float(hit['latitude'])
+        resolved_lon = float(hit['longitude'])
+        resolved_name = ', '.join(
+            part for part in [hit.get('name'), hit.get('admin1'), hit.get('country_code')] if part
+        )
+
+    forecast_url = (
+        'https://api.open-meteo.com/v1/forecast?'
+        + urlencode({
+            'latitude': resolved_lat,
+            'longitude': resolved_lon,
+            'current': 'temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m',
+            'temperature_unit': 'fahrenheit',
+            'wind_speed_unit': 'mph',
+            'timezone': 'auto',
+        })
+    )
+    try:
+        forecast = await asyncio.to_thread(_fetch_json_url, forecast_url, 10)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f'Weather forecast failed: {exc}') from exc
+
+    current = forecast.get('current') or {}
+    code = int(current.get('weather_code') or 0)
+    return {
+        'location': resolved_name,
+        'latitude': resolved_lat,
+        'longitude': resolved_lon,
+        'temperature_f': current.get('temperature_2m'),
+        'wind_mph': current.get('wind_speed_10m'),
+        'humidity': current.get('relative_humidity_2m'),
+        'condition': WEATHER_CODES.get(code, 'Weather update'),
+        'weather_code': code,
+        'timezone': forecast.get('timezone'),
+    }
+
+
+@app.get('/api/widgets/nascar-standings')
+async def widget_nascar_standings(request: Request) -> dict[str, Any]:
+    require_authenticated_user(request)
+    live = await asyncio.to_thread(_try_live_nascar_standings)
+    if live:
+        return live
+    snapshot = await asyncio.to_thread(_load_nascar_snapshot)
+    snapshot['source'] = 'snapshot'
+    snapshot['live_url'] = 'https://www.nascar.com/standings/cup-series/'
+    return snapshot
 
 
 class LoginRequest(BaseModel):

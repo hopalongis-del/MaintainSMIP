@@ -1,4 +1,4 @@
-const APP_VERSION = '1.5.4';
+const APP_VERSION = '1.6.0';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
 
@@ -73,6 +73,7 @@ const DEFAULT_SETTINGS = {
   notifyOverdueWo: true,
   notifyPmDue: true,
   notifyAccidents: true,
+  dashboardWidgets: [],
 };
 
 function readStoredSettings() {
@@ -455,6 +456,12 @@ function buildSettingsModal() {
               </select>
             </label>
           </form>
+        </section>
+
+        <section class="settings-section">
+          <h3>Dashboard</h3>
+          <p class="hero-sub">Customize widgets from the dashboard with <strong>Customize Widgets</strong>. Weather uses Open-Meteo — set a city or enable device location per widget.</p>
+          <p class="hero-sub">Built-ins: fleet stat cards, weather, NASCAR Cup top 10, and custom website embeds.</p>
         </section>
 
         <section class="settings-section">

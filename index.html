@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dashboard | MaintainSMIP</title>
     <link rel="icon" href="logo1.png" type="image/png" />
-    <script src="themes.js?v=1.5.4"></script>
-    <link rel="stylesheet" href="shared.css?v=1.5.4" />
-    <script src="smi_events.js?v=1.5.4"></script>
-    <script src="settings.js?v=1.5.4"></script>
+    <script src="themes.js?v=1.6.0"></script>
+    <link rel="stylesheet" href="shared.css?v=1.6.0" />
+    <link rel="stylesheet" href="dashboard_widgets.css?v=1.6.0" />
+    <script src="smi_events.js?v=1.6.0"></script>
+    <script src="settings.js?v=1.6.0"></script>
     <style>
       .filter-bar {
         display: grid;
@@ -126,22 +127,13 @@
           <a class="btn secondary" href="accidents.html">Accident Damage</a>
         </div>
 
-        <div class="dash-strip">
-          <a class="stat-card stat-card-link" href="workorders.html?status=open" title="View open work orders">
-            <strong class="stat-num loading-pulse" id="stat-open">—</strong><span class="stat-label">Open Work Orders</span>
-          </a>
-          <a class="stat-card stat-card-link alert" href="workorders.html?overdue=1" title="View overdue work orders">
-            <strong class="stat-num loading-pulse" id="stat-overdue">—</strong><span class="stat-label">Overdue Work Orders</span>
-          </a>
-          <a class="stat-card stat-card-link" href="pm.html?due=week" title="View PM due this week">
-            <strong class="stat-num loading-pulse" id="stat-pm-week">—</strong><span class="stat-label" id="stat-pm-week-label">PM Due This Week</span>
-          </a>
-          <a class="stat-card stat-card-link alert" href="pm.html?status=overdue" title="View overdue PM">
-            <strong class="stat-num loading-pulse" id="stat-pm-overdue">—</strong><span class="stat-label">PM Overdue</span>
-          </a>
-          <a class="stat-card stat-card-link alert" href="accidents.html?open=1" title="View open accident reports">
-            <strong class="stat-num loading-pulse" id="stat-accidents">—</strong><span class="stat-label">Open Accident Reports</span>
-          </a>
+        <div class="dashboard-widget-toolbar">
+          <p class="hero-sub" style="margin: 0;">Drag-free widget board — show fleet stats, weather, NASCAR, or your own sites.</p>
+          <button type="button" class="btn secondary" id="dashboard-customize-btn">Customize Widgets</button>
+        </div>
+        <div class="dashboard-widget-customize-panel hidden" id="dashboard-widget-customize"></div>
+        <div class="dashboard-widget-grid" id="dashboard-widget-grid">
+          <div class="empty-state loading-pulse">Loading dashboard widgets…</div>
         </div>
 
         <h2 class="section-title" id="fleet">Fleet Overview</h2>
@@ -289,7 +281,8 @@
       </div>
     </div>
 
-    <script src="db.js?v=1.5.4"></script>
+    <script src="db.js?v=1.6.0"></script>
+    <script src="dashboard_widgets.js?v=1.6.0"></script>
     <script>
       function formatDate(value) {
         if (window.MaintainSMIPSettings?.formatDate) {
@@ -500,14 +493,11 @@
           setFleetWriteUi(db.userCanWrite());
 
           const stats = await db.getStats();
-          document.getElementById('stat-open').textContent = stats.open_work_orders ?? 0;
-          document.getElementById('stat-overdue').textContent = stats.overdue_work_orders ?? 0;
           const pms = await db.getPmRecords();
           const pmDueCount = pms.filter((p) => p.status === 'scheduled' && window.MaintainSMIPSettings?.isPmDueSoon?.(p.scheduled_date)).length;
-          document.getElementById('stat-pm-week').textContent = pmDueCount;
-          document.getElementById('stat-pm-overdue').textContent = stats.pm_overdue ?? 0;
-          document.getElementById('stat-accidents').textContent = stats.open_accidents ?? 0;
-          document.querySelectorAll('.stat-num').forEach(el => el.classList.remove('loading-pulse'));
+          if (window.MaintainSMIPDashboard) {
+            window.MaintainSMIPDashboard.updateStats(stats, pmDueCount);
+          }
 
           const wos = await db.getWorkOrders({ limit: 5 });
           const woList = document.getElementById('recent-wo-list');
@@ -767,6 +757,7 @@
       document.getElementById('fleet-filter-search').addEventListener('input', renderFleetTable);
 
       updatePmLabels();
+      window.MaintainSMIPDashboard?.init();
       window.addEventListener('maintainsmip-settings-changed', () => {
         updatePmLabels();
         loadDashboard();
