@@ -551,7 +551,7 @@
 
     window.addEventListener('maintainsmip-settings-changed', () => {
       renderCustomizePanel();
-      render();
+      if (customizing) render();
     });
 
     render();
@@ -560,7 +560,18 @@
   function updateStats(stats = {}, pmDueCount = 0) {
     latestStats = stats;
     latestPmDueCount = pmDueCount;
-    render();
+    const grid = document.getElementById('dashboard-widget-grid');
+    const hasWidgets = grid?.querySelector('[data-widget-id]');
+    if (!hasWidgets) {
+      render();
+      return;
+    }
+    enabledWidgets()
+      .filter((widget) => widget.type === 'stat')
+      .forEach((widget) => {
+        const valueEl = grid.querySelector(`[data-widget-id="${widget.id}"] .stat-num`);
+        if (valueEl) valueEl.textContent = statValue(widget);
+      });
   }
 
   window.MaintainSMIPDashboard = {

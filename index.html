@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dashboard | MaintainSMIP</title>
     <link rel="icon" href="logo1.png" type="image/png" />
-    <script src="themes.js?v=1.6.0"></script>
-    <link rel="stylesheet" href="shared.css?v=1.6.0" />
-    <link rel="stylesheet" href="dashboard_widgets.css?v=1.6.0" />
-    <script src="smi_events.js?v=1.6.0"></script>
-    <script src="settings.js?v=1.6.0"></script>
+    <script src="themes.js?v=1.6.1"></script>
+    <link rel="stylesheet" href="shared.css?v=1.6.1" />
+    <link rel="stylesheet" href="dashboard_widgets.css?v=1.6.1" />
+    <script src="smi_events.js?v=1.6.1"></script>
+    <script src="settings.js?v=1.6.1"></script>
     <style>
       .filter-bar {
         display: grid;
@@ -281,8 +281,8 @@
       </div>
     </div>
 
-    <script src="db.js?v=1.6.0"></script>
-    <script src="dashboard_widgets.js?v=1.6.0"></script>
+    <script src="db.js?v=1.6.1"></script>
+    <script src="dashboard_widgets.js?v=1.6.1"></script>
     <script>
       function formatDate(value) {
         if (window.MaintainSMIPSettings?.formatDate) {
@@ -316,6 +316,7 @@
       let allCarts = [];
       let editingCartId = null;
       let fleetWriteEnabled = false;
+      let recentWorkOrders = [];
 
       function getUniqueSorted(values) {
         return Array.from(new Set(values.filter(Boolean))).sort();
@@ -499,12 +500,12 @@
             window.MaintainSMIPDashboard.updateStats(stats, pmDueCount);
           }
 
-          const wos = await db.getWorkOrders({ limit: 5 });
+          recentWorkOrders = await db.getWorkOrders({ limit: 5 });
           const woList = document.getElementById('recent-wo-list');
-          if (!wos.length) {
+          if (!recentWorkOrders.length) {
             woList.innerHTML = '<div class="empty-state"><h3>No work orders yet</h3><p><a class="section-title-link" href="workorders.html">Go to Work Orders</a> to create one.</p></div>';
           } else {
-            woList.innerHTML = wos.map(wo => `
+            woList.innerHTML = recentWorkOrders.map(wo => `
               <div class="recent-row wo-clickable" data-wo-id="${wo.id}" tabindex="0" role="button" aria-label="View work order ${wo.id}">
                 <span class="recent-id">WO-${wo.id}</span>
                 <span class="recent-title">${wo.title}</span>
@@ -560,35 +561,6 @@
         window.location.href = `workorders.html?search=${encodeURIComponent(row.dataset.cartId)}`;
       });
 
-      // Work order modal handler
-      woList.addEventListener('click', async (event) => {
-        const woClickable = event.target.closest('.wo-clickable');
-        if (!woClickable) return;
-        
-        event.preventDefault();
-        event.stopPropagation();
-        
-        const woId = woClickable.dataset.woId;
-        const wo = wos.find(w => String(w.id) === woId);
-        if (!wo) return;
-        
-        openWorkOrderModal(wo);
-      });
-      
-      // Also handle keyboard navigation
-      woList.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          const woClickable = event.target.closest('.wo-clickable');
-          if (woClickable) {
-            event.preventDefault();
-            const woId = woClickable.dataset.woId;
-            const wo = wos.find(w => String(w.id) === woId);
-            if (wo) openWorkOrderModal(wo);
-          }
-        }
-      });
-      
-      // Work order modal functions
       function openWorkOrderModal(wo) {
         const modal = document.createElement('div');
         modal.className = 'modal';
@@ -755,6 +727,26 @@
       });
       document.getElementById('fleet-filter-model').addEventListener('change', renderFleetTable);
       document.getElementById('fleet-filter-search').addEventListener('input', renderFleetTable);
+
+      const recentWoList = document.getElementById('recent-wo-list');
+      if (recentWoList) {
+        recentWoList.addEventListener('click', (event) => {
+          const woClickable = event.target.closest('.wo-clickable');
+          if (!woClickable) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const wo = recentWorkOrders.find((w) => String(w.id) === woClickable.dataset.woId);
+          if (wo) openWorkOrderModal(wo);
+        });
+        recentWoList.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          const woClickable = event.target.closest('.wo-clickable');
+          if (!woClickable) return;
+          event.preventDefault();
+          const wo = recentWorkOrders.find((w) => String(w.id) === woClickable.dataset.woId);
+          if (wo) openWorkOrderModal(wo);
+        });
+      }
 
       updatePmLabels();
       window.MaintainSMIPDashboard?.init();
