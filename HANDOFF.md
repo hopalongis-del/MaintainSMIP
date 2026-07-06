@@ -41,7 +41,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\MaintainSMIP` |
 | **Local AI** | `maintainsmip-guru` — prompt: `ollama/SYSTEM_PROMPT.md`, updates: `ollama/MODEL_UPDATES.md` |
-| **App version** | 1.6.2 (`settings.js`) |
+| **App version** | 1.6.3 (`settings.js`) |
 
 ```powershell
 cd "C:\MaintainSMIP"
@@ -277,6 +277,11 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 
 ## Shipped recently (2026-07-06)
 
+- Responsive UI fixes across phone + laptop (v1.6.3):
+  - Dashboard stat cards were collapsing to a sliver with the number/label overflowing — the `<a class="stat-card">` inside `.dashboard-widget` defaulted to `display:inline`. Made the widget a flex column and its card/panel fill the cell (`dashboard_widgets.css`).
+  - Fleet table now renders as stacked, labeled cards on phone (via `data-label` + `html[data-layout='phone']` CSS in `index.html`) instead of hiding Status/Actions behind horizontal scroll. Desktop still uses the normal table.
+  - Admin Team Accounts rows wrap on phone so the Reset Password/Delete buttons no longer overflow the viewport (`shared.css`).
+  - PM tab controls (Schedule/Templates/Automation) wrap cleanly; `.top-strip` wraps so tabs drop to their own row instead of overflowing (`pm.css`).
 - Simplify dashboard widgets — remove custom website embeds; weather + NASCAR Cup only (v1.6.2)
 - Phone nav as tap-friendly buttons; auto-detect phone vs laptop layout (v1.6.2)
 - Fix dashboard stuck on loading — `woList` ReferenceError broke all dashboard JS (v1.6.1)

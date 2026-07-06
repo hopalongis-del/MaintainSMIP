@@ -22,6 +22,28 @@
 .dashboard-widget {
   position: relative;
   min-height: 108px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Make the card/panel fill its grid cell. Without this the stat card is an
+   inline <a> that collapses to a sliver and its number/label overflow. */
+.dashboard-widget > .stat-card,
+.dashboard-widget > .dashboard-widget-panel {
+  flex: 1 1 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dashboard-widget-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.dashboard-widget-stat .stat-label {
+  margin-bottom: 0;
 }
 
 .dashboard-widget.is-panel {

@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dashboard | MaintainSMIP</title>
     <link rel="icon" href="logo1.png" type="image/png" />
-    <script src="themes.js?v=1.6.2"></script>
-    <link rel="stylesheet" href="shared.css?v=1.6.2" />
-    <link rel="stylesheet" href="dashboard_widgets.css?v=1.6.2" />
-    <script src="smi_events.js?v=1.6.2"></script>
-    <script src="settings.js?v=1.6.2"></script>
+    <script src="themes.js?v=1.6.3"></script>
+    <link rel="stylesheet" href="shared.css?v=1.6.3" />
+    <link rel="stylesheet" href="dashboard_widgets.css?v=1.6.3" />
+    <script src="smi_events.js?v=1.6.3"></script>
+    <script src="settings.js?v=1.6.3"></script>
     <style>
       .filter-bar {
         display: grid;
@@ -91,6 +91,66 @@
         .filter-bar {
           grid-template-columns: 1fr;
         }
+      }
+
+      /* Phone: render the fleet table as stacked cards so every column
+         (Status, Actions) is visible without horizontal scrolling. */
+      html[data-layout='phone'] .fleet-table thead {
+        display: none;
+      }
+
+      html[data-layout='phone'] .fleet-table,
+      html[data-layout='phone'] .fleet-table tbody,
+      html[data-layout='phone'] .fleet-table tr,
+      html[data-layout='phone'] .fleet-table td {
+        display: block;
+        width: 100%;
+      }
+
+      html[data-layout='phone'] .fleet-table tr {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--surface);
+        margin-bottom: 12px;
+        padding: 4px 6px;
+      }
+
+      html[data-layout='phone'] .fleet-table tr:hover {
+        background: var(--surface);
+      }
+
+      html[data-layout='phone'] .fleet-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 9px 10px;
+        white-space: normal;
+        overflow: visible;
+        max-width: none;
+        text-align: right;
+      }
+
+      html[data-layout='phone'] .fleet-table td:not(:last-child) {
+        border-bottom: 1px solid var(--border);
+      }
+
+      html[data-layout='phone'] .fleet-table td[data-label]::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 0.82rem;
+        text-align: left;
+      }
+
+      html[data-layout='phone'] .fleet-table .fleet-action-cell {
+        border-bottom: none;
+      }
+
+      html[data-layout='phone'] .fleet-table .fleet-edit-btn {
+        width: 100%;
+        padding: 10px;
+        font-size: 0.95rem;
       }
     </style>
   </head>
@@ -281,8 +341,8 @@
       </div>
     </div>
 
-    <script src="db.js?v=1.6.2"></script>
-    <script src="dashboard_widgets.js?v=1.6.2"></script>
+    <script src="db.js?v=1.6.3"></script>
+    <script src="dashboard_widgets.js?v=1.6.3"></script>
     <script>
       function formatDate(value) {
         if (window.MaintainSMIPSettings?.formatDate) {
@@ -464,18 +524,18 @@
         const body = document.getElementById('fleet-table-body');
         const SHOWN_LIMIT = 300;
         const actionCell = fleetWriteEnabled
-          ? (cart) => `<td><button type="button" class="btn ghost fleet-edit-btn" data-edit-cart="${String(cart.id).replace(/"/g, '&quot;')}">Edit</button></td>`
+          ? (cart) => `<td class="fleet-action-cell"><button type="button" class="btn ghost fleet-edit-btn" data-edit-cart="${String(cart.id).replace(/"/g, '&quot;')}">Edit</button></td>`
           : () => '';
         const colSpan = fleetWriteEnabled ? 6 : 5;
 
         body.innerHTML = filtered.length
           ? filtered.slice(0, SHOWN_LIMIT).map(cart => `
               <tr data-cart-id="${cart.id}" title="View work orders for cart #${cart.id}">
-                <td>${cart.id}</td>
-                <td>${cart.serial || '—'}</td>
-                <td>${cart.model || '—'}</td>
-                <td>${cart.year || '—'}</td>
-                <td>${cart.status || '—'}</td>
+                <td data-label="ID">${cart.id}</td>
+                <td data-label="Serial">${cart.serial || '—'}</td>
+                <td data-label="Model">${cart.model || '—'}</td>
+                <td data-label="Year">${cart.year || '—'}</td>
+                <td data-label="Status">${cart.status || '—'}</td>
                 ${actionCell(cart)}
               </tr>
             `).join('')

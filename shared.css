@@ -1430,6 +1430,19 @@ html[data-layout='phone'] .filter-group {
   min-width: 100%;
 }
 
+html[data-layout='phone'] .admin-user-row {
+  flex-wrap: wrap;
+}
+
+html[data-layout='phone'] .admin-user-actions {
+  width: 100%;
+}
+
+html[data-layout='phone'] .admin-user-actions .btn {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
 html[data-layout='phone'] input,
 html[data-layout='phone'] select {
   min-height: 44px;
