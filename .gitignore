@@ -11,14 +11,32 @@ backup_config.local.json
 uploads/
 imports/*.png
 
+# Secrets — NEVER commit. Real values live only in env vars / the Render dashboard.
+# See .env.example for the list of names (no values). Adding a secret here is
+# not enough on its own — see CLAUDE.md for the full credential policy.
+.env
+.env.local
+.env.production
+.env.development
+.env.staging
+.env.*.local
+vapid_keys.json
+secrets/
+*.pem
+*.key
+!.env.example
+
 # Open WebUI knowledge sync copies (regenerate with scripts/sync-open-webui-knowledge.ps1)
 open-webui-knowledge/*
 !open-webui-knowledge/README.md
 
-# IDE / agent tooling
+# IDE / agent tooling — keep .claude/settings.json shared so the credential
+# guardrails travel with the repo; keep personal/local settings out.
 .vscode/
 .continue/
-.claude/
+.claude/*
+!.claude/settings.json
+.claude/settings.local.json
 *.code-workspace
 
 # OS junk
