@@ -1,5 +1,5 @@
 self.addEventListener('push', (event) => {
-  let payload = { title: 'MaintainSMIP', body: 'You have a new fleet alert.', url: '/index.html' };
+  let payload = { title: 'Fleet Maintain', body: 'You have a new fleet alert.', url: '/index.html' };
   try {
     if (event.data) {
       payload = { ...payload, ...event.data.json() };
@@ -9,11 +9,11 @@ self.addEventListener('push', (event) => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(payload.title || 'MaintainSMIP', {
+    self.registration.showNotification(payload.title || 'Fleet Maintain', {
       body: payload.body || '',
-      icon: '/logo1.png',
-      badge: '/logo1.png',
-      tag: payload.tag || 'maintainsmip-alert',
+      icon: '/logo.svg',
+      badge: '/logo.svg',
+      tag: payload.tag || 'fleet-maintain-alert',
       data: { url: payload.url || '/index.html' },
     }),
   );

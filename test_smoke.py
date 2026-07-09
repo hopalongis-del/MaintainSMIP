@@ -37,25 +37,28 @@ def test_legacy_password_login(client: TestClient) -> None:
     assert response.json()["user"]["username"] == "admin"
 
 
-def ensure_mike_test_password(client: TestClient, password: str = "WeLoveRacing!") -> None:
-    """Reset mike.casady to a known password so tests stay idempotent on local DBs."""
+def ensure_mike_test_password(client: TestClient, password: str = "mike") -> None:
+    """Reset owner account to known credentials (username mike / password mike)."""
     login(client)
     users = client.get("/api/users").json()
-    mike = next((user for user in users if user["username"] == "mike.casady"), None)
+    mike = next((user for user in users if user["username"] == "mike"), None)
     if not mike:
         return
     client.put(f"/api/users/{mike['id']}", json={"password": password})
     client.post("/api/auth/logout")
 
 
-def test_seeded_user_resync_login(client: TestClient) -> None:
+def test_owner_login(client: TestClient) -> None:
     client.post("/api/auth/logout")
     response = client.post(
         "/api/auth/login",
-        json={"username": "mike.casady", "password": "WeLoveRacing!"},
+        json={"username": "mike", "password": "mike"},
     )
     assert response.status_code == 200, response.text
-    assert response.json()["user"]["role"] == "admin"
+    body = response.json()
+    assert body["user"]["username"] == "mike"
+    assert body["user"]["role"] == "admin"
+    assert body["user"]["password_changed"] is True
 
 
 def test_team_members_and_audit_users(client: TestClient) -> None:
@@ -224,7 +227,7 @@ def test_change_password(client: TestClient) -> None:
     client.post("/api/auth/logout")
     login = client.post(
         "/api/auth/login",
-        json={"username": "mike.casady", "password": "WeLoveRacing!"},
+        json={"username": "mike", "password": "mike"},
     )
     assert login.status_code == 200, login.text
 
@@ -236,28 +239,25 @@ def test_change_password(client: TestClient) -> None:
 
     changed = client.post(
         "/api/auth/change-password",
-        json={"current_password": "WeLoveRacing!", "new_password": "NewPass123!"},
+        json={"current_password": "mike", "new_password": "NewPass123!"},
     )
     assert changed.status_code == 200, changed.text
 
     client.post("/api/auth/logout")
     old_login = client.post(
         "/api/auth/login",
-        json={"username": "mike.casady", "password": "WeLoveRacing!"},
+        json={"username": "mike", "password": "mike"},
     )
     assert old_login.status_code == 401, old_login.text
 
     new_login = client.post(
         "/api/auth/login",
-        json={"username": "mike.casady", "password": "NewPass123!"},
+        json={"username": "mike", "password": "NewPass123!"},
     )
     assert new_login.status_code == 200, new_login.text
 
-    client.post(
-        "/api/auth/change-password",
-        json={"current_password": "NewPass123!", "new_password": "WeLoveRacing!"},
-    )
-    client.post("/api/auth/logout")
+    # Self-service change requires 8+ chars; restore short owner password via admin reset.
+    ensure_mike_test_password(client, "mike")
 
 
 def _is_numeric_cart_id(value) -> bool:
@@ -435,7 +435,7 @@ def run_tests(client: TestClient) -> None:
     login(client)
     ensure_mike_test_password(client)
     test_legacy_password_login(client)
-    test_seeded_user_resync_login(client)
+    test_owner_login(client)
     test_change_password(client)
     test_admin_user_management(client)
     test_team_members_and_audit_users(client)

@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sign In | MaintainSMIP</title>
-    <link rel="icon" href="logo1.png" type="image/png" />
-    <script src="themes.js?v=1.6.3"></script>
-    <link rel="stylesheet" href="shared.css?v=1.6.3" />
-    <script src="smi_events.js?v=1.6.3"></script>
-    <script src="settings.js?v=1.6.3"></script>
+    <title>Sign In | Fleet Maintain</title>
+    <link rel="icon" href="logo.svg" type="image/svg+xml" />
+    <script src="themes.js?v=1.7.2"></script>
+    <link rel="stylesheet" href="shared.css?v=1.7.2" />
+    <script src="smi_events.js?v=1.7.2"></script>
+    <script src="settings.js?v=1.7.2"></script>
     <style>
       .login-shell {
         min-height: calc(100vh - 48px);
@@ -59,21 +59,21 @@
     <div class="page login-shell">
       <section class="card login-card">
         <div class="login-brand">
-          <img src="logo1.png" alt="MaintainSMIP" />
+          <img src="logo.svg" alt="Fleet Maintain" />
           <div>
             <span class="eyebrow">Secure Access</span>
-            <h2 style="margin: 6px 0 0;">MaintainSMIP</h2>
+            <h2 style="margin: 6px 0 0;">Fleet Maintain</h2>
           </div>
         </div>
-        <p class="hero-sub">Sign in with your username and the site password.</p>
+        <p class="hero-sub">Sign in with your username and password.</p>
         <form class="login-form" id="login-form">
           <div class="filter-group">
             <label for="username">Username</label>
-            <input id="username" type="text" autocomplete="username" required autofocus placeholder="admin" />
+            <input id="username" type="text" autocomplete="username" required autofocus placeholder="mike" />
           </div>
           <div class="filter-group">
             <label for="password">Password</label>
-            <input id="password" type="password" autocomplete="current-password" required placeholder="Your password" />
+            <input id="password" type="password" autocomplete="current-password" required placeholder="Password" />
           </div>
           <p class="login-error" id="login-error" aria-live="polite"></p>
           <button class="btn primary" type="submit" id="login-btn">Sign In</button>
@@ -112,7 +112,7 @@
             } catch (err) {
               /* ignore */
             }
-            errorEl.textContent = `${detail} Use username mike.casady and the real site password (e.g. WeLoveRacing!).`;
+            errorEl.textContent = detail;
             btn.disabled = false;
             return;
           }

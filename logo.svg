@@ -1,0 +1,15 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Fleet Maintain">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#g)"/>
+  <rect x="8" y="8" width="48" height="48" rx="12" fill="none" stroke="#e11d29" stroke-width="2.5"/>
+  <path d="M18 38h28c1.5 0 2.5-1.2 2.5-2.6V28c0-1.4-1-2.5-2.4-2.5H36l-3.2-5.2A2.2 2.2 0 0 0 30.9 19H24a2 2 0 0 0-2 1.6L20.4 25.5H18c-1.4 0-2.5 1.1-2.5 2.5v7.4C15.5 36.8 16.5 38 18 38z" fill="#f8fafc"/>
+  <circle cx="24" cy="38" r="4.2" fill="#e11d29"/>
+  <circle cx="40" cy="38" r="4.2" fill="#e11d29"/>
+  <circle cx="24" cy="38" r="1.6" fill="#0f172a"/>
+  <circle cx="40" cy="38" r="1.6" fill="#0f172a"/>
+</svg>

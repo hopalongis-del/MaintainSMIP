@@ -1,4 +1,5 @@
-const APP_VERSION = '1.7.1';
+const APP_VERSION = '1.7.2';
+const APP_NAME = 'Fleet Maintain';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
 
@@ -12,7 +13,7 @@ const {
 } = window.MaintainSMIPThemes;
 
 const TECHNICIAN_FALLBACK = [
-  'Mike Casady',
+  'Mike',
 ];
 
 let cachedTeamAssignees = null;
@@ -155,8 +156,8 @@ function applySettings(settings = getSettings()) {
   if (footer) {
     const shop = settings.shopName || DEFAULT_SETTINGS.shopName;
     footer.textContent = shop && shop !== 'Fleet Shop'
-      ? `MaintainSMIP · ${shop}`
-      : 'MaintainSMIP · Fleet Maintenance';
+      ? `${APP_NAME} · ${shop}`
+      : `${APP_NAME} · Fleet Maintenance`;
   }
 }
 
@@ -361,7 +362,7 @@ function buildSettingsModal() {
         <div class="modal-header">
           <div>
             <span class="eyebrow">Settings</span>
-            <h2>Customize MaintainSMIP</h2>
+            <h2>Customize ${APP_NAME}</h2>
           </div>
           <button class="btn ghost" type="button" id="settings-close" aria-label="Close settings">Close</button>
         </div>
@@ -557,7 +558,7 @@ function buildSettingsModal() {
           <h3>About</h3>
           <div class="settings-about">
             <p><strong>Version</strong> <span id="settings-app-version">${APP_VERSION}</span></p>
-            <p class="hero-sub">MaintainSMIP · Golf cart fleet maintenance.</p>
+            <p class="hero-sub">${APP_NAME} · Golf cart fleet maintenance.</p>
           </div>
         </section>
 
@@ -916,7 +917,7 @@ function wireChangePasswordForm() {
     if (modal?.dataset.forcePassword === 'true') {
       if (window.__currentUser) window.__currentUser.password_changed = true;
       exitForcedPasswordMode();
-      status.textContent = 'Password set. You can continue using MaintainSMIP.';
+      status.textContent = `Password set. You can continue using ${APP_NAME}.`;
     }
   });
 }
@@ -1104,7 +1105,7 @@ function exitForcedPasswordMode() {
   if (closeBtn) closeBtn.classList.remove('hidden');
 
   const headerTitle = modal.querySelector('.modal-header h2');
-  if (headerTitle) headerTitle.textContent = 'Customize MaintainSMIP';
+  if (headerTitle) headerTitle.textContent = `Customize ${APP_NAME}`;
 
   const headerEyebrow = modal.querySelector('.modal-header .eyebrow');
   if (headerEyebrow) headerEyebrow.textContent = 'Settings';
@@ -1179,6 +1180,7 @@ function applyStoredSettingsEarly() {
 }
 
 window.MaintainSMIPSettings = {
+  APP_NAME,
   APP_VERSION,
   get: getSettings,
   save: saveSettings,

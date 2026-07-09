@@ -77,7 +77,7 @@ Seeded on first boot (`TECHNICIAN_ACCOUNTS` + `admin` in `server.py`):
 | Username | Role | Initial password |
 |----------|------|------------------|
 | `admin` | Master admin | `APP_PASSWORD` (demo: `WeLoveRacing!`) |
-| `mike.casady` | **Admin** | `APP_PASSWORD` until changed (product owner) |
+| `mike` | **Admin** | **`mike`** (product owner; simple username) |
 
 Former SMI Properties team accounts were removed in v1.7.1 (customer deal did not close).
 

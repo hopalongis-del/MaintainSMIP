@@ -41,7 +41,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\MaintainSMIP` |
 | **Local AI** | `maintainsmip-guru` — prompt: `ollama/SYSTEM_PROMPT.md`, updates: `ollama/MODEL_UPDATES.md` |
-| **App version** | 1.7.1 (`settings.js`) |
+| **App version** | 1.7.2 (`settings.js`) — product UI name **Fleet Maintain** |
 
 ```powershell
 cd "C:\MaintainSMIP"
@@ -102,8 +102,8 @@ Local guru/Open WebUI files are **extras** for development assistance, not a sec
 | Account | Role | Password | Notes |
 |---------|------|----------|-------|
 | `admin` | Master admin | `WeLoveRacing!` (or Render `APP_PASSWORD`) | Legacy password-only login also works |
-| `mike.casady` | Admin | **`mike`** | Changed per owner request; short password allowed via admin reset only |
-| Other seeded users | — | — | Only `admin` + `mike.casady` seed; former customer techs removed |
+| `mike` | Admin | **`mike`** | Product owner; simple username (not first.last). Pinned on boot. |
+| Other seeded users | — | — | Only `admin` + `mike`; former customer techs removed |
 
 **Password rules:**
 - Self-service change (`POST /api/auth/change-password`): min **8** characters
@@ -296,7 +296,8 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 
 ## Shipped recently (2026-07-09)
 
-- **Unbrand + purge SMIP customer data (v1.7.1)** — remove SMI Properties branding; empty fleet seed; one-time DB purge of carts/WO/PM/accidents/parts and former team logins; product seeds only `admin` + `mike.casady`
+- **Login rebrand + owner login (v1.7.2)** — UI name **Fleet Maintain**, generic SVG logo (no SMI mark), owner is `mike` / `mike` (not `mike.casady`)
+- **Unbrand + purge SMIP customer data (v1.7.1)** — remove SMI Properties branding; empty fleet seed; one-time DB purge of carts/WO/PM/accidents/parts and former team logins
 - **Parts module v1.7.0** — real inventory UI replaces zen placeholder; vendors; purchase orders; smoke tests
 
 ## Shipped recently (2026-07-06)

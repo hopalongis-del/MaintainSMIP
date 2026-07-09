@@ -101,14 +101,23 @@ VAPID_EMAIL = os.environ.get('VAPID_EMAIL', 'mailto:admin@localhost')
 VAPID_KEYS_PATH = DATA_DIR / 'vapid_keys.json'
 NOTIFICATION_CHECK_INTERVAL_SEC = int(os.environ.get('NOTIFICATION_CHECK_INTERVAL_SEC', '1800'))
 
-# Product-owner seed only — former customer team accounts removed (deal did not close).
+# Product-owner account (simple username — not first.last).
+OWNER_USERNAME = 'mike'
+OWNER_DISPLAY_NAME = 'Mike'
+OWNER_PASSWORD = 'mike'
+
+# Seeded team accounts: (username, display_name, role, initial_password|None)
+# None password → APP_PASSWORD + password_changed=0 (must set personal password).
+# Explicit password → hashed as given + password_changed=1 (no forced change).
 TECHNICIAN_ACCOUNTS = [
-    ('mike.casady', 'Mike Casady', 'admin'),
+    (OWNER_USERNAME, OWNER_DISPLAY_NAME, 'admin', OWNER_PASSWORD),
 ]
 
 PRIVILEGED_ROLE_OVERRIDES = {
-    'mike.casady': 'admin',
+    OWNER_USERNAME: 'admin',
 }
+
+LEGACY_OWNER_USERNAMES = ('mike.casady',)
 
 # One-time purge of former-customer demo data (fleet, WO/PM/accidents, team logins).
 FORMER_CUSTOMER_PURGE_KEY = 'former_customer_purge_v1'
@@ -127,6 +136,13 @@ OPERATIONAL_TABLES_TO_PURGE = (
 )
 
 SEEDED_USERNAMES = {MASTER_USERNAME, *(account[0] for account in TECHNICIAN_ACCOUNTS)}
+
+
+def account_seed_password(account: tuple) -> tuple[str, int]:
+    """Return (password, password_changed_flag) for a TECHNICIAN_ACCOUNTS row."""
+    if len(account) >= 4 and account[3]:
+        return str(account[3]), 1
+    return (APP_PASSWORD or 'WeLoveRacing!'), 0
 
 
 def hash_password(password: str) -> str:
@@ -307,13 +323,15 @@ async def ensure_users_seeded() -> None:
         await upsert_master_admin(master_password)
         now = datetime.utcnow().isoformat()
         async with aiosqlite.connect(DB_PATH) as connection:
-            for username, display_name, role in TECHNICIAN_ACCOUNTS:
+            for account in TECHNICIAN_ACCOUNTS:
+                username, display_name, role = account[0], account[1], account[2]
+                password, changed = account_seed_password(account)
                 await connection.execute(
                     '''
-                    INSERT INTO users (username, display_name, role, password_hash, active, created_date)
-                    VALUES (?, ?, ?, ?, 1, ?)
+                    INSERT INTO users (username, display_name, role, password_hash, active, password_changed, created_date)
+                    VALUES (?, ?, ?, ?, 1, ?, ?)
                     ''',
-                    (username, display_name, role, hash_password(master_password), now),
+                    (username, display_name, role, hash_password(password), changed, now),
                 )
             await connection.commit()
         return
@@ -338,10 +356,11 @@ async def apply_privileged_role_overrides() -> None:
 
 async def ensure_seeded_team_accounts() -> None:
     """Insert any missing TECHNICIAN_ACCOUNTS rows (used after purge / upgrades)."""
-    master_password = APP_PASSWORD or 'WeLoveRacing!'
     now = datetime.utcnow().isoformat()
     async with aiosqlite.connect(DB_PATH) as connection:
-        for username, display_name, role in TECHNICIAN_ACCOUNTS:
+        for account in TECHNICIAN_ACCOUNTS:
+            username, display_name, role = account[0], account[1], account[2]
+            password, changed = account_seed_password(account)
             cursor = await connection.execute(
                 'SELECT id FROM users WHERE username = ?',
                 (username,),
@@ -350,10 +369,64 @@ async def ensure_seeded_team_accounts() -> None:
                 continue
             await connection.execute(
                 '''
-                INSERT INTO users (username, display_name, role, password_hash, active, created_date)
-                VALUES (?, ?, ?, ?, 1, ?)
+                INSERT INTO users (username, display_name, role, password_hash, active, password_changed, created_date)
+                VALUES (?, ?, ?, ?, 1, ?, ?)
                 ''',
-                (username, display_name, role, hash_password(master_password), now),
+                (username, display_name, role, hash_password(password), changed, now),
+            )
+        await connection.commit()
+
+
+async def ensure_owner_account() -> None:
+    """Rename legacy first.last owner logins and pin username/password to mike / mike."""
+    password_hash = hash_password(OWNER_PASSWORD)
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute(
+            'SELECT id FROM users WHERE username = ?',
+            (OWNER_USERNAME,),
+        )
+        owner_exists = await cursor.fetchone()
+
+        for legacy in LEGACY_OWNER_USERNAMES:
+            if owner_exists:
+                # Prefer the simple username; drop leftover first.last account.
+                await connection.execute(
+                    'DELETE FROM users WHERE username = ?',
+                    (legacy,),
+                )
+            else:
+                await connection.execute(
+                    '''
+                    UPDATE users
+                    SET username = ?, display_name = ?, role = 'admin', active = 1
+                    WHERE username = ?
+                    ''',
+                    (OWNER_USERNAME, OWNER_DISPLAY_NAME, legacy),
+                )
+
+        cursor = await connection.execute(
+            'SELECT id FROM users WHERE username = ?',
+            (OWNER_USERNAME,),
+        )
+        existing = await cursor.fetchone()
+        if existing:
+            await connection.execute(
+                '''
+                UPDATE users
+                SET display_name = ?, role = 'admin', password_hash = ?,
+                    password_changed = 1, active = 1
+                WHERE username = ?
+                ''',
+                (OWNER_DISPLAY_NAME, password_hash, OWNER_USERNAME),
+            )
+        else:
+            await connection.execute(
+                '''
+                INSERT INTO users (username, display_name, role, password_hash, active, password_changed, created_date)
+                VALUES (?, ?, 'admin', ?, 1, 1, ?)
+                ''',
+                (OWNER_USERNAME, OWNER_DISPLAY_NAME, password_hash, now),
             )
         await connection.commit()
 
@@ -655,6 +728,7 @@ async def lifespan(app: FastAPI):
     await ensure_wo_templates_seeded()
     await ensure_users_seeded()
     await ensure_seeded_team_accounts()
+    await ensure_owner_account()
     if SEED_DEMO_DATA:
         await seed_demo_data()
     notification_task = asyncio.create_task(notification_loop())
@@ -666,7 +740,7 @@ async def lifespan(app: FastAPI):
         pass
 
 
-app = FastAPI(title='MaintainSMIP API', version='1.0', lifespan=lifespan)
+app = FastAPI(title='Fleet Maintain API', version='1.0', lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=['*'],
