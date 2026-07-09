@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Parts | MaintainSMIP</title>
     <link rel="icon" href="logo1.png" type="image/png" />
-    <script src="themes.js?v=1.6.3"></script>
-    <link rel="stylesheet" href="shared.css?v=1.6.3" />
-    <link rel="stylesheet" href="parts.css?v=1.6.3" />
-    <script src="smi_events.js?v=1.6.3"></script>
-    <script src="settings.js?v=1.6.3"></script>
+    <script src="themes.js?v=1.7.0"></script>
+    <link rel="stylesheet" href="shared.css?v=1.7.0" />
+    <link rel="stylesheet" href="parts.css?v=1.7.0" />
+    <script src="smi_events.js?v=1.7.0"></script>
+    <script src="settings.js?v=1.7.0"></script>
   </head>
   <body>
     <div class="page">
@@ -32,21 +32,255 @@
         </div>
       </nav>
 
-      <section class="card page-section parts-zen" aria-label="Parts coming soon">
-        <div class="parts-zen-media" aria-hidden="true">
-          <img src="parts-ocean.jpg" alt="" />
+      <section class="card page-section">
+        <div class="top-strip">
+          <div>
+            <span class="eyebrow">Parts &amp; Inventory</span>
+            <h2>Track stock, vendors, and purchase orders.</h2>
+            <p class="hero-sub">
+              Inventory with reorder points. Draft POs require human approval before AvidXchange (coming later).
+            </p>
+          </div>
+          <div class="tab-controls">
+            <button class="btn secondary active" type="button" id="tab-inventory" data-parts-tab="inventory">Inventory</button>
+            <button class="btn secondary" type="button" id="tab-vendors" data-parts-tab="vendors">Vendors</button>
+            <button class="btn secondary" type="button" id="tab-pos" data-parts-tab="pos">Purchase Orders</button>
+          </div>
         </div>
-        <div class="parts-zen-overlay">
-          <p class="parts-zen-eyebrow">Parts &amp; Inventory</p>
-          <h1 class="parts-zen-title">Enjoy the zen while we build.</h1>
-          <p class="parts-zen-copy">
-            The parts module is on the way. For now, breathe, watch the water, and we&rsquo;ll meet you back here when the shelves are stocked.
-          </p>
+
+        <div class="dash-strip" id="parts-dashboard-strip">
+          <div class="stat-card" title="Active parts">
+            <span>Active Parts</span>
+            <strong id="count-parts">0</strong>
+          </div>
+          <div class="stat-card stat-card-link" role="button" tabindex="0" id="stat-low-stock" title="Filter low stock">
+            <span>Low Stock</span>
+            <strong id="count-low-stock">0</strong>
+          </div>
+          <div class="stat-card" title="Active vendors">
+            <span>Vendors</span>
+            <strong id="count-vendors">0</strong>
+          </div>
+          <div class="stat-card" title="Draft purchase orders">
+            <span>Draft POs</span>
+            <strong id="count-draft-pos">0</strong>
+          </div>
+          <div class="stat-card" title="Inventory value (on hand × unit cost)">
+            <span>Inv. Value</span>
+            <strong id="count-inv-value">$0</strong>
+          </div>
+        </div>
+
+        <!-- Inventory tab -->
+        <div id="inventory-view">
+          <div class="filter-bar">
+            <div class="filter-group">
+              <label for="part-filter-search">Search</label>
+              <input id="part-filter-search" type="search" placeholder="Part #, description, location" />
+            </div>
+            <div class="filter-group">
+              <label for="part-filter-stock">Stock</label>
+              <select id="part-filter-stock">
+                <option value="all">All</option>
+                <option value="low">Low stock only</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="part-filter-vendor">Vendor</label>
+              <select id="part-filter-vendor">
+                <option value="all">All</option>
+              </select>
+            </div>
+            <div class="filter-group filter-actions">
+              <button class="btn primary" type="button" id="new-part-btn">Add Part</button>
+              <button class="btn secondary" type="button" id="draft-reorder-btn">Draft PO from Low Stock</button>
+            </div>
+          </div>
+          <div class="parts-table-wrap">
+            <table class="parts-table" id="parts-table">
+              <thead>
+                <tr>
+                  <th>Part #</th>
+                  <th>Description</th>
+                  <th>Vendor</th>
+                  <th>On Hand</th>
+                  <th>Reorder</th>
+                  <th>Cost</th>
+                  <th>Location</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="parts-tbody"></tbody>
+            </table>
+            <p class="hero-sub" id="parts-empty">No parts yet. Add your first part to start tracking inventory.</p>
+          </div>
+        </div>
+
+        <!-- Vendors tab -->
+        <div id="vendors-view" class="hidden">
+          <div class="filter-bar">
+            <div class="filter-group">
+              <label for="vendor-filter-search">Search</label>
+              <input id="vendor-filter-search" type="search" placeholder="Name, contact, account #" />
+            </div>
+            <div class="filter-group filter-actions">
+              <button class="btn primary" type="button" id="new-vendor-btn">Add Vendor</button>
+            </div>
+          </div>
+          <div class="parts-table-wrap">
+            <table class="parts-table" id="vendors-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Contact</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Account #</th>
+                  <th>Terms</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="vendors-tbody"></tbody>
+            </table>
+            <p class="hero-sub" id="vendors-empty">No vendors yet.</p>
+          </div>
+        </div>
+
+        <!-- Purchase orders tab -->
+        <div id="pos-view" class="hidden">
+          <div class="filter-bar">
+            <div class="filter-group">
+              <label for="po-filter-status">Status</label>
+              <select id="po-filter-status">
+                <option value="all">All</option>
+                <option value="draft">Draft</option>
+                <option value="approved">Approved</option>
+                <option value="submitted">Submitted</option>
+                <option value="received">Received</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div class="filter-group filter-actions">
+              <button class="btn primary" type="button" id="new-po-btn">New Draft PO</button>
+            </div>
+          </div>
+          <div class="parts-table-wrap">
+            <table class="parts-table" id="pos-table">
+              <thead>
+                <tr>
+                  <th>PO #</th>
+                  <th>Vendor</th>
+                  <th>Status</th>
+                  <th>Lines</th>
+                  <th>Total</th>
+                  <th>Requested By</th>
+                  <th>Created</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="pos-tbody"></tbody>
+            </table>
+            <p class="hero-sub" id="pos-empty">No purchase orders yet.</p>
+          </div>
         </div>
       </section>
 
       <footer class="page-footer" data-settings-footer>MaintainSMIP · SMI Properties Fleet Maintenance</footer>
     </div>
-    <script src="db.js?v=1.6.3"></script>
+
+    <!-- Part modal -->
+    <div class="modal hidden" id="part-modal" aria-hidden="true">
+      <div class="modal-card parts-modal-card">
+        <div class="modal-header">
+          <h3 id="part-modal-title">Add Part</h3>
+          <button class="btn secondary" type="button" data-close-modal="part-modal">Close</button>
+        </div>
+        <form id="part-form" class="parts-form">
+          <input type="hidden" id="part-id" />
+          <div class="form-grid">
+            <label>Part Number<input id="part-number" type="text" placeholder="BRK-204" /></label>
+            <label>Description *<input id="part-description" type="text" required placeholder="Brake pad set" /></label>
+            <label>Category<input id="part-category" type="text" placeholder="Brakes" /></label>
+            <label>Vendor
+              <select id="part-vendor"></select>
+            </label>
+            <label>Vendor Part #<input id="part-vendor-pn" type="text" /></label>
+            <label>Unit of Measure<input id="part-uom" type="text" value="each" /></label>
+            <label>Unit Cost ($)<input id="part-cost" type="number" step="0.01" min="0" value="0" /></label>
+            <label>On Hand<input id="part-on-hand" type="number" step="any" min="0" value="0" /></label>
+            <label>Reorder Point<input id="part-reorder-point" type="number" step="any" min="0" value="0" /></label>
+            <label>Reorder Qty<input id="part-reorder-qty" type="number" step="any" min="0" value="0" /></label>
+            <label>Location<input id="part-location" type="text" placeholder="Cage A / Bin 3" /></label>
+            <label class="checkbox-label"><input id="part-active" type="checkbox" checked /> Active</label>
+          </div>
+          <label class="full-width">Notes<textarea id="part-notes" rows="2"></textarea></label>
+          <div class="modal-actions">
+            <button class="btn secondary" type="button" data-close-modal="part-modal">Cancel</button>
+            <button class="btn primary" type="submit" id="part-save-btn">Save Part</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Stock adjust modal -->
+    <div class="modal hidden" id="adjust-modal" aria-hidden="true">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Adjust Stock</h3>
+          <button class="btn secondary" type="button" data-close-modal="adjust-modal">Close</button>
+        </div>
+        <form id="adjust-form" class="parts-form">
+          <input type="hidden" id="adjust-part-id" />
+          <p class="hero-sub" id="adjust-part-label"></p>
+          <label>Change (+ receive / − use)<input id="adjust-delta" type="number" step="any" required placeholder="e.g. -2 or 10" /></label>
+          <label>Note<input id="adjust-note" type="text" placeholder="Optional" /></label>
+          <div class="modal-actions">
+            <button class="btn secondary" type="button" data-close-modal="adjust-modal">Cancel</button>
+            <button class="btn primary" type="submit">Apply</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Vendor modal -->
+    <div class="modal hidden" id="vendor-modal" aria-hidden="true">
+      <div class="modal-card parts-modal-card">
+        <div class="modal-header">
+          <h3 id="vendor-modal-title">Add Vendor</h3>
+          <button class="btn secondary" type="button" data-close-modal="vendor-modal">Close</button>
+        </div>
+        <form id="vendor-form" class="parts-form">
+          <input type="hidden" id="vendor-id" />
+          <div class="form-grid">
+            <label>Name *<input id="vendor-name" type="text" required /></label>
+            <label>Contact<input id="vendor-contact" type="text" /></label>
+            <label>Email<input id="vendor-email" type="email" /></label>
+            <label>Phone<input id="vendor-phone" type="text" /></label>
+            <label>Account #<input id="vendor-account" type="text" /></label>
+            <label>Default Terms<input id="vendor-terms" type="text" placeholder="Net 30" /></label>
+            <label class="checkbox-label"><input id="vendor-active" type="checkbox" checked /> Active</label>
+          </div>
+          <label class="full-width">Notes<textarea id="vendor-notes" rows="2"></textarea></label>
+          <div class="modal-actions">
+            <button class="btn secondary" type="button" data-close-modal="vendor-modal">Cancel</button>
+            <button class="btn primary" type="submit">Save Vendor</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- PO detail / create modal -->
+    <div class="modal hidden" id="po-modal" aria-hidden="true">
+      <div class="modal-card parts-modal-card">
+        <div class="modal-header">
+          <h3 id="po-modal-title">Purchase Order</h3>
+          <button class="btn secondary" type="button" data-close-modal="po-modal">Close</button>
+        </div>
+        <div id="po-detail-body" class="parts-form"></div>
+      </div>
+    </div>
+
+    <script src="db.js?v=1.7.0"></script>
+    <script src="parts.js?v=1.7.0"></script>
   </body>
 </html>

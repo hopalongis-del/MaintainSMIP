@@ -292,6 +292,82 @@ def test_pm_record_dedup(client: TestClient) -> None:
     client.delete(f"/api/pm/records/{record_id}")
 
 
+def test_parts_module(client: TestClient) -> None:
+    login(client)
+
+    stats = client.get("/api/parts/stats")
+    assert stats.status_code == 200, stats.text
+    body = stats.json()
+    assert "active_parts" in body
+    assert "low_stock" in body
+
+    vendor = client.post(
+        "/api/vendors",
+        json={
+            "name": f"Smoke Vendor {int(time.time())}",
+            "email": "smoke@example.com",
+            "default_terms": "Net 30",
+            "active": True,
+        },
+    )
+    assert vendor.status_code == 200, vendor.text
+    vendor_id = vendor.json()["id"]
+
+    part = client.post(
+        "/api/parts",
+        json={
+            "part_number": f"SMK-{int(time.time()) % 100000}",
+            "description": "Smoke test brake pad",
+            "category": "Brakes",
+            "vendor_id": vendor_id,
+            "unit_of_measure": "each",
+            "unit_cost": 12.5,
+            "on_hand": 2,
+            "reorder_point": 5,
+            "reorder_qty": 10,
+            "location": "Cage A",
+            "active": True,
+        },
+    )
+    assert part.status_code == 200, part.text
+    part_id = part.json()["id"]
+    assert part.json()["needs_reorder"] is True
+
+    listed = client.get("/api/parts?low_stock=1")
+    assert listed.status_code == 200, listed.text
+    assert any(item["id"] == part_id for item in listed.json())
+
+    adjusted = client.post(
+        f"/api/parts/{part_id}/adjust",
+        json={"delta": 8, "note": "smoke receive"},
+    )
+    assert adjusted.status_code == 200, adjusted.text
+    assert adjusted.json()["on_hand"] == 10
+    assert adjusted.json()["needs_reorder"] is False
+
+    # Drop back below reorder so from-reorder works
+    client.post(f"/api/parts/{part_id}/adjust", json={"delta": -8, "note": "smoke use"})
+
+    po = client.post(f"/api/purchase-orders/from-reorder?vendor_id={vendor_id}")
+    assert po.status_code == 200, po.text
+    po_body = po.json()
+    assert po_body["status"] == "draft"
+    assert po_body["po_number"]
+    assert len(po_body["lines"]) >= 1
+
+    approved = client.put(
+        f"/api/purchase-orders/{po_body['id']}",
+        json={"status": "approved"},
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "approved"
+    assert approved.json()["approved_by"]
+
+    vendors = client.get("/api/vendors")
+    assert vendors.status_code == 200, vendors.text
+    assert any(item["id"] == vendor_id for item in vendors.json())
+
+
 def test_new_user_must_change_password_flag(client: TestClient) -> None:
     login(client)
     temp_username = f"smoke.temp.{int(time.time())}"
@@ -331,6 +407,7 @@ def run_tests(client: TestClient) -> None:
     test_database_restore(client)
     test_database_backup_token(client)
     test_pm_record_dedup(client)
+    test_parts_module(client)
     test_new_user_must_change_password_flag(client)
     login(client)
 
@@ -429,7 +506,8 @@ def run_tests(client: TestClient) -> None:
 
     parts_page = client.get("/parts.html")
     assert parts_page.status_code == 200, parts_page.text
-    assert "Enjoy the zen while we build" in parts_page.text
+    assert "Parts &amp; Inventory" in parts_page.text or "Parts & Inventory" in parts_page.text
+    assert "parts.js" in parts_page.text
 
     weather = client.get("/api/widgets/weather?location=Charlotte")
     assert weather.status_code == 200, weather.text

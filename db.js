@@ -839,4 +839,237 @@ const db = {
     }
     return r.json();
   },
+
+  async getPartsStats() {
+    const r = await fetchApi('/api/parts/stats');
+    if (!r.ok) throw new Error(`Parts stats failed (${r.status})`);
+    return r.json();
+  },
+
+  async getParts(params = {}) {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') p.set(key, value);
+    });
+    const q = p.toString() ? `?${p}` : '';
+    const r = await fetchApi(`/api/parts${q}`);
+    if (!r.ok) throw new Error(`Parts list failed (${r.status})`);
+    return r.json();
+  },
+
+  async getPart(id) {
+    const r = await fetchApi(`/api/parts/${id}`);
+    if (!r.ok) {
+      let detail = `Get part failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async createPart(payload) {
+    const r = await fetchApi('/api/parts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Create part failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async updatePart(id, payload) {
+    const r = await fetchApi(`/api/parts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Update part failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async adjustPartStock(id, payload) {
+    const r = await fetchApi(`/api/parts/${id}/adjust`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Stock adjust failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async deletePart(id) {
+    const r = await fetchApi(`/api/parts/${id}`, { method: 'DELETE' });
+    if (!r.ok) {
+      let detail = `Delete part failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async getVendors(params = {}) {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') p.set(key, value);
+    });
+    const q = p.toString() ? `?${p}` : '';
+    const r = await fetchApi(`/api/vendors${q}`);
+    if (!r.ok) throw new Error(`Vendors list failed (${r.status})`);
+    return r.json();
+  },
+
+  async createVendor(payload) {
+    const r = await fetchApi('/api/vendors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Create vendor failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async updateVendor(id, payload) {
+    const r = await fetchApi(`/api/vendors/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Update vendor failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async getPurchaseOrders(params = {}) {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') p.set(key, value);
+    });
+    const q = p.toString() ? `?${p}` : '';
+    const r = await fetchApi(`/api/purchase-orders${q}`);
+    if (!r.ok) throw new Error(`PO list failed (${r.status})`);
+    return r.json();
+  },
+
+  async getPurchaseOrder(id) {
+    const r = await fetchApi(`/api/purchase-orders/${id}`);
+    if (!r.ok) {
+      let detail = `Get PO failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async createPurchaseOrder(payload) {
+    const r = await fetchApi('/api/purchase-orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Create PO failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async updatePurchaseOrder(id, payload) {
+    const r = await fetchApi(`/api/purchase-orders/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Update PO failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async createPoFromReorder(vendorId = null) {
+    const q = vendorId != null ? `?vendor_id=${encodeURIComponent(vendorId)}` : '';
+    const r = await fetchApi(`/api/purchase-orders/from-reorder${q}`, { method: 'POST' });
+    if (!r.ok) {
+      let detail = `Reorder PO failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
 };

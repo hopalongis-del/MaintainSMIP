@@ -840,6 +840,133 @@ class AccidentReport(AccidentReportBase):
     created_date: str
 
 
+class VendorBase(BaseModel):
+    name: str
+    contact_name: Optional[str] = ''
+    email: Optional[str] = ''
+    phone: Optional[str] = ''
+    account_number: Optional[str] = ''
+    default_terms: Optional[str] = ''
+    avid_vendor_id: Optional[str] = ''
+    active: bool = True
+    notes: Optional[str] = ''
+
+
+class VendorCreate(VendorBase):
+    pass
+
+
+class VendorUpdate(BaseModel):
+    name: Optional[str] = None
+    contact_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    account_number: Optional[str] = None
+    default_terms: Optional[str] = None
+    avid_vendor_id: Optional[str] = None
+    active: Optional[bool] = None
+    notes: Optional[str] = None
+
+
+class Vendor(VendorBase):
+    id: int
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class PartBase(BaseModel):
+    part_number: Optional[str] = ''
+    description: str
+    category: Optional[str] = ''
+    vendor_id: Optional[int] = None
+    vendor_part_number: Optional[str] = ''
+    unit_of_measure: str = 'each'
+    unit_cost: float = 0
+    on_hand: float = 0
+    reorder_point: float = 0
+    reorder_qty: float = 0
+    location: Optional[str] = ''
+    active: bool = True
+    notes: Optional[str] = ''
+
+
+class PartCreate(PartBase):
+    pass
+
+
+class PartUpdate(BaseModel):
+    part_number: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    vendor_id: Optional[int] = None
+    vendor_part_number: Optional[str] = None
+    unit_of_measure: Optional[str] = None
+    unit_cost: Optional[float] = None
+    on_hand: Optional[float] = None
+    reorder_point: Optional[float] = None
+    reorder_qty: Optional[float] = None
+    location: Optional[str] = None
+    active: Optional[bool] = None
+    notes: Optional[str] = None
+
+
+class Part(PartBase):
+    id: int
+    vendor_name: Optional[str] = None
+    needs_reorder: bool = False
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class PartStockAdjust(BaseModel):
+    delta: float
+    note: Optional[str] = ''
+
+
+class PurchaseOrderLine(BaseModel):
+    part_id: Optional[int] = None
+    part_number: Optional[str] = ''
+    description: str = ''
+    qty: float = 1
+    unit_cost: float = 0
+
+
+class PurchaseOrderBase(BaseModel):
+    vendor_id: Optional[int] = None
+    status: str = 'draft'
+    lines: List[PurchaseOrderLine] = Field(default_factory=list)
+    notes: Optional[str] = ''
+
+
+class PurchaseOrderCreate(PurchaseOrderBase):
+    pass
+
+
+class PurchaseOrderUpdate(BaseModel):
+    vendor_id: Optional[int] = None
+    status: Optional[str] = None
+    lines: Optional[List[PurchaseOrderLine]] = None
+    notes: Optional[str] = None
+    approved_by: Optional[str] = None
+
+
+class PurchaseOrder(PurchaseOrderBase):
+    id: int
+    po_number: Optional[str] = None
+    subtotal: float = 0
+    total: float = 0
+    requested_by: Optional[str] = None
+    approved_by: Optional[str] = None
+    avid_po_id: Optional[str] = None
+    avid_status: Optional[str] = None
+    idempotency_key: Optional[str] = None
+    vendor_name: Optional[str] = None
+    created_at: Optional[str] = None
+    approved_at: Optional[str] = None
+    submitted_at: Optional[str] = None
+    last_synced_at: Optional[str] = None
+
+
 class AuditEntry(BaseModel):
     id: int
     created_at: str
@@ -1840,6 +1967,73 @@ async def create_tables() -> None:
                 last_run_at TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            )
+            '''
+        )
+        # --- Parts / procurement module (Phase 1: data model) ---
+        # Generic schema so the shop manager can shape the UI later. The
+        # avid_* columns are stubs for the AvidXchange adapter (Phase 3) so
+        # wiring it in later needs no further migration.
+        await connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS vendors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                contact_name TEXT,
+                email TEXT,
+                phone TEXT,
+                account_number TEXT,
+                default_terms TEXT,
+                avid_vendor_id TEXT,
+                active INTEGER NOT NULL DEFAULT 1,
+                notes TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+            '''
+        )
+        await connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS parts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                part_number TEXT,
+                description TEXT NOT NULL,
+                category TEXT,
+                vendor_id INTEGER,
+                vendor_part_number TEXT,
+                unit_of_measure TEXT NOT NULL DEFAULT 'each',
+                unit_cost REAL NOT NULL DEFAULT 0,
+                on_hand REAL NOT NULL DEFAULT 0,
+                reorder_point REAL NOT NULL DEFAULT 0,
+                reorder_qty REAL NOT NULL DEFAULT 0,
+                location TEXT,
+                active INTEGER NOT NULL DEFAULT 1,
+                notes TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+            '''
+        )
+        await connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS purchase_orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                po_number TEXT,
+                vendor_id INTEGER,
+                status TEXT NOT NULL DEFAULT 'draft',
+                lines TEXT NOT NULL DEFAULT '[]',
+                subtotal REAL NOT NULL DEFAULT 0,
+                total REAL NOT NULL DEFAULT 0,
+                notes TEXT,
+                requested_by TEXT,
+                approved_by TEXT,
+                avid_po_id TEXT,
+                avid_status TEXT,
+                idempotency_key TEXT,
+                created_at TEXT,
+                approved_at TEXT,
+                submitted_at TEXT,
+                last_synced_at TEXT
             )
             '''
         )
@@ -3047,6 +3241,740 @@ async def delete_accident(request: Request, accident_id: int) -> dict:
 
     await record_audit(request, 'deleted', 'accident', accident_id, f'Deleted ACC-{accident_id}')
     return {'deleted': accident_id}
+
+
+# --- Parts / procurement ---
+
+PO_STATUSES = ('draft', 'approved', 'submitted', 'received', 'cancelled')
+
+
+def vendor_row_to_item(row: Any) -> Vendor:
+    data = dict(row)
+    return Vendor(
+        id=data['id'],
+        name=data.get('name') or '',
+        contact_name=data.get('contact_name') or '',
+        email=data.get('email') or '',
+        phone=data.get('phone') or '',
+        account_number=data.get('account_number') or '',
+        default_terms=data.get('default_terms') or '',
+        avid_vendor_id=data.get('avid_vendor_id') or '',
+        active=bool(data.get('active', 1)),
+        notes=data.get('notes') or '',
+        created_at=data.get('created_at'),
+        updated_at=data.get('updated_at'),
+    )
+
+
+def part_row_to_item(row: Any) -> Part:
+    data = dict(row)
+    on_hand = float(data.get('on_hand') or 0)
+    reorder_point = float(data.get('reorder_point') or 0)
+    return Part(
+        id=data['id'],
+        part_number=data.get('part_number') or '',
+        description=data.get('description') or '',
+        category=data.get('category') or '',
+        vendor_id=data.get('vendor_id'),
+        vendor_part_number=data.get('vendor_part_number') or '',
+        unit_of_measure=data.get('unit_of_measure') or 'each',
+        unit_cost=float(data.get('unit_cost') or 0),
+        on_hand=on_hand,
+        reorder_point=reorder_point,
+        reorder_qty=float(data.get('reorder_qty') or 0),
+        location=data.get('location') or '',
+        active=bool(data.get('active', 1)),
+        notes=data.get('notes') or '',
+        vendor_name=data.get('vendor_name'),
+        needs_reorder=on_hand <= reorder_point,
+        created_at=data.get('created_at'),
+        updated_at=data.get('updated_at'),
+    )
+
+
+def po_row_to_item(row: Any) -> PurchaseOrder:
+    data = dict(row)
+    raw_lines = data.get('lines') or '[]'
+    if isinstance(raw_lines, str):
+        try:
+            parsed = json.loads(raw_lines)
+        except json.JSONDecodeError:
+            parsed = []
+    else:
+        parsed = raw_lines
+    lines = [PurchaseOrderLine(**line) if isinstance(line, dict) else line for line in parsed]
+    return PurchaseOrder(
+        id=data['id'],
+        po_number=data.get('po_number'),
+        vendor_id=data.get('vendor_id'),
+        status=data.get('status') or 'draft',
+        lines=lines,
+        subtotal=float(data.get('subtotal') or 0),
+        total=float(data.get('total') or 0),
+        notes=data.get('notes') or '',
+        requested_by=data.get('requested_by'),
+        approved_by=data.get('approved_by'),
+        avid_po_id=data.get('avid_po_id'),
+        avid_status=data.get('avid_status'),
+        idempotency_key=data.get('idempotency_key'),
+        vendor_name=data.get('vendor_name'),
+        created_at=data.get('created_at'),
+        approved_at=data.get('approved_at'),
+        submitted_at=data.get('submitted_at'),
+        last_synced_at=data.get('last_synced_at'),
+    )
+
+
+def po_lines_totals(lines: List[PurchaseOrderLine]) -> tuple[list[dict[str, Any]], float]:
+    serialized: list[dict[str, Any]] = []
+    subtotal = 0.0
+    for line in lines:
+        payload = line.model_dump() if isinstance(line, PurchaseOrderLine) else dict(line)
+        qty = float(payload.get('qty') or 0)
+        unit_cost = float(payload.get('unit_cost') or 0)
+        subtotal += qty * unit_cost
+        serialized.append(payload)
+    return serialized, subtotal
+
+
+async def fetch_vendor(vendor_id: int) -> Optional[dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute('SELECT * FROM vendors WHERE id = ?', (vendor_id,))
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def fetch_part(part_id: int) -> Optional[dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            '''
+            SELECT p.*, v.name AS vendor_name
+            FROM parts p
+            LEFT JOIN vendors v ON v.id = p.vendor_id
+            WHERE p.id = ?
+            ''',
+            (part_id,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def fetch_po(po_id: int) -> Optional[dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            '''
+            SELECT po.*, v.name AS vendor_name
+            FROM purchase_orders po
+            LEFT JOIN vendors v ON v.id = po.vendor_id
+            WHERE po.id = ?
+            ''',
+            (po_id,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+@app.get('/api/parts/stats')
+async def parts_stats(request: Request) -> dict[str, Any]:
+    require_authenticated_user(request)
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            'SELECT COUNT(*) AS total FROM parts WHERE active = 1'
+        )
+        active_parts = (await cursor.fetchone())['total']
+        cursor = await connection.execute(
+            '''
+            SELECT COUNT(*) AS total FROM parts
+            WHERE active = 1 AND on_hand <= reorder_point
+            '''
+        )
+        low_stock = (await cursor.fetchone())['total']
+        cursor = await connection.execute(
+            'SELECT COUNT(*) AS total FROM vendors WHERE active = 1'
+        )
+        active_vendors = (await cursor.fetchone())['total']
+        cursor = await connection.execute(
+            "SELECT COUNT(*) AS total FROM purchase_orders WHERE status = 'draft'"
+        )
+        draft_pos = (await cursor.fetchone())['total']
+        cursor = await connection.execute(
+            '''
+            SELECT COALESCE(SUM(on_hand * unit_cost), 0) AS value
+            FROM parts WHERE active = 1
+            '''
+        )
+        inventory_value = float((await cursor.fetchone())['value'] or 0)
+    return {
+        'active_parts': active_parts,
+        'low_stock': low_stock,
+        'active_vendors': active_vendors,
+        'draft_pos': draft_pos,
+        'inventory_value': round(inventory_value, 2),
+    }
+
+
+@app.get('/api/vendors', response_model=List[Vendor])
+async def list_vendors(
+    request: Request,
+    active: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+) -> List[Vendor]:
+    require_authenticated_user(request)
+    clauses: list[str] = []
+    params: list[Any] = []
+    if active in ('0', '1', 'true', 'false'):
+        clauses.append('active = ?')
+        params.append(1 if active in ('1', 'true') else 0)
+    if search:
+        clauses.append('(name LIKE ? OR contact_name LIKE ? OR account_number LIKE ?)')
+        like = f'%{search.strip()}%'
+        params.extend([like, like, like])
+    where = f'WHERE {" AND ".join(clauses)}' if clauses else ''
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            f'SELECT * FROM vendors {where} ORDER BY name COLLATE NOCASE',
+            params,
+        )
+        rows = await cursor.fetchall()
+    return [vendor_row_to_item(row) for row in rows]
+
+
+@app.get('/api/vendors/{vendor_id}', response_model=Vendor)
+async def get_vendor(request: Request, vendor_id: int) -> Vendor:
+    require_authenticated_user(request)
+    row = await fetch_vendor(vendor_id)
+    if not row:
+        raise HTTPException(status_code=404, detail='Vendor not found')
+    return vendor_row_to_item(row)
+
+
+@app.post('/api/vendors', response_model=Vendor)
+async def create_vendor(request: Request, item: VendorCreate) -> Vendor:
+    require_write_access(request)
+    name = (item.name or '').strip()
+    if not name:
+        raise HTTPException(status_code=400, detail='Vendor name is required')
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute(
+            '''
+            INSERT INTO vendors (
+                name, contact_name, email, phone, account_number, default_terms,
+                avid_vendor_id, active, notes, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                name,
+                (item.contact_name or '').strip(),
+                (item.email or '').strip(),
+                (item.phone or '').strip(),
+                (item.account_number or '').strip(),
+                (item.default_terms or '').strip(),
+                (item.avid_vendor_id or '').strip(),
+                1 if item.active else 0,
+                (item.notes or '').strip(),
+                now,
+                now,
+            ),
+        )
+        vendor_id = cursor.lastrowid
+        await connection.commit()
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute('SELECT * FROM vendors WHERE id = ?', (vendor_id,))
+        row = await cursor.fetchone()
+    await record_audit(
+        request,
+        'created',
+        'vendor',
+        vendor_id,
+        f'Added vendor {name}',
+        {'name': name},
+    )
+    return vendor_row_to_item(row)
+
+
+@app.put('/api/vendors/{vendor_id}', response_model=Vendor)
+async def update_vendor(request: Request, vendor_id: int, item: VendorUpdate) -> Vendor:
+    require_write_access(request)
+    existing = await fetch_vendor(vendor_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail='Vendor not found')
+    payload = item.model_dump(exclude_unset=True)
+    if 'name' in payload:
+        payload['name'] = (payload['name'] or '').strip()
+        if not payload['name']:
+            raise HTTPException(status_code=400, detail='Vendor name is required')
+    if 'active' in payload:
+        payload['active'] = 1 if payload['active'] else 0
+    for key in ('contact_name', 'email', 'phone', 'account_number', 'default_terms', 'avid_vendor_id', 'notes'):
+        if key in payload and payload[key] is not None:
+            payload[key] = str(payload[key]).strip()
+    if not payload:
+        return vendor_row_to_item(existing)
+    payload['updated_at'] = datetime.utcnow().isoformat()
+    columns = ', '.join(f'{key} = ?' for key in payload)
+    values = list(payload.values()) + [vendor_id]
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(f'UPDATE vendors SET {columns} WHERE id = ?', values)
+        await connection.commit()
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute('SELECT * FROM vendors WHERE id = ?', (vendor_id,))
+        row = await cursor.fetchone()
+    await record_audit(
+        request,
+        'updated',
+        'vendor',
+        vendor_id,
+        f'Updated vendor {row["name"]}',
+        payload,
+    )
+    return vendor_row_to_item(row)
+
+
+@app.delete('/api/vendors/{vendor_id}')
+async def delete_vendor(request: Request, vendor_id: int) -> dict[str, Any]:
+    require_write_access(request)
+    existing = await fetch_vendor(vendor_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail='Vendor not found')
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            'UPDATE vendors SET active = 0, updated_at = ? WHERE id = ?',
+            (datetime.utcnow().isoformat(), vendor_id),
+        )
+        await connection.commit()
+    await record_audit(
+        request,
+        'deactivated',
+        'vendor',
+        vendor_id,
+        f'Deactivated vendor {existing.get("name")}',
+    )
+    return {'deactivated': vendor_id}
+
+
+@app.get('/api/parts', response_model=List[Part])
+async def list_parts(
+    request: Request,
+    active: Optional[str] = Query(None),
+    low_stock: Optional[str] = Query(None),
+    vendor_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+) -> List[Part]:
+    require_authenticated_user(request)
+    clauses: list[str] = []
+    params: list[Any] = []
+    if active in ('0', '1', 'true', 'false'):
+        clauses.append('p.active = ?')
+        params.append(1 if active in ('1', 'true') else 0)
+    if low_stock in ('1', 'true'):
+        clauses.append('p.on_hand <= p.reorder_point')
+    if vendor_id is not None:
+        clauses.append('p.vendor_id = ?')
+        params.append(vendor_id)
+    if category:
+        clauses.append('p.category = ?')
+        params.append(category.strip())
+    if search:
+        clauses.append(
+            '(p.part_number LIKE ? OR p.description LIKE ? OR p.location LIKE ? OR p.vendor_part_number LIKE ?)'
+        )
+        like = f'%{search.strip()}%'
+        params.extend([like, like, like, like])
+    where = f'WHERE {" AND ".join(clauses)}' if clauses else ''
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            f'''
+            SELECT p.*, v.name AS vendor_name
+            FROM parts p
+            LEFT JOIN vendors v ON v.id = p.vendor_id
+            {where}
+            ORDER BY p.description COLLATE NOCASE
+            ''',
+            params,
+        )
+        rows = await cursor.fetchall()
+    return [part_row_to_item(row) for row in rows]
+
+
+@app.get('/api/parts/{part_id}', response_model=Part)
+async def get_part(request: Request, part_id: int) -> Part:
+    require_authenticated_user(request)
+    row = await fetch_part(part_id)
+    if not row:
+        raise HTTPException(status_code=404, detail='Part not found')
+    return part_row_to_item(row)
+
+
+@app.post('/api/parts', response_model=Part)
+async def create_part(request: Request, item: PartCreate) -> Part:
+    require_write_access(request)
+    description = (item.description or '').strip()
+    if not description:
+        raise HTTPException(status_code=400, detail='Part description is required')
+    if item.vendor_id is not None:
+        vendor = await fetch_vendor(item.vendor_id)
+        if not vendor:
+            raise HTTPException(status_code=400, detail='Vendor not found')
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute(
+            '''
+            INSERT INTO parts (
+                part_number, description, category, vendor_id, vendor_part_number,
+                unit_of_measure, unit_cost, on_hand, reorder_point, reorder_qty,
+                location, active, notes, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                (item.part_number or '').strip(),
+                description,
+                (item.category or '').strip(),
+                item.vendor_id,
+                (item.vendor_part_number or '').strip(),
+                (item.unit_of_measure or 'each').strip() or 'each',
+                float(item.unit_cost or 0),
+                float(item.on_hand or 0),
+                float(item.reorder_point or 0),
+                float(item.reorder_qty or 0),
+                (item.location or '').strip(),
+                1 if item.active else 0,
+                (item.notes or '').strip(),
+                now,
+                now,
+            ),
+        )
+        part_id = cursor.lastrowid
+        await connection.commit()
+    row = await fetch_part(part_id)
+    await record_audit(
+        request,
+        'created',
+        'part',
+        part_id,
+        f'Added part {item.part_number or description}',
+        {'description': description, 'part_number': item.part_number},
+    )
+    return part_row_to_item(row)
+
+
+@app.put('/api/parts/{part_id}', response_model=Part)
+async def update_part(request: Request, part_id: int, item: PartUpdate) -> Part:
+    require_write_access(request)
+    existing = await fetch_part(part_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail='Part not found')
+    payload = item.model_dump(exclude_unset=True)
+    if 'description' in payload:
+        payload['description'] = (payload['description'] or '').strip()
+        if not payload['description']:
+            raise HTTPException(status_code=400, detail='Part description is required')
+    if 'vendor_id' in payload and payload['vendor_id'] is not None:
+        vendor = await fetch_vendor(payload['vendor_id'])
+        if not vendor:
+            raise HTTPException(status_code=400, detail='Vendor not found')
+    if 'active' in payload:
+        payload['active'] = 1 if payload['active'] else 0
+    for key in ('part_number', 'category', 'vendor_part_number', 'unit_of_measure', 'location', 'notes'):
+        if key in payload and payload[key] is not None:
+            payload[key] = str(payload[key]).strip()
+    for key in ('unit_cost', 'on_hand', 'reorder_point', 'reorder_qty'):
+        if key in payload and payload[key] is not None:
+            payload[key] = float(payload[key])
+    if not payload:
+        return part_row_to_item(existing)
+    payload['updated_at'] = datetime.utcnow().isoformat()
+    columns = ', '.join(f'{key} = ?' for key in payload)
+    values = list(payload.values()) + [part_id]
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(f'UPDATE parts SET {columns} WHERE id = ?', values)
+        await connection.commit()
+    row = await fetch_part(part_id)
+    await record_audit(
+        request,
+        'updated',
+        'part',
+        part_id,
+        f'Updated part {row.get("part_number") or row.get("description")}',
+        payload,
+    )
+    return part_row_to_item(row)
+
+
+@app.post('/api/parts/{part_id}/adjust', response_model=Part)
+async def adjust_part_stock(request: Request, part_id: int, body: PartStockAdjust) -> Part:
+    require_write_access(request)
+    existing = await fetch_part(part_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail='Part not found')
+    delta = float(body.delta)
+    new_qty = float(existing.get('on_hand') or 0) + delta
+    if new_qty < 0:
+        raise HTTPException(status_code=400, detail='Stock cannot go below zero')
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            'UPDATE parts SET on_hand = ?, updated_at = ? WHERE id = ?',
+            (new_qty, now, part_id),
+        )
+        await connection.commit()
+    row = await fetch_part(part_id)
+    await record_audit(
+        request,
+        'stock_adjust',
+        'part',
+        part_id,
+        f'Adjusted stock on {row.get("part_number") or row.get("description")}: {delta:+g} → {new_qty:g}',
+        {'delta': delta, 'on_hand': new_qty, 'note': body.note or ''},
+    )
+    return part_row_to_item(row)
+
+
+@app.delete('/api/parts/{part_id}')
+async def delete_part(request: Request, part_id: int) -> dict[str, Any]:
+    require_write_access(request)
+    existing = await fetch_part(part_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail='Part not found')
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            'UPDATE parts SET active = 0, updated_at = ? WHERE id = ?',
+            (datetime.utcnow().isoformat(), part_id),
+        )
+        await connection.commit()
+    await record_audit(
+        request,
+        'deactivated',
+        'part',
+        part_id,
+        f'Deactivated part {existing.get("part_number") or existing.get("description")}',
+    )
+    return {'deactivated': part_id}
+
+
+@app.get('/api/purchase-orders', response_model=List[PurchaseOrder])
+async def list_purchase_orders(
+    request: Request,
+    status: Optional[str] = Query(None),
+    vendor_id: Optional[int] = Query(None),
+) -> List[PurchaseOrder]:
+    require_authenticated_user(request)
+    clauses: list[str] = []
+    params: list[Any] = []
+    if status:
+        clauses.append('po.status = ?')
+        params.append(status.strip())
+    if vendor_id is not None:
+        clauses.append('po.vendor_id = ?')
+        params.append(vendor_id)
+    where = f'WHERE {" AND ".join(clauses)}' if clauses else ''
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            f'''
+            SELECT po.*, v.name AS vendor_name
+            FROM purchase_orders po
+            LEFT JOIN vendors v ON v.id = po.vendor_id
+            {where}
+            ORDER BY po.id DESC
+            ''',
+            params,
+        )
+        rows = await cursor.fetchall()
+    return [po_row_to_item(row) for row in rows]
+
+
+@app.post('/api/purchase-orders', response_model=PurchaseOrder)
+async def create_purchase_order(request: Request, item: PurchaseOrderCreate) -> PurchaseOrder:
+    user = require_write_access(request)
+    status = (item.status or 'draft').strip().lower()
+    if status not in PO_STATUSES:
+        raise HTTPException(status_code=400, detail=f'Invalid status. Use one of: {", ".join(PO_STATUSES)}')
+    if item.vendor_id is not None:
+        vendor = await fetch_vendor(item.vendor_id)
+        if not vendor:
+            raise HTTPException(status_code=400, detail='Vendor not found')
+    lines, subtotal = po_lines_totals(item.lines or [])
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute(
+            '''
+            INSERT INTO purchase_orders (
+                po_number, vendor_id, status, lines, subtotal, total, notes,
+                requested_by, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                None,
+                item.vendor_id,
+                status,
+                json.dumps(lines),
+                subtotal,
+                subtotal,
+                (item.notes or '').strip(),
+                user.get('display_name') or user.get('username'),
+                now,
+            ),
+        )
+        po_id = cursor.lastrowid
+        po_number = f'PO-{po_id:05d}'
+        await connection.execute(
+            'UPDATE purchase_orders SET po_number = ? WHERE id = ?',
+            (po_number, po_id),
+        )
+        await connection.commit()
+    row = await fetch_po(po_id)
+    await record_audit(
+        request,
+        'created',
+        'purchase_order',
+        po_id,
+        f'Created {po_number}',
+        {'status': status, 'total': subtotal, 'lines': len(lines)},
+    )
+    return po_row_to_item(row)
+
+
+@app.post('/api/purchase-orders/from-reorder', response_model=PurchaseOrder)
+async def create_po_from_reorder(
+    request: Request,
+    vendor_id: Optional[int] = Query(None),
+) -> PurchaseOrder:
+    """Create a draft PO for all active parts at or below reorder point."""
+    user = require_write_access(request)
+    clauses = ['p.active = 1', 'p.on_hand <= p.reorder_point']
+    params: list[Any] = []
+    if vendor_id is not None:
+        clauses.append('p.vendor_id = ?')
+        params.append(vendor_id)
+    where = ' AND '.join(clauses)
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            f'''
+            SELECT p.*, v.name AS vendor_name
+            FROM parts p
+            LEFT JOIN vendors v ON v.id = p.vendor_id
+            WHERE {where}
+            ORDER BY p.vendor_id, p.description
+            ''',
+            params,
+        )
+        rows = await cursor.fetchall()
+    if not rows:
+        raise HTTPException(status_code=400, detail='No parts need reordering')
+
+    chosen_vendor = vendor_id
+    if chosen_vendor is None:
+        vendor_ids = {row['vendor_id'] for row in rows if row['vendor_id'] is not None}
+        if len(vendor_ids) == 1:
+            chosen_vendor = next(iter(vendor_ids))
+        elif len(vendor_ids) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail='Low-stock parts span multiple vendors — pick a vendor_id',
+            )
+
+    lines: list[PurchaseOrderLine] = []
+    for row in rows:
+        if chosen_vendor is not None and row['vendor_id'] not in (None, chosen_vendor):
+            continue
+        qty = float(row['reorder_qty'] or 0)
+        if qty <= 0:
+            qty = max(float(row['reorder_point'] or 0) - float(row['on_hand'] or 0), 1)
+        lines.append(
+            PurchaseOrderLine(
+                part_id=row['id'],
+                part_number=row['part_number'] or '',
+                description=row['description'] or '',
+                qty=qty,
+                unit_cost=float(row['unit_cost'] or 0),
+            )
+        )
+    if not lines:
+        raise HTTPException(status_code=400, detail='No parts need reordering for that vendor')
+
+    return await create_purchase_order(
+        request,
+        PurchaseOrderCreate(
+            vendor_id=chosen_vendor,
+            status='draft',
+            lines=lines,
+            notes=f'Draft from reorder — requested by {user.get("display_name") or user.get("username")}',
+        ),
+    )
+
+
+@app.get('/api/purchase-orders/{po_id}', response_model=PurchaseOrder)
+async def get_purchase_order(request: Request, po_id: int) -> PurchaseOrder:
+    require_authenticated_user(request)
+    row = await fetch_po(po_id)
+    if not row:
+        raise HTTPException(status_code=404, detail='Purchase order not found')
+    return po_row_to_item(row)
+
+
+@app.put('/api/purchase-orders/{po_id}', response_model=PurchaseOrder)
+async def update_purchase_order(
+    request: Request,
+    po_id: int,
+    item: PurchaseOrderUpdate,
+) -> PurchaseOrder:
+    user = require_write_access(request)
+    existing = await fetch_po(po_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail='Purchase order not found')
+    payload = item.model_dump(exclude_unset=True)
+    if 'status' in payload:
+        status = (payload['status'] or '').strip().lower()
+        if status not in PO_STATUSES:
+            raise HTTPException(status_code=400, detail=f'Invalid status. Use one of: {", ".join(PO_STATUSES)}')
+        payload['status'] = status
+        if status == 'approved' and not existing.get('approved_at'):
+            payload['approved_at'] = datetime.utcnow().isoformat()
+            if not payload.get('approved_by'):
+                payload['approved_by'] = user.get('display_name') or user.get('username')
+        if status == 'submitted' and not existing.get('submitted_at'):
+            payload['submitted_at'] = datetime.utcnow().isoformat()
+    if 'vendor_id' in payload and payload['vendor_id'] is not None:
+        vendor = await fetch_vendor(payload['vendor_id'])
+        if not vendor:
+            raise HTTPException(status_code=400, detail='Vendor not found')
+    if 'lines' in payload and payload['lines'] is not None:
+        line_models = [
+            PurchaseOrderLine(**line) if isinstance(line, dict) else line
+            for line in payload['lines']
+        ]
+        serialized, subtotal = po_lines_totals(line_models)
+        payload['lines'] = json.dumps(serialized)
+        payload['subtotal'] = subtotal
+        payload['total'] = subtotal
+    if 'notes' in payload and payload['notes'] is not None:
+        payload['notes'] = str(payload['notes']).strip()
+    if not payload:
+        return po_row_to_item(existing)
+    columns = ', '.join(f'{key} = ?' for key in payload)
+    values = list(payload.values()) + [po_id]
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(f'UPDATE purchase_orders SET {columns} WHERE id = ?', values)
+        await connection.commit()
+    row = await fetch_po(po_id)
+    await record_audit(
+        request,
+        'updated',
+        'purchase_order',
+        po_id,
+        f'Updated {row.get("po_number") or f"PO-{po_id}"}',
+        {k: v for k, v in payload.items() if k != 'lines'},
+    )
+    return po_row_to_item(row)
 
 
 @app.get('/api/audit', response_model=List[AuditEntry])

@@ -1,6 +1,6 @@
 # MaintainSMIP — Handoff
 
-**Last updated:** July 6, 2026  
+**Last updated:** July 9, 2026  
 **Purpose:** Onboard the next developer or agent with current state, credentials, architecture, and what to do next.
 
 ---
@@ -41,7 +41,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\MaintainSMIP` |
 | **Local AI** | `maintainsmip-guru` — prompt: `ollama/SYSTEM_PROMPT.md`, updates: `ollama/MODEL_UPDATES.md` |
-| **App version** | 1.6.3 (`settings.js`) |
+| **App version** | 1.7.0 (`settings.js`) |
 
 ```powershell
 cd "C:\MaintainSMIP"
@@ -159,6 +159,7 @@ e0d7cd4 Add Reports section with preview, CSV export, print
 | `accidents.html` / `accidents.js` | Accident reports |
 | `activity.html` / `activity.js` | Audit log UI |
 | `reports.html` / `reports.js` | 14 report definitions + render/export |
+| `parts.html` / `parts.js` / `parts.css` | Parts inventory, vendors, purchase orders |
 | `maintenance_sheet.js` | Printable WO sheet |
 | `service-worker.js` | Push notification handler |
 | `cart_data.js` | Static fleet seed data (also loaded into DB) |
@@ -176,6 +177,10 @@ e0d7cd4 Add Reports section with preview, CSV export, print
 **Work orders:** `GET/POST /api/workorders`, `PUT/DELETE /api/workorders/{id}`, `GET/POST /api/wo/templates`  
 **PM:** `GET/POST /api/pm/templates`, `PUT`, `GET/POST/PUT/DELETE /api/pm/records`  
 **Accidents:** full CRUD + photo upload/delete  
+**Parts:** `GET/POST /api/parts`, `PUT /api/parts/{id}`, `POST /api/parts/{id}/adjust`, `DELETE` (deactivate)  
+**Vendors:** `GET/POST /api/vendors`, `PUT/DELETE /api/vendors/{id}`  
+**Purchase orders:** `GET/POST /api/purchase-orders`, `PUT /api/purchase-orders/{id}`, `POST /api/purchase-orders/from-reorder`  
+**Parts stats:** `GET /api/parts/stats`  
 **Audit:** `GET /api/audit?limit=&days=&entity_type=&entity_id=`  
 **Push:** `/api/push/vapid-public-key`, `/subscribe`, `/status`, `/test`  
 **Prefs:** `GET/PUT /api/notifications/preferences`  
@@ -259,7 +264,7 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 |---|------|---------|-------|
 | 2 | Roles & permissions UI | **Chelsie meeting (Charlotte)** | Decide manager/technician/readonly behavior. Readonly still sees edit buttons on WO/PM/accidents (only fleet uses `userCanWrite()` today). |
 | 4b | Fleet bulk data fill | **Chelsie export** | Import via **Admin → Fleet Import** or one-off script when export arrives. |
-| 5 | Parts / inventory module | **Brian Excel + scope** | Placeholder page shipped (`parts.html`); full inventory pinned until scope agreed. Dashboard widgets shipped separately (v1.6.0). |
+| 5 | Parts / inventory module | Brian can refine UI/fields | **Shipped v1.7.0** — inventory, vendors, draft POs, stock adjust, reorder draft. AvidXchange auto-submit still Phase 3. |
 | 7b | Box daily backup automation | **Production commitment** | Script exists; schedule Task Scheduler when you commit to production use. |
 
 ### Discuss later (audit items 10–12 + Tier 2–4)
@@ -274,6 +279,24 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 | **Barcode scan** (Tier 3) | Tablet cart lookup — leasing app has pattern. |
 | **Cost tracking** (Tier 3) | Parts/labor/vendor rollups. |
 | **Cosmetic pile** (Tier 4) | Nav injection, skeletons, phone polish, PDF export, dashboard charts. |
+
+---
+
+## Parts / procurement + AvidXchange (v1.7.0 shipped)
+
+**Shipped:** Parts UI (inventory / vendors / POs), full CRUD APIs, stock adjust, draft PO from low stock, human approve → submit → received (received adjusts on-hand). Tables: `vendors`, `parts`, `purchase_orders` (with `avid_*` stubs).
+
+**Still pending:**
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 2 | Auto reorder scheduler (`reorder_loop`) | Not started |
+| 3 | AvidXchange adapter + OAuth + idempotency | Not started (needs API docs from owner) |
+
+**Policy:** draft PO → human approve → submit (NOT auto-submit to AP).
+
+## Shipped recently (2026-07-09)
+
+- **Parts module v1.7.0** — real inventory UI replaces zen placeholder; vendors; purchase orders; smoke tests
 
 ## Shipped recently (2026-07-06)
 
