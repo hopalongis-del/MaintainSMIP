@@ -73,6 +73,7 @@ PUBLIC_PATHS = {
     '/api/health',
     '/api/push/vapid-public-key',
     '/shared.css',
+    '/logo.svg',
     '/logo1.png',
     '/service-worker.js',
 }
@@ -4144,7 +4145,7 @@ async def unsubscribe_push(request: Request, item: PushUnsubscribeRequest) -> di
 async def send_test_push(request: Request) -> dict[str, Any]:
     user = require_authenticated_user(request)
     sent = await send_push_to_user(user['id'], {
-        'title': 'MaintainSMIP Test Alert',
+        'title': 'Fleet Maintain Test Alert',
         'body': 'Push notifications are working on this device.',
         'url': '/index.html',
         'tag': 'push-test',
