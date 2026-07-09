@@ -30,7 +30,7 @@
     },
     {
       id: 'smi-racing',
-      name: 'SMI Racing',
+      name: 'Racing Red',
       subtitle: 'Classic RaceDay Red',
       swatches: ['#0a0e1a', '#1a1f35', '#e11d29', '#e2e8f0'],
     },

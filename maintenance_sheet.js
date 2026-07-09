@@ -1,4 +1,4 @@
-// SMI Properties paper maintenance sheet — digitized from scanned work order form.
+// Paper maintenance sheet — digitized from scanned work order form.
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -231,7 +231,7 @@ function renderMaintenanceSheetHtml(wo, sheet, { editable = true } = {}) {
     <div class="maintenance-sheet">
       <div class="sheet-header">
         <div>
-          <span class="eyebrow" data-settings-shop-name>SMI Properties</span>
+          <span class="eyebrow" data-settings-shop-name>Fleet Shop</span>
           <h3>Maintenance Sheet</h3>
         </div>
         <div class="sheet-service-no">Service No. <strong>WO-${wo.id}</strong></div>
@@ -372,7 +372,7 @@ function wireGlobalCheckAll() {
 function printMaintenanceSheet(wo, sheetOverride) {
   const sheet = sheetOverride || wo.maintenance_sheet || {};
   const bodyHtml = renderMaintenanceSheetHtml(wo, sheet, { editable: false });
-  const shopName = window.MaintainSMIPSettings?.getShopName?.() || 'SMI Properties';
+  const shopName = window.MaintainSMIPSettings?.getShopName?.() || 'Fleet Shop';
   const printedAt = new Date().toLocaleString('en-US', {
     month: 'short',
     day: '2-digit',

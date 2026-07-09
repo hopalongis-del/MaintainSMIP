@@ -1,4 +1,4 @@
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.7.1';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
 
@@ -12,15 +12,7 @@ const {
 } = window.MaintainSMIPThemes;
 
 const TECHNICIAN_FALLBACK = [
-  'Gavin Weinmeister',
-  'Kevin Stellman',
-  'Cory Yeager',
   'Mike Casady',
-  'Dusty Hixson',
-  'Brian Lachance',
-  'Chelsie',
-  'Stephen Hering',
-  'Mark Hixson',
 ];
 
 let cachedTeamAssignees = null;
@@ -60,7 +52,7 @@ const DEFAULT_SETTINGS = {
   customTheme: null,
   layout: 'laptop',
   layoutMode: 'auto',
-  shopName: 'SMI Properties',
+  shopName: 'Fleet Shop',
   defaultLocation: '',
   defaultMechanic: '',
   defaultLandingPage: 'index.html',
@@ -162,7 +154,9 @@ function applySettings(settings = getSettings()) {
   const footer = document.querySelector('[data-settings-footer]');
   if (footer) {
     const shop = settings.shopName || DEFAULT_SETTINGS.shopName;
-    footer.textContent = `MaintainSMIP · ${shop} Fleet Maintenance`;
+    footer.textContent = shop && shop !== 'Fleet Shop'
+      ? `MaintainSMIP · ${shop}`
+      : 'MaintainSMIP · Fleet Maintenance';
   }
 }
 
@@ -420,7 +414,7 @@ function buildSettingsModal() {
           <p class="hero-sub">Defaults for your track and crew.</p>
           <form class="settings-form" id="shop-settings-form">
             <label id="settings-shop-name-field">Shop Name
-              <input type="text" id="settings-shop-name" placeholder="SMI Properties" />
+              <input type="text" id="settings-shop-name" placeholder="Fleet Shop" />
             </label>
             <p class="hero-sub hidden" id="settings-shop-name-note">Only admins can change the shop name.</p>
             <label>Default Event
@@ -563,8 +557,7 @@ function buildSettingsModal() {
           <h3>About</h3>
           <div class="settings-about">
             <p><strong>Version</strong> <span id="settings-app-version">${APP_VERSION}</span></p>
-            <p><strong>Support</strong> <a href="mailto:support@smiproperties.com">support@smiproperties.com</a></p>
-            <p class="hero-sub">MaintainSMIP · Fleet maintenance for SMI Properties.</p>
+            <p class="hero-sub">MaintainSMIP · Golf cart fleet maintenance.</p>
           </div>
         </section>
 

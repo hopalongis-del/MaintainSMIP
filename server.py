@@ -97,28 +97,34 @@ def is_public_path(path: str) -> bool:
         return True
     return path.endswith(STATIC_PUBLIC_SUFFIXES)
 
-VAPID_EMAIL = os.environ.get('VAPID_EMAIL', 'mailto:support@smiproperties.com')
+VAPID_EMAIL = os.environ.get('VAPID_EMAIL', 'mailto:admin@localhost')
 VAPID_KEYS_PATH = DATA_DIR / 'vapid_keys.json'
 NOTIFICATION_CHECK_INTERVAL_SEC = int(os.environ.get('NOTIFICATION_CHECK_INTERVAL_SEC', '1800'))
 
+# Product-owner seed only — former customer team accounts removed (deal did not close).
 TECHNICIAN_ACCOUNTS = [
-    ('gavin.weinmeister', 'Gavin Weinmeister', 'technician'),
-    ('kevin.stellman', 'Kevin Stellman', 'technician'),
-    ('cory.yeager', 'Cory Yeager', 'technician'),
     ('mike.casady', 'Mike Casady', 'admin'),
-    ('dusty.hixson', 'Dusty Hixson', 'admin'),
-    ('brian.lachance', 'Brian Lachance', 'admin'),
-    ('chelsie', 'Chelsie', 'admin'),
-    ('stephen.hering', 'Stephen Hering', 'technician'),
-    ('mark.hixson', 'Mark Hixson', 'technician'),
 ]
 
 PRIVILEGED_ROLE_OVERRIDES = {
     'mike.casady': 'admin',
-    'dusty.hixson': 'admin',
-    'brian.lachance': 'admin',
-    'chelsie': 'admin',
 }
+
+# One-time purge of former-customer demo data (fleet, WO/PM/accidents, team logins).
+FORMER_CUSTOMER_PURGE_KEY = 'former_customer_purge_v1'
+OPERATIONAL_TABLES_TO_PURGE = (
+    'work_orders',
+    'pm_records',
+    'accident_reports',
+    'carts',
+    'audit_log',
+    'push_subscriptions',
+    'notification_dedup',
+    'pm_automation_rules',
+    'vendors',
+    'parts',
+    'purchase_orders',
+)
 
 SEEDED_USERNAMES = {MASTER_USERNAME, *(account[0] for account in TECHNICIAN_ACCOUNTS)}
 
@@ -320,30 +326,79 @@ async def ensure_users_seeded() -> None:
 
 
 async def apply_privileged_role_overrides() -> None:
-    """Keep leadership accounts at the right privilege level; add Chelsie if missing."""
-    master_password = APP_PASSWORD or 'WeLoveRacing!'
-    now = datetime.utcnow().isoformat()
+    """Keep product-owner accounts at the configured privilege level."""
     async with aiosqlite.connect(DB_PATH) as connection:
         for username, role in PRIVILEGED_ROLE_OVERRIDES.items():
             await connection.execute(
                 'UPDATE users SET role = ? WHERE username = ?',
                 (role, username),
             )
+        await connection.commit()
 
-        cursor = await connection.execute(
-            'SELECT id FROM users WHERE username = ?',
-            ('chelsie',),
-        )
-        if not await cursor.fetchone():
+
+async def ensure_seeded_team_accounts() -> None:
+    """Insert any missing TECHNICIAN_ACCOUNTS rows (used after purge / upgrades)."""
+    master_password = APP_PASSWORD or 'WeLoveRacing!'
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        for username, display_name, role in TECHNICIAN_ACCOUNTS:
+            cursor = await connection.execute(
+                'SELECT id FROM users WHERE username = ?',
+                (username,),
+            )
+            if await cursor.fetchone():
+                continue
             await connection.execute(
                 '''
                 INSERT INTO users (username, display_name, role, password_hash, active, created_date)
-                VALUES (?, ?, 'admin', ?, 1, ?)
+                VALUES (?, ?, ?, ?, 1, ?)
                 ''',
-                ('chelsie', 'Chelsie', hash_password(master_password), now),
+                (username, display_name, role, hash_password(master_password), now),
             )
-
         await connection.commit()
+
+
+async def purge_former_customer_data_once() -> None:
+    """Wipe SMI Properties demo/customer data once after the deal fell through.
+
+    Keeps schema, PM/WO templates, master admin, and product-owner seed accounts.
+    Safe to re-run: gated by app_meta key.
+    """
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            'CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+        )
+        cursor = await connection.execute(
+            'SELECT value FROM app_meta WHERE key = ?',
+            (FORMER_CUSTOMER_PURGE_KEY,),
+        )
+        if await cursor.fetchone():
+            return
+
+        for table in OPERATIONAL_TABLES_TO_PURGE:
+            try:
+                await connection.execute(f'DELETE FROM {table}')
+            except Exception:
+                pass
+
+        keep_usernames = {MASTER_USERNAME, *(account[0] for account in TECHNICIAN_ACCOUNTS)}
+        placeholders = ','.join('?' for _ in keep_usernames)
+        await connection.execute(
+            f'DELETE FROM users WHERE username NOT IN ({placeholders})',
+            tuple(keep_usernames),
+        )
+
+        await connection.execute(
+            'INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)',
+            (FORMER_CUSTOMER_PURGE_KEY, datetime.utcnow().isoformat()),
+        )
+        await connection.commit()
+
+    # Drop uploaded accident photos from the former customer demo.
+    for uploads_root in (DATA_DIR / 'uploads' / 'accidents', ROOT_DIR / 'uploads' / 'accidents'):
+        if uploads_root.exists():
+            shutil.rmtree(uploads_root, ignore_errors=True)
+        uploads_root.mkdir(parents=True, exist_ok=True)
 
 
 def get_request_user(request: Request) -> Optional[dict[str, Any]]:
@@ -592,12 +647,14 @@ async def lifespan(app: FastAPI):
     ensure_persistent_storage()
     await migrate_schema()
     await create_tables()
+    await purge_former_customer_data_once()
     await seed_carts_from_file()
     app.state.carts = await fetch_all_carts()
     await seed_pm_templates()
     await seed_wo_templates()
     await ensure_wo_templates_seeded()
     await ensure_users_seeded()
+    await ensure_seeded_team_accounts()
     if SEED_DEMO_DATA:
         await seed_demo_data()
     notification_task = asyncio.create_task(notification_loop())
@@ -2133,16 +2190,17 @@ def _iso_days_from_now(days: int) -> str:
     return (datetime.utcnow() + timedelta(days=days)).isoformat()
 
 
+# Generic sample demo rows used only when SEED_DEMO_DATA=true (not customer data).
 DEMO_WORK_ORDERS = [
     {
-        'cart_id': 2002,
+        'cart_id': 1002,
         'title': 'Brake squeal under load',
-        'description': 'Operator reports grinding noise when descending hills at Charlotte. Inspect pads and rear drum.',
+        'description': 'Operator reports grinding noise when descending hills. Inspect pads and rear drum.',
         'priority': 'high',
         'status': 'in_progress',
         'type': 'repair',
         'assigned_to': 'Mike Casady',
-        'location': 'Charlotte',
+        'location': 'Shop',
         'due_date': _iso_days_from_now(2),
         'labor_minutes': 45,
         'parts_used': ['Brake pad set'],
@@ -2161,60 +2219,32 @@ DEMO_WORK_ORDERS = [
         },
     },
     {
-        'cart_id': 2000,
+        'cart_id': 1001,
         'title': 'Battery terminal corrosion',
         'description': 'Green buildup on positive terminal. Clean, test load, verify charger output.',
         'priority': 'medium',
         'status': 'open',
         'type': 'battery',
-        'assigned_to': 'Gavin Weinmeister',
-        'location': 'SMIP',
+        'assigned_to': '',
+        'location': 'Shop',
         'due_date': _iso_days_from_now(4),
         'labor_minutes': 30,
         'parts_used': [],
         'comments': [],
     },
     {
-        'cart_id': 2057,
+        'cart_id': 1003,
         'title': 'Steering wander at speed',
         'description': 'Cart drifts right above 12 mph on service roads. Check toe alignment and tire wear.',
         'priority': 'critical',
         'status': 'open',
         'type': 'repair',
         'assigned_to': '',
-        'location': 'Bristol',
+        'location': 'Yard',
         'due_date': _iso_days_from_now(-3),
         'labor_minutes': 0,
         'parts_used': [],
         'comments': [],
-    },
-    {
-        'cart_id': 2003,
-        'title': 'Headlight intermittent',
-        'description': 'Left headlight flickers over bumps. Inspect harness and connector at firewall.',
-        'priority': 'low',
-        'status': 'completed',
-        'type': 'electrical',
-        'assigned_to': 'Cory Yeager',
-        'location': 'Charlotte',
-        'due_date': _iso_days_from_now(-7),
-        'labor_minutes': 25,
-        'parts_used': ['Bulb 12V'],
-        'comments': [{'author': 'Cory Yeager', 'text': 'Loose ground strap — tightened and tested.', 'date': _iso_days_from_now(-5)}],
-    },
-    {
-        'cart_id': 2001,
-        'title': 'Quarterly safety inspection',
-        'description': 'Routine safety walk-around before CMS event weekend.',
-        'priority': 'medium',
-        'status': 'on_hold',
-        'type': 'inspection',
-        'assigned_to': 'Kevin Stellman',
-        'location': 'SMIP',
-        'due_date': _iso_days_from_now(6),
-        'labor_minutes': 15,
-        'parts_used': [],
-        'comments': [{'author': 'Kevin Stellman', 'text': 'Waiting on parts cage key.', 'date': _iso_days_from_now(0)}],
     },
 ]
 
@@ -2224,8 +2254,8 @@ DEMO_PM_RECORDS = [
         'template_id': 'PM-TPL-001',
         'template_name': '90-Day Inspection',
         'description': 'Full inspection every 90 days',
-        'cart_id': 2000,
-        'location': 'SMIP',
+        'cart_id': 1001,
+        'location': 'Shop',
         'scheduled_date': _iso_days_from_now(3),
         'status': 'scheduled',
         'checklist_results': [
@@ -2240,8 +2270,8 @@ DEMO_PM_RECORDS = [
         'template_id': 'PM-TPL-003',
         'template_name': 'Battery Service',
         'description': 'Battery check every 6 months',
-        'cart_id': 2002,
-        'location': 'Charlotte',
+        'cart_id': 1002,
+        'location': 'Shop',
         'scheduled_date': _iso_days_from_now(5),
         'status': 'scheduled',
         'checklist_results': [
@@ -2250,57 +2280,26 @@ DEMO_PM_RECORDS = [
             {'task_id': 3, 'task': 'Load test', 'passed': False, 'note': ''},
         ],
     },
-    {
-        'template_id': 'PM-TPL-004',
-        'template_name': 'Brake Inspection',
-        'description': 'Brake check every 6 months',
-        'cart_id': 2057,
-        'location': 'Bristol',
-        'scheduled_date': _iso_days_from_now(-2),
-        'status': 'scheduled',
-        'checklist_results': [
-            {'task_id': 1, 'task': 'Check brake pads', 'passed': False, 'note': ''},
-            {'task_id': 2, 'task': 'Test brake response', 'passed': False, 'note': ''},
-        ],
-    },
-    {
-        'template_id': 'PM-TPL-002',
-        'template_name': 'Annual Full Service',
-        'description': 'Complete annual service',
-        'cart_id': 2003,
-        'location': 'Charlotte',
-        'scheduled_date': _iso_days_from_now(-14),
-        'status': 'completed',
-        'completed_date': _iso_days_from_now(-10),
-        'tech_name': 'Dusty Hixson',
-        'labor_minutes': 110,
-        'checklist_results': [
-            {'task_id': 1, 'task': 'Full brake service', 'passed': True, 'note': ''},
-            {'task_id': 2, 'task': 'Battery load test', 'passed': True, 'note': ''},
-            {'task_id': 3, 'task': 'Tire check', 'passed': True, 'note': ''},
-            {'task_id': 4, 'task': 'Motor inspection', 'passed': True, 'note': ''},
-        ],
-    },
 ]
 
 
 DEMO_ACCIDENTS = [
     {
-        'cart_id': 2002,
-        'location': 'Charlotte',
+        'cart_id': 1002,
+        'location': 'Shop',
         'reported_by': 'Mike Casady',
         'incident_date': _iso_days_from_now(-1),
         'description': 'Rear corner impact with loading dock post. Cracked body panel and bent rear bumper bracket.',
         'severity': 'moderate',
         'status': 'under_review',
         'damage_areas': ['rear bumper', 'right rear panel', 'tail light'],
-        'notes': 'Operator reported during CMS infield move.',
+        'notes': 'Operator reported during yard move.',
         'created_days_ago': -1,
     },
     {
-        'cart_id': 2057,
-        'location': 'Bristol',
-        'reported_by': 'Gavin Weinmeister',
+        'cart_id': 1003,
+        'location': 'Yard',
+        'reported_by': 'Mike Casady',
         'incident_date': _iso_days_from_now(-4),
         'description': 'Roof scrape under low garage door. Bubble top scuffed, no structural damage visible.',
         'severity': 'minor',

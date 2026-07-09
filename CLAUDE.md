@@ -1,6 +1,6 @@
 # MaintainSMIP — agent guide
 
-SMI Properties fleet-maintenance web app (FastAPI + SQLite + vanilla JS), deployed
+Golf cart fleet-maintenance web app (FastAPI + SQLite + vanilla JS), deployed
 on Render from `main`. Full onboarding, architecture, credentials location, and
 pending work live in **`handoff.md`** — read it first.
 

@@ -77,9 +77,9 @@ Seeded on first boot (`TECHNICIAN_ACCOUNTS` + `admin` in `server.py`):
 | Username | Role | Initial password |
 |----------|------|------------------|
 | `admin` | Master admin | `APP_PASSWORD` (demo: `WeLoveRacing!`) |
-| `mike.casady` | **Admin** | Admin-reset — **currently `mike`** on production |
-| `dusty.hixson`, `brian.lachance`, `chelsie` | Admin | `APP_PASSWORD` until changed |
-| `gavin.weinmeister`, `kevin.stellman`, etc. | Technician | `APP_PASSWORD` until changed |
+| `mike.casady` | **Admin** | `APP_PASSWORD` until changed (product owner) |
+
+Former SMI Properties team accounts were removed in v1.7.1 (customer deal did not close).
 
 **Roles:** `admin`, `manager`, `technician`, `readonly`. Write access: admin, manager, technician. Readonly is API-blocked; UI hiding is pending product decisions.
 

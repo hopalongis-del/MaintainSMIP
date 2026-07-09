@@ -260,20 +260,57 @@ def test_change_password(client: TestClient) -> None:
     client.post("/api/auth/logout")
 
 
+def _is_numeric_cart_id(value) -> bool:
+    try:
+        int(value)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def ensure_smoke_cart(client: TestClient) -> dict:
+    """Create (or return) a disposable cart with a numeric id for PM/WO APIs."""
+    carts = client.get("/api/carts").json()
+    active = next(
+        (
+            c
+            for c in carts
+            if str(c.get("status", "")).lower() != "retired" and _is_numeric_cart_id(c.get("id"))
+        ),
+        None,
+    )
+    if active:
+        return active
+    cart_id = int(time.time()) % 900000 + 100000
+    created = client.post(
+        "/api/carts",
+        json={
+            "id": cart_id,
+            "serial": f"SN-{cart_id}",
+            "model": "Carryall 1",
+            "year": "2024",
+            "location": "Shop",
+            "status": "active",
+            "notes": "Smoke test cart",
+        },
+    )
+    assert created.status_code == 200, created.text
+    return created.json()
+
+
 def test_pm_record_dedup(client: TestClient) -> None:
     login(client)
     templates = client.get("/api/pm/templates").json()
     assert templates, "Need at least one PM template for dedup test"
     template = templates[0]
-    carts = client.get("/api/carts").json()
-    cart = next((c for c in carts if str(c.get("status", "")).lower() != "retired"), carts[0])
+    cart = ensure_smoke_cart(client)
 
     payload = {
         "template_id": template["id"],
         "template_name": template["name"],
         "description": template.get("description") or "Smoke dedup test",
         "cart_id": cart["id"],
-        "location": cart.get("location") or "SMIP",
+        "location": cart.get("location") or "Shop",
         "scheduled_date": "2099-01-01T00:00:00",
         "completed_date": None,
         "status": "scheduled",
@@ -433,9 +470,8 @@ def run_tests(client: TestClient) -> None:
 
     carts = client.get("/api/carts")
     assert carts.status_code == 200, carts.text
-    assert len(carts.json()) > 0
 
-    smoke_cart_id = f"SMOKE-TEST-{int(time.time())}"
+    smoke_cart_id = int(time.time()) % 900000 + 200000
 
     create_cart = client.post(
         "/api/carts",
@@ -444,7 +480,7 @@ def run_tests(client: TestClient) -> None:
             "serial": "SMOKE-123",
             "model": "Carryall 1",
             "year": "2024",
-            "location": "SMIP",
+            "location": "Shop",
             "status": "active",
             "notes": "Smoke test cart",
         },
@@ -454,7 +490,7 @@ def run_tests(client: TestClient) -> None:
 
     missing_fields = client.post(
         "/api/carts",
-        json={"id": "SMOKE-TEST-2", "serial": "ONLY-SERIAL"},
+        json={"id": smoke_cart_id + 1, "serial": "ONLY-SERIAL"},
     )
     assert missing_fields.status_code == 422, missing_fields.text
 
@@ -465,7 +501,7 @@ def run_tests(client: TestClient) -> None:
             "serial": "SMOKE-123",
             "model": "Carryall 1",
             "year": "2024",
-            "location": "SMIP",
+            "location": "Shop",
             "status": "active",
         },
     )
@@ -479,10 +515,10 @@ def run_tests(client: TestClient) -> None:
 
     update_cart = client.put(
         f"/api/carts/{smoke_cart_id}",
-        json={"location": "Charlotte", "notes": "Updated smoke cart"},
+        json={"location": "Yard", "notes": "Updated smoke cart"},
     )
     assert update_cart.status_code == 200, update_cart.text
-    assert update_cart.json()["location"] == "Charlotte"
+    assert update_cart.json()["location"] == "Yard"
 
     retire_cart = client.put(
         f"/api/carts/{smoke_cart_id}",
@@ -497,6 +533,22 @@ def run_tests(client: TestClient) -> None:
     assert len(cart_audit_entries) >= 2, cart_audit.text
     assert any("Added cart" in entry["summary"] for entry in cart_audit_entries)
     assert any("Retired cart" in entry["summary"] for entry in cart_audit_entries)
+
+    # Keep an active cart for WO / accident smoke tests below
+    active_cart_id = smoke_cart_id + 50
+    active_cart = client.post(
+        "/api/carts",
+        json={
+            "id": active_cart_id,
+            "serial": "SMOKE-ACTIVE-1",
+            "model": "Carryall 2",
+            "year": "2023",
+            "location": "Shop",
+            "status": "active",
+            "notes": "Active smoke cart",
+        },
+    )
+    assert active_cart.status_code == 200, active_cart.text
 
     activity_page = client.get("/activity.html")
     assert activity_page.status_code == 200, activity_page.text
@@ -567,19 +619,18 @@ def run_tests(client: TestClient) -> None:
 
     accidents = client.get("/api/accidents")
     assert accidents.status_code == 200, accidents.text
-    assert len(accidents.json()) >= 2
 
     create = client.post(
         "/api/workorders",
         json={
-            "cart_id": 2000,
+            "cart_id": active_cart_id,
             "title": "Smoke test WO",
             "description": "Temporary test order",
             "priority": "low",
             "status": "open",
             "type": "inspection",
             "assigned_to": "",
-            "location": "SMIP",
+            "location": "Shop",
             "due_date": "2026-07-10T00:00:00",
             "labor_minutes": 15,
             "parts_used": [],
@@ -618,7 +669,7 @@ def run_tests(client: TestClient) -> None:
     accident = client.post(
         "/api/accidents",
         json={
-            "cart_id": 2000,
+            "cart_id": active_cart_id,
             "description": "Smoke test accident damage",
             "severity": "minor",
             "status": "reported",

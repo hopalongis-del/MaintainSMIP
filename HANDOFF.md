@@ -41,7 +41,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\MaintainSMIP` |
 | **Local AI** | `maintainsmip-guru` — prompt: `ollama/SYSTEM_PROMPT.md`, updates: `ollama/MODEL_UPDATES.md` |
-| **App version** | 1.7.0 (`settings.js`) |
+| **App version** | 1.7.1 (`settings.js`) |
 
 ```powershell
 cd "C:\MaintainSMIP"
@@ -91,7 +91,7 @@ Local guru/Open WebUI files are **extras** for development assistance, not a sec
 
 ## What this app is
 
-**MaintainSMIP** is SMI Properties’ fleet maintenance web app: work orders, preventive maintenance, accidents, fleet inventory (~846 carts), audit trail, reports, and Web Push notifications. Tablet/laptop-friendly vanilla JS UI with racing-themed settings.
+**MaintainSMIP** is a golf cart fleet maintenance web app: work orders, preventive maintenance, accidents, fleet inventory, audit trail, reports, parts/procurement, and Web Push notifications. Tablet/laptop-friendly vanilla JS UI with racing-themed settings. **Not tied to SMI Properties** (deal did not close; customer data purged in v1.7.1).
 
 **Stack:** FastAPI + SQLite + vanilla HTML/CSS/JS. No React. Session cookies for auth. Persistent data on Render via mounted disk at `/var/data`.
 
@@ -103,7 +103,7 @@ Local guru/Open WebUI files are **extras** for development assistance, not a sec
 |---------|------|----------|-------|
 | `admin` | Master admin | `WeLoveRacing!` (or Render `APP_PASSWORD`) | Legacy password-only login also works |
 | `mike.casady` | Admin | **`mike`** | Changed per owner request; short password allowed via admin reset only |
-| Other seeded users | technician / admin | `WeLoveRacing!` until changed | See `TECHNICIAN_ACCOUNTS` in `server.py` |
+| Other seeded users | — | — | Only `admin` + `mike.casady` seed; former customer techs removed |
 
 **Password rules:**
 - Self-service change (`POST /api/auth/change-password`): min **8** characters
@@ -296,6 +296,7 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 
 ## Shipped recently (2026-07-09)
 
+- **Unbrand + purge SMIP customer data (v1.7.1)** — remove SMI Properties branding; empty fleet seed; one-time DB purge of carts/WO/PM/accidents/parts and former team logins; product seeds only `admin` + `mike.casady`
 - **Parts module v1.7.0** — real inventory UI replaces zen placeholder; vendors; purchase orders; smoke tests
 
 ## Shipped recently (2026-07-06)
@@ -351,7 +352,6 @@ Run this yourself before marking a task done:
 ## Contacts (reference only — not for “please run this”)
 
 - **Product owner:** Mike Casady (`mike.casady`, admin)
-- **In-app support email:** support@smiproperties.com
 - **Infra:** Render service `maintainsmip` + disk `maintainsmip-data` (already provisioned)
 
 ---

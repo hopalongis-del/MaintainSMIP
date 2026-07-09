@@ -789,7 +789,7 @@ function updatePrintHeader() {
     ? formatReportDateTime(currentReportState.generatedAt)
     : '';
   document.getElementById('report-print-header').innerHTML = `
-    <h1>MaintainSMIP · ${window.MaintainSMIPSettings?.getShopName?.() || 'SMI Properties'}</h1>
+    <h1>MaintainSMIP · ${window.MaintainSMIPSettings?.getShopName?.() || 'Fleet Shop'}</h1>
     <h2>${currentReportState.title}</h2>
     <p>${currentReportState.subtitle}</p>
     <p>Generated ${generated} by ${user}</p>
