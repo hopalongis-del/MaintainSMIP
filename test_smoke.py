@@ -405,6 +405,109 @@ def test_parts_module(client: TestClient) -> None:
     assert any(item["id"] == vendor_id for item in vendors.json())
 
 
+def test_leasing_and_store(client: TestClient) -> None:
+    login(client)
+
+    lease_stats = client.get("/api/lease/stats")
+    assert lease_stats.status_code == 200, lease_stats.text
+    assert "available" in lease_stats.json()
+
+    unit_code = f"LC-SMOKE-{int(time.time()) % 100000}"
+    unit = client.post(
+        "/api/lease/units",
+        json={
+            "unit_code": unit_code,
+            "model": "Carryall Smoke",
+            "serial": "SN-SMOKE-1",
+            "condition": "good",
+            "status": "available",
+            "venue": "Shop",
+            "daily_rate": 50,
+        },
+    )
+    assert unit.status_code == 200, unit.text
+    unit_id = unit.json()["id"]
+
+    lease = client.post(
+        "/api/leases",
+        json={
+            "unit_id": unit_id,
+            "customer_name": "Smoke Customer",
+            "customer_phone": "555-0100",
+            "start_date": "2026-07-09",
+            "expected_return": "2026-07-12",
+            "daily_rate": 50,
+            "deposit": 100,
+        },
+    )
+    assert lease.status_code == 200, lease.text
+    lease_id = lease.json()["id"]
+    assert lease.json()["status"] == "active"
+
+    busy = client.get(f"/api/lease/units?status=available")
+    assert busy.status_code == 200
+    assert not any(u["id"] == unit_id for u in busy.json())
+
+    returned = client.post(
+        f"/api/leases/{lease_id}/return",
+        json={"total_charged": 150, "condition": "good", "notes": "clean"},
+    )
+    assert returned.status_code == 200, returned.text
+    assert returned.json()["status"] == "returned"
+
+    free = client.get("/api/lease/units")
+    free_unit = next(u for u in free.json() if u["id"] == unit_id)
+    assert free_unit["status"] == "available"
+
+    part = client.post(
+        "/api/parts",
+        json={
+            "part_number": f"STORE-{int(time.time()) % 100000}",
+            "description": "Smoke store belt",
+            "unit_cost": 10,
+            "unit_price": 19.99,
+            "on_hand": 5,
+            "reorder_point": 1,
+            "reorder_qty": 5,
+            "active": True,
+        },
+    )
+    assert part.status_code == 200, part.text
+    part_id = part.json()["id"]
+
+    sale = client.post(
+        "/api/sales",
+        json={
+            "customer_name": "Walk-in",
+            "payment_method": "cash",
+            "lines": [
+                {
+                    "part_id": part_id,
+                    "qty": 2,
+                    "unit_price": 19.99,
+                }
+            ],
+        },
+    )
+    assert sale.status_code == 200, sale.text
+    sale_id = sale.json()["id"]
+    assert sale.json()["status"] == "completed"
+    assert abs(sale.json()["total"] - 39.98) < 0.01
+
+    stocked = client.get(f"/api/parts/{part_id}").json()
+    assert stocked["on_hand"] == 3
+
+    voided = client.post(f"/api/sales/{sale_id}/void")
+    assert voided.status_code == 200, voided.text
+    assert voided.json()["status"] == "void"
+
+    restocked = client.get(f"/api/parts/{part_id}").json()
+    assert restocked["on_hand"] == 5
+
+    sales_stats = client.get("/api/sales/stats")
+    assert sales_stats.status_code == 200, sales_stats.text
+
+
 def test_new_user_must_change_password_flag(client: TestClient) -> None:
     login(client)
     temp_username = f"smoke.temp.{int(time.time())}"
@@ -445,6 +548,7 @@ def run_tests(client: TestClient) -> None:
     test_database_backup_token(client)
     test_pm_record_dedup(client)
     test_parts_module(client)
+    test_leasing_and_store(client)
     test_new_user_must_change_password_flag(client)
     login(client)
 
@@ -560,6 +664,14 @@ def run_tests(client: TestClient) -> None:
     assert parts_page.status_code == 200, parts_page.text
     assert "Parts &amp; Inventory" in parts_page.text or "Parts & Inventory" in parts_page.text
     assert "parts.js" in parts_page.text
+
+    leasing_page = client.get("/leasing.html")
+    assert leasing_page.status_code == 200, leasing_page.text
+    assert "leasing.js" in leasing_page.text
+
+    store_page = client.get("/store.html")
+    assert store_page.status_code == 200, store_page.text
+    assert "store.js" in store_page.text
 
     weather = client.get("/api/widgets/weather?location=Charlotte")
     assert weather.status_code == 200, weather.text

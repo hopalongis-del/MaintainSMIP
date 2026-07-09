@@ -1072,4 +1072,159 @@ const db = {
     }
     return r.json();
   },
+
+  async getLeaseStats() {
+    const r = await fetchApi('/api/lease/stats');
+    if (!r.ok) throw new Error(`Lease stats failed (${r.status})`);
+    return r.json();
+  },
+
+  async getLeaseUnits(params = {}) {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') p.set(key, value);
+    });
+    const q = p.toString() ? `?${p}` : '';
+    const r = await fetchApi(`/api/lease/units${q}`);
+    if (!r.ok) throw new Error(`Lease units failed (${r.status})`);
+    return r.json();
+  },
+
+  async createLeaseUnit(payload) {
+    const r = await fetchApi('/api/lease/units', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Create lease unit failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async updateLeaseUnit(id, payload) {
+    const r = await fetchApi(`/api/lease/units/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Update lease unit failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async getLeases(params = {}) {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') p.set(key, value);
+    });
+    const q = p.toString() ? `?${p}` : '';
+    const r = await fetchApi(`/api/leases${q}`);
+    if (!r.ok) throw new Error(`Leases list failed (${r.status})`);
+    return r.json();
+  },
+
+  async createLease(payload) {
+    const r = await fetchApi('/api/leases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Create lease failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async returnLease(id, payload = {}) {
+    const r = await fetchApi(`/api/leases/${id}/return`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Return lease failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async getSalesStats() {
+    const r = await fetchApi('/api/sales/stats');
+    if (!r.ok) throw new Error(`Sales stats failed (${r.status})`);
+    return r.json();
+  },
+
+  async getSales(params = {}) {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') p.set(key, value);
+    });
+    const q = p.toString() ? `?${p}` : '';
+    const r = await fetchApi(`/api/sales${q}`);
+    if (!r.ok) throw new Error(`Sales list failed (${r.status})`);
+    return r.json();
+  },
+
+  async createSale(payload) {
+    const r = await fetchApi('/api/sales', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      let detail = `Sale failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
+
+  async voidSale(id) {
+    const r = await fetchApi(`/api/sales/${id}/void`, { method: 'POST' });
+    if (!r.ok) {
+      let detail = `Void sale failed (${r.status})`;
+      try {
+        const body = await r.json();
+        detail = formatApiError(body.detail, detail);
+      } catch (err) {
+        /* ignore */
+      }
+      return { error: detail };
+    }
+    return r.json();
+  },
 };

@@ -1,4 +1,4 @@
-const APP_VERSION = '1.7.2';
+const APP_VERSION = '1.8.0';
 const APP_NAME = 'Fleet Maintain';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
@@ -1001,6 +1001,50 @@ function injectPartsNavLink() {
   }
 }
 
+function injectLeasingNavLink() {
+  const navLinks = document.querySelector('.nav-links');
+  if (!navLinks || navLinks.querySelector('[data-nav-leasing]')) return;
+
+  const link = document.createElement('a');
+  link.href = 'leasing.html';
+  link.dataset.navLeasing = 'true';
+  link.textContent = 'Leasing';
+  if (window.location.pathname.endsWith('leasing.html')) {
+    link.classList.add('active');
+  }
+
+  const partsLink = navLinks.querySelector('[data-nav-parts]')
+    || [...navLinks.querySelectorAll('a')].find((anchor) => anchor.getAttribute('href')?.includes('parts'));
+  if (partsLink) {
+    partsLink.insertAdjacentElement('afterend', link);
+  } else {
+    navLinks.appendChild(link);
+  }
+}
+
+function injectStoreNavLink() {
+  const navLinks = document.querySelector('.nav-links');
+  if (!navLinks || navLinks.querySelector('[data-nav-store]')) return;
+
+  const link = document.createElement('a');
+  link.href = 'store.html';
+  link.dataset.navStore = 'true';
+  link.textContent = 'Store';
+  if (window.location.pathname.endsWith('store.html')) {
+    link.classList.add('active');
+  }
+
+  const leasingLink = navLinks.querySelector('[data-nav-leasing]')
+    || [...navLinks.querySelectorAll('a')].find((anchor) => anchor.getAttribute('href')?.includes('leasing'));
+  if (leasingLink) {
+    leasingLink.insertAdjacentElement('afterend', link);
+  } else {
+    const partsLink = navLinks.querySelector('[data-nav-parts]');
+    if (partsLink) partsLink.insertAdjacentElement('afterend', link);
+    else navLinks.appendChild(link);
+  }
+}
+
 function injectSettingsButton() {
   if (document.getElementById('open-settings-btn')) return;
 
@@ -1232,6 +1276,8 @@ async function initSettings() {
   injectActivityNavLink();
   injectReportsNavLink();
   injectPartsNavLink();
+  injectLeasingNavLink();
+  injectStoreNavLink();
   injectSettingsButton();
   await loadTeamAssignees();
   syncSettingsForm();

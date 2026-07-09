@@ -41,7 +41,7 @@ Render is already connected to `main`; pushing **is** deploying. No manual Rende
 | **GitHub** | https://github.com/hopalongis-del/MaintainSMIP |
 | **Local path** | `C:\MaintainSMIP` |
 | **Local AI** | `maintainsmip-guru` — prompt: `ollama/SYSTEM_PROMPT.md`, updates: `ollama/MODEL_UPDATES.md` |
-| **App version** | 1.7.2 (`settings.js`) — product UI name **Fleet Maintain** |
+| **App version** | 1.8.0 (`settings.js`) — product UI name **Fleet Maintain** |
 
 ```powershell
 cd "C:\MaintainSMIP"

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Leasing | Fleet Maintain</title>
+    <link rel="icon" href="logo.svg" type="image/svg+xml" />
+    <script src="themes.js?v=1.8.0"></script>
+    <link rel="stylesheet" href="shared.css?v=1.8.0" />
+    <link rel="stylesheet" href="leasing.css?v=1.8.0" />
+    <script src="smi_events.js?v=1.8.0"></script>
+    <script src="settings.js?v=1.8.0"></script>
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="index.html">
+          <div class="brand-mark">
+            <img class="brand-logo" src="logo.svg" alt="Fleet Maintain" />
+          </div>
+          <span>Fleet Maintain</span>
+        </a>
+        <div class="nav-links">
+          <a href="index.html">Dashboard</a>
+          <a href="workorders.html">Work Orders</a>
+          <a href="pm.html">Preventive Maintenance</a>
+          <a href="index.html#fleet">Fleet</a>
+          <a href="accidents.html">Accident Damage</a>
+          <a href="activity.html">Activity</a>
+          <a href="reports.html">Reports</a>
+          <a href="parts.html">Parts</a>
+          <a class="active" href="leasing.html">Leasing</a>
+          <a href="store.html">Store</a>
+        </div>
+      </nav>
+
+      <section class="card page-section">
+        <div class="top-strip">
+          <div>
+            <span class="eyebrow">Golf Cart Leasing</span>
+            <h2>Check out carts, track returns, manage lease fleet.</h2>
+            <p class="hero-sub">Separate from maintenance fleet inventory — add lease units here, then check them out to customers.</p>
+          </div>
+          <div class="tab-controls">
+            <button class="btn secondary active" type="button" data-lease-tab="leases">Leases</button>
+            <button class="btn secondary" type="button" data-lease-tab="units">Units</button>
+          </div>
+        </div>
+
+        <div class="dash-strip">
+          <div class="stat-card"><span>Units</span><strong id="stat-units">0</strong></div>
+          <div class="stat-card"><span>Available</span><strong id="stat-available">0</strong></div>
+          <div class="stat-card"><span>Out on Lease</span><strong id="stat-leased">0</strong></div>
+          <div class="stat-card"><span>Active Leases</span><strong id="stat-active">0</strong></div>
+        </div>
+
+        <div id="leases-view">
+          <div class="filter-bar">
+            <div class="filter-group">
+              <label for="lease-filter-status">Status</label>
+              <select id="lease-filter-status">
+                <option value="active">Active</option>
+                <option value="all">All</option>
+                <option value="returned">Returned</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="lease-filter-search">Search</label>
+              <input id="lease-filter-search" type="search" placeholder="Customer, lease #, unit" />
+            </div>
+            <div class="filter-group filter-actions">
+              <button class="btn primary" type="button" id="new-lease-btn">Check Out Cart</button>
+            </div>
+          </div>
+          <div class="parts-table-wrap">
+            <table class="parts-table">
+              <thead>
+                <tr>
+                  <th>Lease #</th>
+                  <th>Customer</th>
+                  <th>Unit</th>
+                  <th>Start</th>
+                  <th>Expected</th>
+                  <th>Rate / day</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="leases-tbody"></tbody>
+            </table>
+            <p class="hero-sub" id="leases-empty">No leases yet. Add a unit, then check one out.</p>
+          </div>
+        </div>
+
+        <div id="units-view" class="hidden">
+          <div class="filter-bar">
+            <div class="filter-group">
+              <label for="unit-filter-status">Status</label>
+              <select id="unit-filter-status">
+                <option value="all">All</option>
+                <option value="available">Available</option>
+                <option value="leased">Leased</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="retired">Retired</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="unit-filter-search">Search</label>
+              <input id="unit-filter-search" type="search" placeholder="Code, serial, model" />
+            </div>
+            <div class="filter-group filter-actions">
+              <button class="btn primary" type="button" id="new-unit-btn">Add Unit</button>
+            </div>
+          </div>
+          <div class="parts-table-wrap">
+            <table class="parts-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Model</th>
+                  <th>Serial</th>
+                  <th>Condition</th>
+                  <th>Venue</th>
+                  <th>Daily Rate</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="units-tbody"></tbody>
+            </table>
+            <p class="hero-sub" id="units-empty">No lease units yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <footer class="page-footer" data-settings-footer>Fleet Maintain · Fleet Maintenance</footer>
+    </div>
+
+    <div class="modal hidden" id="unit-modal" aria-hidden="true">
+      <div class="modal-card parts-modal-card">
+        <div class="modal-header">
+          <h3 id="unit-modal-title">Add Lease Unit</h3>
+          <button class="btn secondary" type="button" data-close-modal="unit-modal">Close</button>
+        </div>
+        <form id="unit-form">
+          <input type="hidden" id="unit-id" />
+          <div class="form-grid">
+            <label>Unit Code *<input id="unit-code" required placeholder="LC-1001" /></label>
+            <label>Model<input id="unit-model" placeholder="Club Car Carryall 1" /></label>
+            <label>Serial<input id="unit-serial" /></label>
+            <label>Year<input id="unit-year" /></label>
+            <label>Condition
+              <select id="unit-condition">
+                <option value="excellent">Excellent</option>
+                <option value="good" selected>Good</option>
+                <option value="fair">Fair</option>
+                <option value="poor">Poor</option>
+              </select>
+            </label>
+            <label>Status
+              <select id="unit-status">
+                <option value="available">Available</option>
+                <option value="leased">Leased</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="retired">Retired</option>
+              </select>
+            </label>
+            <label>Venue / Location<input id="unit-venue" /></label>
+            <label>Daily Rate ($)<input id="unit-rate" type="number" min="0" step="0.01" value="75" /></label>
+            <label>Fleet Cart ID <span class="hero-sub">(optional link)</span><input id="unit-fleet-id" placeholder="2002" /></label>
+          </div>
+          <label class="full-width">Notes<textarea id="unit-notes" rows="2"></textarea></label>
+          <div class="modal-actions">
+            <button class="btn secondary" type="button" data-close-modal="unit-modal">Cancel</button>
+            <button class="btn primary" type="submit">Save Unit</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="lease-modal" aria-hidden="true">
+      <div class="modal-card parts-modal-card">
+        <div class="modal-header">
+          <h3>Check Out Cart</h3>
+          <button class="btn secondary" type="button" data-close-modal="lease-modal">Close</button>
+        </div>
+        <form id="lease-form">
+          <div class="form-grid">
+            <label>Unit *
+              <select id="lease-unit" required></select>
+            </label>
+            <label>Customer Name *<input id="lease-customer" required placeholder="Jane Doe" /></label>
+            <label>Phone<input id="lease-phone" type="tel" /></label>
+            <label>Email<input id="lease-email" type="email" /></label>
+            <label>Start Date *<input id="lease-start" type="date" required /></label>
+            <label>Expected Return<input id="lease-expected" type="date" /></label>
+            <label>Daily Rate ($)<input id="lease-rate" type="number" min="0" step="0.01" /></label>
+            <label>Deposit ($)<input id="lease-deposit" type="number" min="0" step="0.01" value="0" /></label>
+          </div>
+          <label class="full-width">Notes<textarea id="lease-notes" rows="2"></textarea></label>
+          <div class="modal-actions">
+            <button class="btn secondary" type="button" data-close-modal="lease-modal">Cancel</button>
+            <button class="btn primary" type="submit">Start Lease</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="return-modal" aria-hidden="true">
+      <div class="modal-card parts-modal-card">
+        <div class="modal-header">
+          <h3>Return Cart</h3>
+          <button class="btn secondary" type="button" data-close-modal="return-modal">Close</button>
+        </div>
+        <form id="return-form">
+          <input type="hidden" id="return-lease-id" />
+          <p class="hero-sub" id="return-summary"></p>
+          <div class="form-grid">
+            <label>Actual Return<input id="return-date" type="datetime-local" /></label>
+            <label>Total Charged ($)<input id="return-total" type="number" min="0" step="0.01" /></label>
+            <label>Condition on return
+              <select id="return-condition">
+                <option value="">— Keep current —</option>
+                <option value="excellent">Excellent</option>
+                <option value="good">Good</option>
+                <option value="fair">Fair → send to maintenance</option>
+                <option value="poor">Poor → send to maintenance</option>
+                <option value="maintenance">Needs maintenance</option>
+              </select>
+            </label>
+          </div>
+          <label class="full-width">Return notes<textarea id="return-notes" rows="2"></textarea></label>
+          <div class="modal-actions">
+            <button class="btn secondary" type="button" data-close-modal="return-modal">Cancel</button>
+            <button class="btn primary" type="submit">Complete Return</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="db.js?v=1.8.0"></script>
+    <script src="leasing.js?v=1.8.0"></script>
+  </body>
+</html>

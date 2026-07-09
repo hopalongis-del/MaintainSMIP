@@ -134,6 +134,9 @@ OPERATIONAL_TABLES_TO_PURGE = (
     'vendors',
     'parts',
     'purchase_orders',
+    'lease_units',
+    'leases',
+    'sales',
 )
 
 SEEDED_USERNAMES = {MASTER_USERNAME, *(account[0] for account in TECHNICIAN_ACCOUNTS)}
@@ -1014,6 +1017,7 @@ class PartBase(BaseModel):
     vendor_part_number: Optional[str] = ''
     unit_of_measure: str = 'each'
     unit_cost: float = 0
+    unit_price: float = 0
     on_hand: float = 0
     reorder_point: float = 0
     reorder_qty: float = 0
@@ -1034,6 +1038,7 @@ class PartUpdate(BaseModel):
     vendor_part_number: Optional[str] = None
     unit_of_measure: Optional[str] = None
     unit_cost: Optional[float] = None
+    unit_price: Optional[float] = None
     on_hand: Optional[float] = None
     reorder_point: Optional[float] = None
     reorder_qty: Optional[float] = None
@@ -1097,6 +1102,130 @@ class PurchaseOrder(PurchaseOrderBase):
     approved_at: Optional[str] = None
     submitted_at: Optional[str] = None
     last_synced_at: Optional[str] = None
+
+
+LEASE_UNIT_STATUSES = ('available', 'leased', 'maintenance', 'retired')
+LEASE_STATUSES = ('active', 'returned', 'cancelled')
+SALE_STATUSES = ('completed', 'void')
+
+
+class LeaseUnitBase(BaseModel):
+    unit_code: str
+    serial: Optional[str] = ''
+    model: Optional[str] = ''
+    year: Optional[str] = ''
+    condition: str = 'good'
+    status: str = 'available'
+    venue: Optional[str] = ''
+    daily_rate: float = 0
+    fleet_cart_id: Optional[str] = None
+    notes: Optional[str] = ''
+
+
+class LeaseUnitCreate(LeaseUnitBase):
+    pass
+
+
+class LeaseUnitUpdate(BaseModel):
+    unit_code: Optional[str] = None
+    serial: Optional[str] = None
+    model: Optional[str] = None
+    year: Optional[str] = None
+    condition: Optional[str] = None
+    status: Optional[str] = None
+    venue: Optional[str] = None
+    daily_rate: Optional[float] = None
+    fleet_cart_id: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class LeaseUnit(LeaseUnitBase):
+    id: int
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class LeaseBase(BaseModel):
+    unit_id: int
+    customer_name: str
+    customer_phone: Optional[str] = ''
+    customer_email: Optional[str] = ''
+    start_date: str
+    expected_return: Optional[str] = ''
+    daily_rate: float = 0
+    deposit: float = 0
+    notes: Optional[str] = ''
+
+
+class LeaseCreate(LeaseBase):
+    pass
+
+
+class LeaseUpdate(BaseModel):
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    customer_email: Optional[str] = None
+    start_date: Optional[str] = None
+    expected_return: Optional[str] = None
+    actual_return: Optional[str] = None
+    daily_rate: Optional[float] = None
+    deposit: Optional[float] = None
+    total_charged: Optional[float] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class LeaseReturn(BaseModel):
+    actual_return: Optional[str] = None
+    total_charged: Optional[float] = None
+    condition: Optional[str] = None
+    notes: Optional[str] = ''
+
+
+class Lease(LeaseBase):
+    id: int
+    lease_number: Optional[str] = None
+    actual_return: Optional[str] = None
+    total_charged: float = 0
+    status: str = 'active'
+    unit_code: Optional[str] = None
+    unit_model: Optional[str] = None
+    unit_serial: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class SaleLine(BaseModel):
+    part_id: Optional[int] = None
+    part_number: Optional[str] = ''
+    description: str = ''
+    qty: float = 1
+    unit_price: float = 0
+
+
+class SaleCreate(BaseModel):
+    customer_name: Optional[str] = ''
+    customer_phone: Optional[str] = ''
+    lines: List[SaleLine] = Field(default_factory=list)
+    notes: Optional[str] = ''
+    payment_method: Optional[str] = 'cash'
+
+
+class Sale(BaseModel):
+    id: int
+    sale_number: Optional[str] = None
+    customer_name: Optional[str] = ''
+    customer_phone: Optional[str] = ''
+    status: str = 'completed'
+    lines: List[SaleLine] = Field(default_factory=list)
+    subtotal: float = 0
+    total: float = 0
+    payment_method: Optional[str] = 'cash'
+    notes: Optional[str] = ''
+    sold_by: Optional[str] = None
+    created_at: Optional[str] = None
+    voided_at: Optional[str] = None
 
 
 class AuditEntry(BaseModel):
@@ -2166,6 +2295,75 @@ async def create_tables() -> None:
                 approved_at TEXT,
                 submitted_at TEXT,
                 last_synced_at TEXT
+            )
+            '''
+        )
+        # Retail sell price for store module (defaults to 0; UI can copy unit_cost).
+        cursor = await connection.execute('PRAGMA table_info(parts)')
+        part_cols = {row[1] for row in await cursor.fetchall()}
+        if 'unit_price' not in part_cols:
+            await connection.execute(
+                'ALTER TABLE parts ADD COLUMN unit_price REAL NOT NULL DEFAULT 0',
+            )
+
+        await connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS lease_units (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                unit_code TEXT NOT NULL UNIQUE,
+                serial TEXT,
+                model TEXT,
+                year TEXT,
+                condition TEXT NOT NULL DEFAULT 'good',
+                status TEXT NOT NULL DEFAULT 'available',
+                venue TEXT,
+                daily_rate REAL NOT NULL DEFAULT 0,
+                fleet_cart_id TEXT,
+                notes TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+            '''
+        )
+        await connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS leases (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lease_number TEXT,
+                unit_id INTEGER NOT NULL,
+                customer_name TEXT NOT NULL,
+                customer_phone TEXT,
+                customer_email TEXT,
+                start_date TEXT NOT NULL,
+                expected_return TEXT,
+                actual_return TEXT,
+                daily_rate REAL NOT NULL DEFAULT 0,
+                deposit REAL NOT NULL DEFAULT 0,
+                total_charged REAL NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'active',
+                notes TEXT,
+                created_by TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+            '''
+        )
+        await connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS sales (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sale_number TEXT,
+                customer_name TEXT,
+                customer_phone TEXT,
+                status TEXT NOT NULL DEFAULT 'completed',
+                lines TEXT NOT NULL DEFAULT '[]',
+                subtotal REAL NOT NULL DEFAULT 0,
+                total REAL NOT NULL DEFAULT 0,
+                payment_method TEXT,
+                notes TEXT,
+                sold_by TEXT,
+                created_at TEXT,
+                voided_at TEXT
             )
             '''
         )
@@ -3344,6 +3542,10 @@ def part_row_to_item(row: Any) -> Part:
     data = dict(row)
     on_hand = float(data.get('on_hand') or 0)
     reorder_point = float(data.get('reorder_point') or 0)
+    unit_cost = float(data.get('unit_cost') or 0)
+    unit_price = float(data.get('unit_price') or 0)
+    if unit_price <= 0 and unit_cost > 0:
+        unit_price = unit_cost
     return Part(
         id=data['id'],
         part_number=data.get('part_number') or '',
@@ -3352,7 +3554,8 @@ def part_row_to_item(row: Any) -> Part:
         vendor_id=data.get('vendor_id'),
         vendor_part_number=data.get('vendor_part_number') or '',
         unit_of_measure=data.get('unit_of_measure') or 'each',
-        unit_cost=float(data.get('unit_cost') or 0),
+        unit_cost=unit_cost,
+        unit_price=unit_price,
         on_hand=on_hand,
         reorder_point=reorder_point,
         reorder_qty=float(data.get('reorder_qty') or 0),
@@ -3703,9 +3906,9 @@ async def create_part(request: Request, item: PartCreate) -> Part:
             '''
             INSERT INTO parts (
                 part_number, description, category, vendor_id, vendor_part_number,
-                unit_of_measure, unit_cost, on_hand, reorder_point, reorder_qty,
+                unit_of_measure, unit_cost, unit_price, on_hand, reorder_point, reorder_qty,
                 location, active, notes, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
             (
                 (item.part_number or '').strip(),
@@ -3715,6 +3918,7 @@ async def create_part(request: Request, item: PartCreate) -> Part:
                 (item.vendor_part_number or '').strip(),
                 (item.unit_of_measure or 'each').strip() or 'each',
                 float(item.unit_cost or 0),
+                float(item.unit_price if item.unit_price is not None else 0),
                 float(item.on_hand or 0),
                 float(item.reorder_point or 0),
                 float(item.reorder_qty or 0),
@@ -3759,7 +3963,7 @@ async def update_part(request: Request, part_id: int, item: PartUpdate) -> Part:
     for key in ('part_number', 'category', 'vendor_part_number', 'unit_of_measure', 'location', 'notes'):
         if key in payload and payload[key] is not None:
             payload[key] = str(payload[key]).strip()
-    for key in ('unit_cost', 'on_hand', 'reorder_point', 'reorder_qty'):
+    for key in ('unit_cost', 'unit_price', 'on_hand', 'reorder_point', 'reorder_qty'):
         if key in payload and payload[key] is not None:
             payload[key] = float(payload[key])
     if not payload:
@@ -4049,6 +4253,622 @@ async def update_purchase_order(
         {k: v for k, v in payload.items() if k != 'lines'},
     )
     return po_row_to_item(row)
+
+
+def lease_unit_row_to_item(row: Any) -> LeaseUnit:
+    data = dict(row)
+    return LeaseUnit(
+        id=data['id'],
+        unit_code=data.get('unit_code') or '',
+        serial=data.get('serial') or '',
+        model=data.get('model') or '',
+        year=data.get('year') or '',
+        condition=data.get('condition') or 'good',
+        status=data.get('status') or 'available',
+        venue=data.get('venue') or '',
+        daily_rate=float(data.get('daily_rate') or 0),
+        fleet_cart_id=str(data['fleet_cart_id']) if data.get('fleet_cart_id') is not None else None,
+        notes=data.get('notes') or '',
+        created_at=data.get('created_at'),
+        updated_at=data.get('updated_at'),
+    )
+
+
+def lease_row_to_item(row: Any) -> Lease:
+    data = dict(row)
+    return Lease(
+        id=data['id'],
+        lease_number=data.get('lease_number') or f"LS-{data['id']}",
+        unit_id=int(data['unit_id']),
+        customer_name=data.get('customer_name') or '',
+        customer_phone=data.get('customer_phone') or '',
+        customer_email=data.get('customer_email') or '',
+        start_date=data.get('start_date') or '',
+        expected_return=data.get('expected_return') or '',
+        actual_return=data.get('actual_return'),
+        daily_rate=float(data.get('daily_rate') or 0),
+        deposit=float(data.get('deposit') or 0),
+        total_charged=float(data.get('total_charged') or 0),
+        status=data.get('status') or 'active',
+        notes=data.get('notes') or '',
+        unit_code=data.get('unit_code'),
+        unit_model=data.get('unit_model'),
+        unit_serial=data.get('unit_serial'),
+        created_by=data.get('created_by'),
+        created_at=data.get('created_at'),
+        updated_at=data.get('updated_at'),
+    )
+
+
+def sale_row_to_item(row: Any) -> Sale:
+    data = dict(row)
+    raw_lines = data.get('lines') or '[]'
+    if isinstance(raw_lines, str):
+        try:
+            parsed = json.loads(raw_lines)
+        except json.JSONDecodeError:
+            parsed = []
+    else:
+        parsed = raw_lines
+    lines = [SaleLine(**line) if isinstance(line, dict) else line for line in (parsed or [])]
+    return Sale(
+        id=data['id'],
+        sale_number=data.get('sale_number') or f"SALE-{data['id']}",
+        customer_name=data.get('customer_name') or '',
+        customer_phone=data.get('customer_phone') or '',
+        status=data.get('status') or 'completed',
+        lines=lines,
+        subtotal=float(data.get('subtotal') or 0),
+        total=float(data.get('total') or 0),
+        payment_method=data.get('payment_method') or 'cash',
+        notes=data.get('notes') or '',
+        sold_by=data.get('sold_by'),
+        created_at=data.get('created_at'),
+        voided_at=data.get('voided_at'),
+    )
+
+
+async def fetch_lease_unit(unit_id: int) -> Optional[dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute('SELECT * FROM lease_units WHERE id = ?', (unit_id,))
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def fetch_lease(lease_id: int) -> Optional[dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            '''
+            SELECT l.*, u.unit_code, u.model AS unit_model, u.serial AS unit_serial
+            FROM leases l
+            LEFT JOIN lease_units u ON u.id = l.unit_id
+            WHERE l.id = ?
+            ''',
+            (lease_id,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def fetch_sale(sale_id: int) -> Optional[dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute('SELECT * FROM sales WHERE id = ?', (sale_id,))
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+@app.get('/api/lease/stats')
+async def lease_stats(request: Request) -> dict[str, Any]:
+    require_authenticated_user(request)
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        available = (await (await connection.execute(
+            "SELECT COUNT(*) AS n FROM lease_units WHERE status = 'available'",
+        )).fetchone())['n']
+        leased = (await (await connection.execute(
+            "SELECT COUNT(*) AS n FROM lease_units WHERE status = 'leased'",
+        )).fetchone())['n']
+        active = (await (await connection.execute(
+            "SELECT COUNT(*) AS n FROM leases WHERE status = 'active'",
+        )).fetchone())['n']
+        units = (await (await connection.execute(
+            'SELECT COUNT(*) AS n FROM lease_units',
+        )).fetchone())['n']
+    return {
+        'units': units,
+        'available': available,
+        'leased': leased,
+        'active_leases': active,
+    }
+
+
+@app.get('/api/lease/units', response_model=List[LeaseUnit])
+async def list_lease_units(
+    request: Request,
+    status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+) -> List[LeaseUnit]:
+    require_authenticated_user(request)
+    clauses: list[str] = []
+    params: list[Any] = []
+    if status and status != 'all':
+        clauses.append('status = ?')
+        params.append(status.strip().lower())
+    if search:
+        like = f'%{search.strip()}%'
+        clauses.append('(unit_code LIKE ? OR serial LIKE ? OR model LIKE ? OR venue LIKE ?)')
+        params.extend([like, like, like, like])
+    where = f'WHERE {" AND ".join(clauses)}' if clauses else ''
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            f'SELECT * FROM lease_units {where} ORDER BY unit_code COLLATE NOCASE',
+            params,
+        )
+        rows = await cursor.fetchall()
+    return [lease_unit_row_to_item(row) for row in rows]
+
+
+@app.post('/api/lease/units', response_model=LeaseUnit)
+async def create_lease_unit(request: Request, item: LeaseUnitCreate) -> LeaseUnit:
+    require_write_access(request)
+    code = (item.unit_code or '').strip()
+    if not code:
+        raise HTTPException(status_code=400, detail='Unit code is required')
+    status = (item.status or 'available').strip().lower()
+    if status not in LEASE_UNIT_STATUSES:
+        raise HTTPException(status_code=400, detail=f'Invalid status. Use: {", ".join(LEASE_UNIT_STATUSES)}')
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        try:
+            cursor = await connection.execute(
+                '''
+                INSERT INTO lease_units (
+                    unit_code, serial, model, year, condition, status, venue,
+                    daily_rate, fleet_cart_id, notes, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''',
+                (
+                    code,
+                    (item.serial or '').strip(),
+                    (item.model or '').strip(),
+                    (item.year or '').strip(),
+                    (item.condition or 'good').strip() or 'good',
+                    status,
+                    (item.venue or '').strip(),
+                    float(item.daily_rate or 0),
+                    str(item.fleet_cart_id).strip() if item.fleet_cart_id else None,
+                    (item.notes or '').strip(),
+                    now,
+                    now,
+                ),
+            )
+            unit_id = cursor.lastrowid
+            await connection.commit()
+        except aiosqlite.IntegrityError:
+            raise HTTPException(status_code=409, detail=f'Unit code {code} already exists') from None
+    row = await fetch_lease_unit(unit_id)
+    await record_audit(request, 'created', 'lease_unit', unit_id, f'Added lease unit {code}')
+    return lease_unit_row_to_item(row)
+
+
+@app.put('/api/lease/units/{unit_id}', response_model=LeaseUnit)
+async def update_lease_unit(request: Request, unit_id: int, item: LeaseUnitUpdate) -> LeaseUnit:
+    require_write_access(request)
+    existing = await fetch_lease_unit(unit_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail='Lease unit not found')
+    payload = item.model_dump(exclude_unset=True)
+    if 'status' in payload and payload['status'] is not None:
+        status = str(payload['status']).strip().lower()
+        if status not in LEASE_UNIT_STATUSES:
+            raise HTTPException(status_code=400, detail=f'Invalid status. Use: {", ".join(LEASE_UNIT_STATUSES)}')
+        payload['status'] = status
+    if 'unit_code' in payload and payload['unit_code'] is not None:
+        payload['unit_code'] = str(payload['unit_code']).strip()
+        if not payload['unit_code']:
+            raise HTTPException(status_code=400, detail='Unit code is required')
+    for key in ('serial', 'model', 'year', 'condition', 'venue', 'notes'):
+        if key in payload and payload[key] is not None:
+            payload[key] = str(payload[key]).strip()
+    if 'daily_rate' in payload and payload['daily_rate'] is not None:
+        payload['daily_rate'] = float(payload['daily_rate'])
+    if 'fleet_cart_id' in payload:
+        payload['fleet_cart_id'] = (
+            str(payload['fleet_cart_id']).strip() if payload['fleet_cart_id'] else None
+        )
+    if not payload:
+        return lease_unit_row_to_item(existing)
+    payload['updated_at'] = datetime.utcnow().isoformat()
+    columns = ', '.join(f'{key} = ?' for key in payload)
+    values = list(payload.values()) + [unit_id]
+    async with aiosqlite.connect(DB_PATH) as connection:
+        try:
+            await connection.execute(f'UPDATE lease_units SET {columns} WHERE id = ?', values)
+            await connection.commit()
+        except aiosqlite.IntegrityError:
+            raise HTTPException(status_code=409, detail='Unit code already exists') from None
+    row = await fetch_lease_unit(unit_id)
+    await record_audit(request, 'updated', 'lease_unit', unit_id, f'Updated lease unit {row.get("unit_code")}')
+    return lease_unit_row_to_item(row)
+
+
+@app.get('/api/leases', response_model=List[Lease])
+async def list_leases(
+    request: Request,
+    status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+) -> List[Lease]:
+    require_authenticated_user(request)
+    clauses: list[str] = []
+    params: list[Any] = []
+    if status and status != 'all':
+        clauses.append('l.status = ?')
+        params.append(status.strip().lower())
+    if search:
+        like = f'%{search.strip()}%'
+        clauses.append(
+            '(l.customer_name LIKE ? OR l.lease_number LIKE ? OR u.unit_code LIKE ? OR l.customer_phone LIKE ?)',
+        )
+        params.extend([like, like, like, like])
+    where = f'WHERE {" AND ".join(clauses)}' if clauses else ''
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            f'''
+            SELECT l.*, u.unit_code, u.model AS unit_model, u.serial AS unit_serial
+            FROM leases l
+            LEFT JOIN lease_units u ON u.id = l.unit_id
+            {where}
+            ORDER BY l.id DESC
+            ''',
+            params,
+        )
+        rows = await cursor.fetchall()
+    return [lease_row_to_item(row) for row in rows]
+
+
+@app.post('/api/leases', response_model=Lease)
+async def create_lease(request: Request, item: LeaseCreate) -> Lease:
+    user = require_write_access(request)
+    unit = await fetch_lease_unit(item.unit_id)
+    if not unit:
+        raise HTTPException(status_code=400, detail='Lease unit not found')
+    if (unit.get('status') or '') != 'available':
+        raise HTTPException(status_code=409, detail=f'Unit is not available (status: {unit.get("status")})')
+    customer = (item.customer_name or '').strip()
+    if not customer:
+        raise HTTPException(status_code=400, detail='Customer name is required')
+    start_date = (item.start_date or '').strip()
+    if not start_date:
+        raise HTTPException(status_code=400, detail='Start date is required')
+    daily_rate = float(item.daily_rate if item.daily_rate is not None else unit.get('daily_rate') or 0)
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        cursor = await connection.execute(
+            '''
+            INSERT INTO leases (
+                lease_number, unit_id, customer_name, customer_phone, customer_email,
+                start_date, expected_return, daily_rate, deposit, total_charged,
+                status, notes, created_by, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?, ?, ?)
+            ''',
+            (
+                None,
+                item.unit_id,
+                customer,
+                (item.customer_phone or '').strip(),
+                (item.customer_email or '').strip(),
+                start_date,
+                (item.expected_return or '').strip(),
+                daily_rate,
+                float(item.deposit or 0),
+                (item.notes or '').strip(),
+                user.get('display_name') or user.get('username'),
+                now,
+                now,
+            ),
+        )
+        lease_id = cursor.lastrowid
+        lease_number = f'LS-{lease_id:05d}'
+        await connection.execute(
+            'UPDATE leases SET lease_number = ? WHERE id = ?',
+            (lease_number, lease_id),
+        )
+        await connection.execute(
+            "UPDATE lease_units SET status = 'leased', updated_at = ? WHERE id = ?",
+            (now, item.unit_id),
+        )
+        await connection.commit()
+    row = await fetch_lease(lease_id)
+    await record_audit(
+        request,
+        'created',
+        'lease',
+        lease_id,
+        f'Started {lease_number} for {customer} ({unit.get("unit_code")})',
+    )
+    return lease_row_to_item(row)
+
+
+@app.put('/api/leases/{lease_id}', response_model=Lease)
+async def update_lease(request: Request, lease_id: int, item: LeaseUpdate) -> Lease:
+    require_write_access(request)
+    existing = await fetch_lease(lease_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail='Lease not found')
+    payload = item.model_dump(exclude_unset=True)
+    if 'status' in payload and payload['status'] is not None:
+        status = str(payload['status']).strip().lower()
+        if status not in LEASE_STATUSES:
+            raise HTTPException(status_code=400, detail=f'Invalid status. Use: {", ".join(LEASE_STATUSES)}')
+        payload['status'] = status
+    for key in ('customer_name', 'customer_phone', 'customer_email', 'start_date', 'expected_return', 'actual_return', 'notes'):
+        if key in payload and payload[key] is not None:
+            payload[key] = str(payload[key]).strip()
+    for key in ('daily_rate', 'deposit', 'total_charged'):
+        if key in payload and payload[key] is not None:
+            payload[key] = float(payload[key])
+    if not payload:
+        return lease_row_to_item(existing)
+    payload['updated_at'] = datetime.utcnow().isoformat()
+    columns = ', '.join(f'{key} = ?' for key in payload)
+    values = list(payload.values()) + [lease_id]
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(f'UPDATE leases SET {columns} WHERE id = ?', values)
+        await connection.commit()
+    row = await fetch_lease(lease_id)
+    await record_audit(request, 'updated', 'lease', lease_id, f'Updated {row.get("lease_number")}')
+    return lease_row_to_item(row)
+
+
+@app.post('/api/leases/{lease_id}/return', response_model=Lease)
+async def return_lease(request: Request, lease_id: int, body: LeaseReturn) -> Lease:
+    require_write_access(request)
+    existing = await fetch_lease(lease_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail='Lease not found')
+    if (existing.get('status') or '') != 'active':
+        raise HTTPException(status_code=409, detail='Only active leases can be returned')
+    now = datetime.utcnow().isoformat()
+    actual_return = (body.actual_return or now).strip()
+    total_charged = body.total_charged
+    if total_charged is None:
+        total_charged = float(existing.get('deposit') or 0)
+    notes = (body.notes or '').strip()
+    if notes:
+        prior = (existing.get('notes') or '').strip()
+        notes = f'{prior}\nReturn: {notes}'.strip() if prior else f'Return: {notes}'
+    else:
+        notes = existing.get('notes') or ''
+    async with aiosqlite.connect(DB_PATH) as connection:
+        await connection.execute(
+            '''
+            UPDATE leases
+            SET status = 'returned', actual_return = ?, total_charged = ?, notes = ?, updated_at = ?
+            WHERE id = ?
+            ''',
+            (actual_return, float(total_charged), notes, now, lease_id),
+        )
+        unit_status = 'available'
+        if body.condition and body.condition.strip().lower() in ('maintenance', 'fair', 'poor'):
+            unit_status = 'maintenance'
+        await connection.execute(
+            'UPDATE lease_units SET status = ?, updated_at = ? WHERE id = ?',
+            (unit_status, now, existing['unit_id']),
+        )
+        if body.condition:
+            await connection.execute(
+                'UPDATE lease_units SET condition = ? WHERE id = ?',
+                (body.condition.strip(), existing['unit_id']),
+            )
+        await connection.commit()
+    row = await fetch_lease(lease_id)
+    await record_audit(
+        request,
+        'updated',
+        'lease',
+        lease_id,
+        f'Returned {row.get("lease_number")}',
+        {'total_charged': total_charged},
+    )
+    return lease_row_to_item(row)
+
+
+@app.get('/api/sales/stats')
+async def sales_stats(request: Request) -> dict[str, Any]:
+    require_authenticated_user(request)
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        completed = (await (await connection.execute(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(total), 0) AS revenue FROM sales WHERE status = 'completed'",
+        )).fetchone())
+        today = datetime.utcnow().date().isoformat()
+        today_row = (await (await connection.execute(
+            '''
+            SELECT COUNT(*) AS n, COALESCE(SUM(total), 0) AS revenue
+            FROM sales
+            WHERE status = 'completed' AND created_at LIKE ?
+            ''',
+            (f'{today}%',),
+        )).fetchone())
+    return {
+        'completed_sales': completed['n'],
+        'revenue': round(float(completed['revenue'] or 0), 2),
+        'today_sales': today_row['n'],
+        'today_revenue': round(float(today_row['revenue'] or 0), 2),
+    }
+
+
+@app.get('/api/sales', response_model=List[Sale])
+async def list_sales(
+    request: Request,
+    status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+) -> List[Sale]:
+    require_authenticated_user(request)
+    clauses: list[str] = []
+    params: list[Any] = []
+    if status and status != 'all':
+        clauses.append('status = ?')
+        params.append(status.strip().lower())
+    if search:
+        like = f'%{search.strip()}%'
+        clauses.append('(sale_number LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)')
+        params.extend([like, like, like])
+    where = f'WHERE {" AND ".join(clauses)}' if clauses else ''
+    params.append(limit)
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        cursor = await connection.execute(
+            f'SELECT * FROM sales {where} ORDER BY id DESC LIMIT ?',
+            params,
+        )
+        rows = await cursor.fetchall()
+    return [sale_row_to_item(row) for row in rows]
+
+
+@app.post('/api/sales', response_model=Sale)
+async def create_sale(request: Request, item: SaleCreate) -> Sale:
+    user = require_write_access(request)
+    if not item.lines:
+        raise HTTPException(status_code=400, detail='Add at least one line item')
+    now = datetime.utcnow().isoformat()
+    normalized: list[dict[str, Any]] = []
+    subtotal = 0.0
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+        for line in item.lines:
+            qty = float(line.qty or 0)
+            if qty <= 0:
+                raise HTTPException(status_code=400, detail='Quantity must be greater than zero')
+            part = None
+            if line.part_id is not None:
+                cursor = await connection.execute(
+                    'SELECT * FROM parts WHERE id = ?',
+                    (line.part_id,),
+                )
+                part = await cursor.fetchone()
+                if not part:
+                    raise HTTPException(status_code=400, detail=f'Part id {line.part_id} not found')
+                on_hand = float(part['on_hand'] or 0)
+                if on_hand < qty:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            f'Insufficient stock for {part["part_number"] or part["description"]}: '
+                            f'on hand {on_hand}, requested {qty}'
+                        ),
+                    )
+            unit_price = float(line.unit_price or 0)
+            if unit_price <= 0 and part is not None:
+                unit_price = float(part['unit_price'] or part['unit_cost'] or 0)
+            description = (line.description or '').strip()
+            part_number = (line.part_number or '').strip()
+            if part is not None:
+                description = description or (part['description'] or '')
+                part_number = part_number or (part['part_number'] or '')
+            if not description:
+                raise HTTPException(status_code=400, detail='Line description is required')
+            line_total = round(qty * unit_price, 2)
+            subtotal += line_total
+            normalized.append({
+                'part_id': line.part_id,
+                'part_number': part_number,
+                'description': description,
+                'qty': qty,
+                'unit_price': unit_price,
+            })
+
+        for line in normalized:
+            if line['part_id'] is None:
+                continue
+            await connection.execute(
+                '''
+                UPDATE parts
+                SET on_hand = on_hand - ?, updated_at = ?
+                WHERE id = ?
+                ''',
+                (line['qty'], now, line['part_id']),
+            )
+
+        subtotal = round(subtotal, 2)
+        cursor = await connection.execute(
+            '''
+            INSERT INTO sales (
+                sale_number, customer_name, customer_phone, status, lines,
+                subtotal, total, payment_method, notes, sold_by, created_at, voided_at
+            ) VALUES (?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, NULL)
+            ''',
+            (
+                None,
+                (item.customer_name or '').strip(),
+                (item.customer_phone or '').strip(),
+                json.dumps(normalized),
+                subtotal,
+                subtotal,
+                (item.payment_method or 'cash').strip() or 'cash',
+                (item.notes or '').strip(),
+                user.get('display_name') or user.get('username'),
+                now,
+            ),
+        )
+        sale_id = cursor.lastrowid
+        sale_number = f'SALE-{sale_id:05d}'
+        await connection.execute(
+            'UPDATE sales SET sale_number = ? WHERE id = ?',
+            (sale_number, sale_id),
+        )
+        await connection.commit()
+
+    row = await fetch_sale(sale_id)
+    await record_audit(
+        request,
+        'created',
+        'sale',
+        sale_id,
+        f'Completed {sale_number} · ${subtotal:.2f}',
+        {'lines': len(normalized), 'total': subtotal},
+    )
+    return sale_row_to_item(row)
+
+
+@app.post('/api/sales/{sale_id}/void', response_model=Sale)
+async def void_sale(request: Request, sale_id: int) -> Sale:
+    require_write_access(request)
+    existing = await fetch_sale(sale_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail='Sale not found')
+    if (existing.get('status') or '') != 'completed':
+        raise HTTPException(status_code=409, detail='Only completed sales can be voided')
+    raw_lines = existing.get('lines') or '[]'
+    try:
+        lines = json.loads(raw_lines) if isinstance(raw_lines, str) else (raw_lines or [])
+    except json.JSONDecodeError:
+        lines = []
+    now = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as connection:
+        for line in lines:
+            part_id = line.get('part_id') if isinstance(line, dict) else None
+            qty = float(line.get('qty') or 0) if isinstance(line, dict) else 0
+            if part_id and qty:
+                await connection.execute(
+                    'UPDATE parts SET on_hand = on_hand + ?, updated_at = ? WHERE id = ?',
+                    (qty, now, part_id),
+                )
+        await connection.execute(
+            "UPDATE sales SET status = 'void', voided_at = ? WHERE id = ?",
+            (now, sale_id),
+        )
+        await connection.commit()
+    row = await fetch_sale(sale_id)
+    await record_audit(request, 'updated', 'sale', sale_id, f'Voided {row.get("sale_number")}')
+    return sale_row_to_item(row)
 
 
 @app.get('/api/audit', response_model=List[AuditEntry])

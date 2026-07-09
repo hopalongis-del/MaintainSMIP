@@ -119,7 +119,7 @@ function renderPartsTable() {
       <td data-label="Vendor">${escapeHtml(part.vendor_name || '—')}</td>
       <td data-label="On Hand" class="${low ? 'stock-low' : 'stock-ok'}">${part.on_hand}${low ? ' ⚠' : ''}</td>
       <td data-label="Reorder">${part.reorder_point} / ${part.reorder_qty}</td>
-      <td data-label="Cost">${money(part.unit_cost)}</td>
+      <td data-label="Cost / Sell">${money(part.unit_cost)} / ${money(part.unit_price || part.unit_cost)}</td>
       <td data-label="Location">${escapeHtml(part.location || '—')}</td>
       <td class="row-actions" data-label="">
         ${canWrite ? `
@@ -150,6 +150,7 @@ function openPartEditor(partId = null) {
   document.getElementById('part-vendor-pn').value = part?.vendor_part_number || '';
   document.getElementById('part-uom').value = part?.unit_of_measure || 'each';
   document.getElementById('part-cost').value = part?.unit_cost ?? 0;
+  document.getElementById('part-price').value = part?.unit_price ?? part?.unit_cost ?? 0;
   document.getElementById('part-on-hand').value = part?.on_hand ?? 0;
   document.getElementById('part-reorder-point').value = part?.reorder_point ?? 0;
   document.getElementById('part-reorder-qty').value = part?.reorder_qty ?? 0;
@@ -182,6 +183,7 @@ async function savePart(event) {
     vendor_part_number: document.getElementById('part-vendor-pn').value.trim(),
     unit_of_measure: document.getElementById('part-uom').value.trim() || 'each',
     unit_cost: Number(document.getElementById('part-cost').value) || 0,
+    unit_price: Number(document.getElementById('part-price').value) || 0,
     on_hand: Number(document.getElementById('part-on-hand').value) || 0,
     reorder_point: Number(document.getElementById('part-reorder-point').value) || 0,
     reorder_qty: Number(document.getElementById('part-reorder-qty').value) || 0,

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Store | Fleet Maintain</title>
+    <link rel="icon" href="logo.svg" type="image/svg+xml" />
+    <script src="themes.js?v=1.8.0"></script>
+    <link rel="stylesheet" href="shared.css?v=1.8.0" />
+    <link rel="stylesheet" href="store.css?v=1.8.0" />
+    <script src="smi_events.js?v=1.8.0"></script>
+    <script src="settings.js?v=1.8.0"></script>
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="index.html">
+          <div class="brand-mark">
+            <img class="brand-logo" src="logo.svg" alt="Fleet Maintain" />
+          </div>
+          <span>Fleet Maintain</span>
+        </a>
+        <div class="nav-links">
+          <a href="index.html">Dashboard</a>
+          <a href="workorders.html">Work Orders</a>
+          <a href="pm.html">Preventive Maintenance</a>
+          <a href="index.html#fleet">Fleet</a>
+          <a href="accidents.html">Accident Damage</a>
+          <a href="activity.html">Activity</a>
+          <a href="reports.html">Reports</a>
+          <a href="parts.html">Parts</a>
+          <a href="leasing.html">Leasing</a>
+          <a class="active" href="store.html">Store</a>
+        </div>
+      </nav>
+
+      <section class="card page-section">
+        <div class="top-strip">
+          <div>
+            <span class="eyebrow">Parts Store</span>
+            <h2>Sell parts from inventory at the counter.</h2>
+            <p class="hero-sub">Sales deduct on-hand stock. Void a sale to put stock back. Manage catalog in Parts.</p>
+          </div>
+          <div class="tab-controls">
+            <button class="btn secondary active" type="button" data-store-tab="sell">Sell</button>
+            <button class="btn secondary" type="button" data-store-tab="history">Sales History</button>
+          </div>
+        </div>
+
+        <div class="dash-strip">
+          <div class="stat-card"><span>Today</span><strong id="stat-today">0</strong></div>
+          <div class="stat-card"><span>Today $</span><strong id="stat-today-rev">$0</strong></div>
+          <div class="stat-card"><span>All Sales</span><strong id="stat-sales">0</strong></div>
+          <div class="stat-card"><span>Revenue</span><strong id="stat-revenue">$0</strong></div>
+        </div>
+
+        <div id="sell-view">
+          <div class="store-layout">
+            <div class="store-panel">
+              <h3>Catalog</h3>
+              <div class="filter-bar">
+                <div class="filter-group" style="flex: 1; min-width: 200px;">
+                  <label for="part-search">Search stocked parts</label>
+                  <input id="part-search" type="search" placeholder="Part # or description" />
+                </div>
+              </div>
+              <div class="parts-table-wrap">
+                <table class="parts-table">
+                  <thead>
+                    <tr>
+                      <th>Part</th>
+                      <th>On Hand</th>
+                      <th>Price</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="catalog-tbody"></tbody>
+                </table>
+                <p class="hero-sub" id="catalog-empty">No sellable parts. Add inventory under Parts first.</p>
+              </div>
+            </div>
+
+            <div class="store-panel">
+              <h3>Cart</h3>
+              <div class="form-grid">
+                <label>Customer<input id="sale-customer" placeholder="Optional" /></label>
+                <label>Phone<input id="sale-phone" type="tel" placeholder="Optional" /></label>
+                <label>Payment
+                  <select id="sale-payment">
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="check">Check</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+                <label>Notes<input id="sale-notes" placeholder="Optional" /></label>
+              </div>
+              <div class="cart-lines" id="cart-lines"></div>
+              <p class="hero-sub" id="cart-empty">Cart is empty — add parts from the catalog.</p>
+              <div class="sale-total">
+                <span>Total</span>
+                <strong id="cart-total">$0.00</strong>
+              </div>
+              <button class="btn primary" type="button" id="complete-sale-btn" style="width: 100%;">Complete Sale</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="history-view" class="hidden">
+          <div class="filter-bar">
+            <div class="filter-group">
+              <label for="sale-filter-status">Status</label>
+              <select id="sale-filter-status">
+                <option value="all">All</option>
+                <option value="completed">Completed</option>
+                <option value="void">Void</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="sale-filter-search">Search</label>
+              <input id="sale-filter-search" type="search" placeholder="Sale #, customer" />
+            </div>
+          </div>
+          <div class="parts-table-wrap">
+            <table class="parts-table">
+              <thead>
+                <tr>
+                  <th>Sale #</th>
+                  <th>Customer</th>
+                  <th>Items</th>
+                  <th>Total</th>
+                  <th>Payment</th>
+                  <th>Sold By</th>
+                  <th>When</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="sales-tbody"></tbody>
+            </table>
+            <p class="hero-sub" id="sales-empty">No sales yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <footer class="page-footer" data-settings-footer>Fleet Maintain · Fleet Maintenance</footer>
+    </div>
+
+    <script src="db.js?v=1.8.0"></script>
+    <script src="store.js?v=1.8.0"></script>
+  </body>
+</html>
