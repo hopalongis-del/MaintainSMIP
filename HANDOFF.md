@@ -296,6 +296,7 @@ Separate app in `C:\Claude Code\leasing program\` — golf cart **leasing** inve
 
 ## Shipped recently (2026-07-09)
 
+- **Leasing + Store modules (v1.8.0)** — golf cart leasing (units, checkout, return); parts store (sell from inventory, void restores stock); sell price on parts
 - **Login rebrand + owner login (v1.7.2)** — UI name **Fleet Maintain**, generic SVG logo (no SMI mark), owner is `mike` / `mike` (not `mike.casady`)
 - **Unbrand + purge SMIP customer data (v1.7.1)** — remove SMI Properties branding; empty fleet seed; one-time DB purge of carts/WO/PM/accidents/parts and former team logins
 - **Parts module v1.7.0** — real inventory UI replaces zen placeholder; vendors; purchase orders; smoke tests
