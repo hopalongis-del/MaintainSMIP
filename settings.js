@@ -1,4 +1,4 @@
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.8.1';
 const APP_NAME = 'Fleet Maintain';
 const LEGACY_THEME_KEY = 'maintainsmip-theme';
 const SETTINGS_KEY = 'maintainsmip-settings';
@@ -138,7 +138,7 @@ function applySettings(settings = getSettings()) {
   const theme = resolveThemeId(settings.theme, settings.customTheme);
   const layout = resolveLayout(settings);
 
-  applyDocumentTheme({ theme: settings.theme, layout, layoutMode: settings.layoutMode, customTheme: settings.customTheme });
+  applyDocumentTheme({ theme, layout, layoutMode: settings.layoutMode, customTheme: settings.customTheme });
 
   document.querySelectorAll('[data-theme-option]').forEach((button) => {
     button.classList.toggle('active', button.dataset.themeOption === theme);
