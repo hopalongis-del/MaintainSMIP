@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dashboard | Fleet Maintain</title>
     <link rel="icon" href="logo.svg" type="image/svg+xml" />
-    <script src="themes.js?v=1.8.1"></script>
-    <link rel="stylesheet" href="shared.css?v=1.8.1" />
-    <link rel="stylesheet" href="dashboard_widgets.css?v=1.8.1" />
-    <script src="smi_events.js?v=1.8.1"></script>
-    <script src="settings.js?v=1.8.1"></script>
+    <script src="themes.js?v=1.9.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="shared.css?v=1.9.0" />
+    <link rel="stylesheet" href="dashboard_widgets.css?v=1.9.0" />
+    <script src="smi_events.js?v=1.9.0"></script>
+    <script src="settings.js?v=1.9.0"></script>
     <style>
       .filter-bar {
         display: grid;
@@ -201,6 +202,7 @@
 
         <div class="fleet-actions">
           <p class="hero-sub" style="margin: 0;">Search and filter the fleet table below. Click a row to view work orders for that cart.</p>
+          <button type="button" class="btn secondary" id="fleet-scan-btn" style="margin-right: 8px;">Scan Barcode</button>
           <button type="button" class="btn primary hidden" id="fleet-add-btn">Add Cart</button>
         </div>
 
@@ -338,11 +340,45 @@
           <h3 class="section-title" style="font-size: 1rem; margin-bottom: 8px;">Activity</h3>
           <div id="cart-audit-list"></div>
         </div>
+
+        <div class="cart-timeline-panel hidden" id="cart-timeline-panel" style="margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border);">
+          <h3 class="section-title" style="font-size: 1rem; margin-bottom: 8px;">Lifecycle Timeline</h3>
+          <div id="cart-timeline-list" class="timeline-list" style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;"></div>
+        </div>
       </div>
     </div>
 
-    <script src="db.js?v=1.8.1"></script>
-    <script src="dashboard_widgets.js?v=1.8.1"></script>
+    <div class="modal hidden" id="scan-modal">
+      <div class="modal-panel card" style="max-width: 450px;">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">Scanner</span>
+            <h2>Scan Cart QR / Barcode</h2>
+          </div>
+          <button class="btn ghost" type="button" id="scan-modal-close">Close</button>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 16px; align-items: center; margin-top: 14px;">
+          <p class="hero-sub" style="margin: 0; text-align: center;">Simulate a barcode scan by entering a Cart ID or Serial below, or use your camera if supported.</p>
+          <div id="scanner-reader" style="width: 100%; border: 1px dashed var(--border); border-radius: 12px; min-height: 180px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.2);">
+            <div style="text-align: center; padding: 20px;">
+              <p style="margin: 0 0 10px; font-weight: bold; color: var(--muted);">Camera Scanner Offline</p>
+              <button class="btn secondary" id="start-camera-btn">Enable Camera</button>
+            </div>
+          </div>
+          <div style="width: 100%;">
+            <label for="scan-input" style="font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; display: block;">Manual Simulator Input</label>
+            <div style="display: flex; gap: 10px; width: 100%;">
+              <input id="scan-input" style="flex: 1;" placeholder="Enter Cart ID, Serial or Barcode" />
+              <button class="btn primary" id="simulate-scan-btn">Lookup</button>
+            </div>
+          </div>
+          <p id="scan-status" class="hero-sub" style="margin: 0; color: var(--warning); text-align: center; min-height: 1.2rem;"></p>
+        </div>
+      </div>
+    </div>
+
+    <script src="db.js?v=1.9.0"></script>
+    <script src="dashboard_widgets.js?v=1.9.0"></script>
     <script>
       function formatDate(value) {
         if (window.MaintainSMIPSettings?.formatDate) {
@@ -427,8 +463,13 @@
         document.getElementById('cart-modal').classList.remove('hidden');
         if (isEdit) {
           loadCartAudit(cart.id);
+          loadCartTimeline(cart.id);
         } else {
           document.getElementById('cart-audit-list').innerHTML = '';
+          const timelineList = document.getElementById('cart-timeline-list');
+          if (timelineList) timelineList.innerHTML = '';
+          const timelinePanel = document.getElementById('cart-timeline-panel');
+          if (timelinePanel) timelinePanel.classList.add('hidden');
         }
       }
 
@@ -436,6 +477,8 @@
         editingCartId = null;
         document.getElementById('cart-modal').classList.add('hidden');
         document.getElementById('cart-form').reset();
+        const timelinePanel = document.getElementById('cart-timeline-panel');
+        if (timelinePanel) timelinePanel.classList.add('hidden');
       }
 
       async function loadCartAudit(cartId) {
@@ -814,6 +857,139 @@
         updatePmLabels();
         loadDashboard();
       });
+
+
+      async function loadCartTimeline(cartId) {
+        const panel = document.getElementById('cart-timeline-panel');
+        const list = document.getElementById('cart-timeline-list');
+        if (!panel || !list) return;
+
+        panel.classList.remove('hidden');
+        list.innerHTML = '<p class="hero-sub loading-pulse">Loading lifecycle timeline…</p>';
+
+        try {
+          const events = await db.getCartTimeline(cartId);
+          if (!events || events.length === 0) {
+            list.innerHTML = '<p class="hero-sub">No maintenance or checkout history found for this cart.</p>';
+            return;
+          }
+
+          list.innerHTML = events.map(ev => {
+            const dateStr = formatDate(ev.date);
+            return `
+              <div class="timeline-item" data-type="${ev.type}">
+                <div class="timeline-date">${dateStr}</div>
+                <div class="timeline-title">${ev.title}</div>
+                <div class="timeline-desc">${ev.description}</div>
+              </div>
+            `;
+          }).join('');
+        } catch (err) {
+          list.innerHTML = `<p class="hero-sub" style="color:var(--warning);">Failed to load timeline: ${err.message || err}</p>`;
+        }
+      }
+
+
+      // Barcode / QR Scanner Simulation
+      const scanBtn = document.getElementById('fleet-scan-btn');
+      const scanModal = document.getElementById('scan-modal');
+      const scanModalClose = document.getElementById('scan-modal-close');
+      const scanInput = document.getElementById('scan-input');
+      const simulateBtn = document.getElementById('simulate-scan-btn');
+      const scanStatus = document.getElementById('scan-status');
+      const startCamBtn = document.getElementById('start-camera-btn');
+      const scannerReader = document.getElementById('scanner-reader');
+
+      if (scanBtn) {
+        scanBtn.addEventListener('click', () => {
+          if (scanStatus) scanStatus.textContent = '';
+          if (scanInput) scanInput.value = '';
+          if (scanModal) {
+            scanModal.classList.remove('hidden');
+            scanModal.setAttribute('aria-hidden', 'false');
+          }
+          if (scanInput) scanInput.focus();
+        });
+      }
+
+      function closeScanModal() {
+        if (scanModal) {
+          scanModal.classList.add('hidden');
+          scanModal.setAttribute('aria-hidden', 'true');
+        }
+        if (scannerReader) {
+          scannerReader.innerHTML = `
+            <div style="text-align: center; padding: 20px;">
+              <p style="margin: 0 0 10px; font-weight: bold; color: var(--muted);">Camera Scanner Offline</p>
+              <button class="btn secondary" id="start-camera-btn">Enable Camera</button>
+            </div>
+          `;
+          document.getElementById('start-camera-btn')?.addEventListener('click', startFakeCamera);
+        }
+      }
+
+      if (scanModalClose) scanModalClose.addEventListener('click', closeScanModal);
+      scanModal?.addEventListener('click', (event) => {
+        if (event.target.id === 'scan-modal') closeScanModal();
+      });
+
+      async function doScanLookup(val) {
+        const query = (val || '').trim().toLowerCase();
+        if (!query) return;
+
+        if (scanStatus) scanStatus.textContent = 'Searching fleet…';
+
+        const carts = window.cartData || [];
+        const found = carts.find(c => 
+          String(c.id).toLowerCase() === query || 
+          String(c.serial).toLowerCase() === query || 
+          String(c.barcode).toLowerCase() === query
+        );
+
+        if (found) {
+          closeScanModal();
+          openCartModal('edit', found);
+        } else {
+          if (scanStatus) scanStatus.textContent = `Cart not found matching "${val}".`;
+        }
+      }
+
+      if (simulateBtn) {
+        simulateBtn.addEventListener('click', () => {
+          doScanLookup(scanInput?.value);
+        });
+      }
+      if (scanInput) {
+        scanInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            doScanLookup(scanInput.value);
+          }
+        });
+      }
+
+      function startFakeCamera() {
+        if (!scannerReader) return;
+        scannerReader.innerHTML = `
+          <div style="text-align: center; padding: 20px; width:100%;">
+            <p style="margin: 0 0 10px; font-weight: bold; color: #10b981;" class="loading-pulse">Camera scanning active... [SIMULATOR]</p>
+            <p class="hero-sub" style="margin:0 0 10px; font-size:0.75rem;">Align a golf cart barcode inside the camera frame.</p>
+            <button class="btn secondary danger" id="stop-camera-btn">Stop Camera</button>
+          </div>
+        `;
+        document.getElementById('stop-camera-btn')?.addEventListener('click', closeScanModal);
+        
+        setTimeout(() => {
+          const carts = window.cartData || [];
+          if (carts.length > 0 && !scanModal.classList.contains('hidden')) {
+            const randomCart = carts[Math.floor(Math.random() * carts.length)];
+            doScanLookup(randomCart.id);
+          }
+        }, 1500);
+      }
+
+      if (startCamBtn) {
+        startCamBtn.addEventListener('click', startFakeCamera);
+      }
 
       loadDashboard();
     </script>

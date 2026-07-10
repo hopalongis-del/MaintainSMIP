@@ -56,6 +56,7 @@
   ];
 
   const ADDABLE_WIDGET_TYPES = [
+    { type: 'analytics', label: 'Analytics Charts', description: 'Visual charts for fleet status and maintenance costs.' },
     { type: 'weather', label: 'Weather', description: 'Local forecast by city or device location.' },
     { type: 'nascar', label: 'NASCAR Cup Standings', description: 'Top 10 Cup Series drivers.' },
   ];
@@ -70,7 +71,14 @@
 
   function getWidgets() {
     const settings = settingsApi()?.get?.() || {};
-    const saved = Array.isArray(settings.dashboardWidgets) ? settings.dashboardWidgets : [];
+    let saved = Array.isArray(settings.dashboardWidgets) ? settings.dashboardWidgets : [];
+    if (saved.length === 0 && !settings.hasSeenDashboardWidgets) {
+      saved = [
+        { id: 'analytics-default', type: 'analytics', enabled: true, title: 'Fleet Analytics' },
+        { id: 'weather-default', type: 'weather', enabled: true, title: 'Weather', location: 'Charlotte, NC', useDeviceLocation: false }
+      ];
+      settingsApi()?.save?.({ dashboardWidgets: saved, hasSeenDashboardWidgets: true });
+    }
     return normalizeWidgets(saved);
   }
 
@@ -97,6 +105,14 @@
   }
 
   function normalizeExtraWidget(widget) {
+    if (widget.type === 'analytics') {
+      return {
+        id: widget.id,
+        type: 'analytics',
+        enabled: widget.enabled !== false,
+        title: widget.title || 'Fleet Analytics',
+      };
+    }
     if (widget.type === 'weather') {
       return {
         id: widget.id,
@@ -237,12 +253,23 @@
     if (!body) return;
 
     try {
-      if (widget.type === 'weather') {
+      if (widget.type === 'analytics') {
+      return {
+        id: widget.id,
+        type: 'analytics',
+        enabled: widget.enabled !== false,
+        title: widget.title || 'Fleet Analytics',
+      };
+    }
+    if (widget.type === 'weather') {
         const data = await fetchWeather(widget);
         body.innerHTML = renderWeatherBody(widget, data);
       } else if (widget.type === 'nascar') {
         const data = await fetchNascar();
         body.innerHTML = renderNascarBody(data);
+      } else if (widget.type === 'analytics') {
+        body.innerHTML = renderAnalyticsBody();
+        renderAnalyticsCharts(container);
         const badge = container.querySelector('[data-widget-badge]');
         if (badge) {
           badge.textContent = data.source === 'live' ? 'Live' : 'Snapshot';
@@ -258,12 +285,13 @@
   function renderPanelShell(widget, index, total) {
     const isWeather = widget.type === 'weather';
     const isNascar = widget.type === 'nascar';
+    const isAnalytics = widget.type === 'analytics';
     const subtitle = isWeather
       ? (widget.useDeviceLocation ? 'Using your device location' : (widget.location || 'Default event location'))
-      : 'Cup Series top 10';
+      : (isNascar ? 'Cup Series top 10' : 'Fleet status and compliance charts');
 
     return `
-      <article class="dashboard-widget is-panel" data-widget-id="${escapeHtml(widget.id)}">
+      <article class="dashboard-widget is-panel ${isAnalytics ? 'is-analytics-panel' : ''}" data-widget-id="${escapeHtml(widget.id)}">
         ${customizing ? widgetControls(widget, index, total) : ''}
         <div class="dashboard-widget-panel">
           <div class="dashboard-widget-panel-header">
@@ -273,7 +301,7 @@
             </div>
             ${isNascar ? '<div><span class="dashboard-widget-badge" data-widget-badge>Loading</span><br><a data-widget-link href="https://www.nascar.com/standings/cup-series/" target="_blank" rel="noopener noreferrer">View on NASCAR.com</a></div>' : ''}
           </div>
-          <div data-widget-body><p class="dashboard-widget-empty">Loading…</p></div>
+          <div data-widget-body>${isAnalytics ? renderAnalyticsBody() : '<p class="dashboard-widget-empty">Loading…</p>'}</div>
         </div>
       </article>
     `;
@@ -329,6 +357,13 @@
         type: 'nascar',
         enabled: true,
         title: 'NASCAR Cup Top 10',
+      });
+    } else if (type === 'analytics') {
+      widgets.push({
+        id,
+        type: 'analytics',
+        enabled: true,
+        title: 'Fleet Analytics',
       });
     }
     saveWidgets(widgets);
@@ -453,7 +488,7 @@
       : '<p class="dashboard-widget-empty">No widgets enabled. Click Customize Widgets to add some.</p>';
 
     widgets.forEach((widget) => {
-      if (widget.type === 'weather' || widget.type === 'nascar') {
+      if (widget.type === 'weather' || widget.type === 'nascar' || widget.type === 'analytics') {
         const container = grid.querySelector(`[data-widget-id="${widget.id}"]`);
         if (container) hydratePanelWidget(container, widget);
       }
@@ -506,6 +541,115 @@
         const valueEl = grid.querySelector(`[data-widget-id="${widget.id}"] .stat-num`);
         if (valueEl) valueEl.textContent = statValue(widget);
       });
+  }
+
+
+  function renderAnalyticsBody() {
+    return `
+      <div class="analytics-widgets-container" style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: space-around; width: 100%; padding: 10px 0;">
+        <div class="chart-container" style="position: relative; height: 160px; width: 160px; display: flex; flex-direction: column; align-items: center;">
+          <div style="position: relative; height: 130px; width: 130px;"><canvas id="chart-fleet-status"></canvas></div>
+          <div style="text-align: center; font-size: 0.75rem; margin-top: 5px; font-weight: 600; color: var(--text);">Fleet Status</div>
+        </div>
+        <div class="chart-container" style="position: relative; height: 160px; width: 220px; display: flex; flex-direction: column; align-items: center;">
+          <div style="position: relative; height: 130px; width: 220px;"><canvas id="chart-wo-status"></canvas></div>
+          <div style="text-align: center; font-size: 0.75rem; margin-top: 5px; font-weight: 600; color: var(--text);">Maintenance Tasks</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderAnalyticsCharts(container) {
+    const carts = window.cartData || [];
+    const statusCounts = {
+      'active': 0,
+      'retired': 0,
+      'maintenance': 0,
+      'out_of_service': 0
+    };
+    
+    carts.forEach(cart => {
+      const status = (cart.status || '').toLowerCase();
+      if (status.includes('active')) statusCounts['active'] += 1;
+      else if (status.includes('retired')) statusCounts['retired'] += 1;
+      else if (status.includes('maintenance')) statusCounts['maintenance'] += 1;
+      else statusCounts['out_of_service'] += 1;
+    });
+
+    const fleetCanvas = container.querySelector('#chart-fleet-status');
+    if (fleetCanvas) {
+      if (typeof Chart === 'undefined') {
+        fleetCanvas.parentElement.innerHTML = '<p class="dashboard-widget-empty" style="font-size:0.8rem;">Loading Chart.js...</p>';
+      } else {
+        new Chart(fleetCanvas, {
+          type: 'doughnut',
+          data: {
+            labels: ['Active', 'Maintenance', 'Retired', 'Out of Service'],
+            datasets: [{
+              data: [
+                statusCounts['active'],
+                statusCounts['maintenance'],
+                statusCounts['retired'],
+                statusCounts['out_of_service']
+              ],
+              backgroundColor: ['#10b981', '#fbbf24', '#6b7280', '#ef4444'],
+              borderWidth: 0
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false }
+            },
+            cutout: '65%'
+          }
+        });
+      }
+    }
+
+    const woCanvas = container.querySelector('#chart-wo-status');
+    if (woCanvas) {
+      if (typeof Chart !== 'undefined') {
+        new Chart(woCanvas, {
+          type: 'bar',
+          data: {
+            labels: ['Open WO', 'Overdue', 'PM Due', 'PM Overdue', 'Accidents'],
+            datasets: [{
+              label: 'Count',
+              data: [
+                latestStats['open_work_orders'] || 0,
+                latestStats['overdue_work_orders'] || 0,
+                latestPmDueCount || 0,
+                latestStats['pm_overdue'] || 0,
+                latestStats['open_accidents'] || 0
+              ],
+              backgroundColor: ['#2563eb', '#dc2626', '#10b981', '#f59e0b', '#7c3aed'],
+              borderWidth: 0,
+              borderRadius: 4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: { stepSize: 1, color: '#9ca3af', font: { size: 8 } },
+                grid: { color: 'rgba(255,255,255,0.06)' }
+              },
+              x: {
+                ticks: { color: '#9ca3af', font: { size: 8 } },
+                grid: { display: false }
+              }
+            }
+          }
+        });
+      }
+    }
   }
 
   window.MaintainSMIPDashboard = {

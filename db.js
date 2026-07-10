@@ -1227,4 +1227,10 @@ const db = {
     }
     return r.json();
   },
+
+  async getCartTimeline(cartId) {
+    const r = await fetchApi(`/api/carts/${cartId}/timeline`);
+    if (!r.ok) throw new Error(`Cart timeline failed (${r.status})`);
+    return r.json();
+  },
 };

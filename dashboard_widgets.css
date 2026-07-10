@@ -232,3 +232,62 @@
     grid-template-columns: 1fr;
   }
 }
+/* Premium Analytics & Timeline Enhancements */
+.analytics-widgets-container {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.timeline-list {
+  position: relative;
+  padding-left: 20px;
+  border-left: 2px solid var(--border);
+  margin-left: 10px;
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -27px;
+  top: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--border);
+  border: 2px solid var(--panel);
+}
+
+/* Event badges */
+.timeline-item[data-type="workorder_created"]::before { background: #2563eb; }
+.timeline-item[data-type="workorder_completed"]::before { background: #10b981; }
+.timeline-item[data-type="pm_scheduled"]::before { background: #f59e0b; }
+.timeline-item[data-type="pm_completed"]::before { background: #10b981; }
+.timeline-item[data-type="accident"]::before { background: #ef4444; }
+.timeline-item[data-type="lease_started"]::before { background: #7c3aed; }
+.timeline-item[data-type="lease_returned"]::before { background: #10b981; }
+
+.timeline-date {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.timeline-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.timeline-desc {
+  font-size: 0.8rem;
+  color: var(--muted);
+}

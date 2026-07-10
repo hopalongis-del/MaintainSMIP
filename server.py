@@ -845,6 +845,8 @@ class WorkOrderBase(BaseModel):
     location: Optional[str] = ''
     due_date: Optional[str] = None
     labor_minutes: int = 0
+    labor_rate: float = 75.0
+    part_cost: float = 0.0
     parts_used: List[Any] = Field(default_factory=list)
     comments: List[Any] = Field(default_factory=list)
     maintenance_sheet: dict = Field(default_factory=dict)
@@ -866,6 +868,8 @@ class WorkOrderUpdate(BaseModel):
     due_date: Optional[str] = None
     completed_date: Optional[str] = None
     labor_minutes: Optional[int] = None
+    labor_rate: Optional[float] = None
+    part_cost: Optional[float] = None
     parts_used: Optional[List[Any]] = None
     comments: Optional[List[Any]] = None
     maintenance_sheet: Optional[dict] = None
@@ -2007,6 +2011,12 @@ async def migrate_schema() -> None:
             if 'maintenance_sheet' not in wo_columns:
                 await connection.execute('ALTER TABLE work_orders ADD COLUMN maintenance_sheet TEXT')
                 await connection.commit()
+            if 'labor_rate' not in wo_columns:
+                await connection.execute('ALTER TABLE work_orders ADD COLUMN labor_rate REAL DEFAULT 75.0')
+                await connection.commit()
+            if 'part_cost' not in wo_columns:
+                await connection.execute('ALTER TABLE work_orders ADD COLUMN part_cost REAL DEFAULT 0.0')
+                await connection.commit()
             await backfill_demo_maintenance_sheets(connection)
 
         cursor = await connection.execute(
@@ -2044,7 +2054,9 @@ async def create_tables() -> None:
                 labor_minutes INTEGER,
                 parts_used TEXT,
                 comments TEXT,
-                maintenance_sheet TEXT
+                maintenance_sheet TEXT,
+                labor_rate REAL DEFAULT 75.0,
+                part_cost REAL DEFAULT 0.0
             )
             '''
         )
@@ -2757,6 +2769,115 @@ async def get_cart(cart_id: str) -> CartItem:
     if not row:
         raise HTTPException(status_code=404, detail='Cart not found')
     return cart_row_to_item(row)
+@app.get('/api/carts/{cart_id}/timeline')
+async def get_cart_timeline(cart_id: str) -> List[dict]:
+    try:
+        cart_numeric = int(cart_id)
+    except ValueError:
+        cart_numeric = -1
+
+    timeline = []
+
+    async with aiosqlite.connect(DB_PATH) as connection:
+        connection.row_factory = aiosqlite.Row
+
+        # 1. Work Orders
+        cursor = await connection.execute(
+            'SELECT * FROM work_orders WHERE cart_id = ? OR cart_id = ?',
+            (cart_id, cart_numeric)
+        )
+        for row in await cursor.fetchall():
+            wo = dict(row)
+            if wo.get('created_date'):
+                timeline.append({
+                    'date': wo['created_date'],
+                    'type': 'workorder_created',
+                    'title': 'Work Order Opened',
+                    'description': f"WO-{wo['id']}: {wo['title']} (Priority: {wo['priority'].capitalize()}) opened by {wo.get('assigned_to') or 'unassigned'}.",
+                    'ref_id': wo['id']
+                })
+            if wo.get('completed_date') and wo.get('status') in ('completed', 'closed'):
+                timeline.append({
+                    'date': wo['completed_date'],
+                    'type': 'workorder_completed',
+                    'title': 'Work Order Completed',
+                    'description': f"WO-{wo['id']}: {wo['title']} completed in {wo.get('labor_minutes') or 0} mins.",
+                    'ref_id': wo['id']
+                })
+
+        # 2. PM Records
+        cursor = await connection.execute(
+            'SELECT * FROM pm_records WHERE cart_id = ? OR cart_id = ?',
+            (cart_id, cart_numeric)
+        )
+        for row in await cursor.fetchall():
+            pm = dict(row)
+            if pm.get('scheduled_date') and pm.get('status') != 'completed':
+                timeline.append({
+                    'date': pm['scheduled_date'],
+                    'type': 'pm_scheduled',
+                    'title': 'PM Scheduled',
+                    'description': f"PM: {pm['template_name']} scheduled.",
+                    'ref_id': pm['id']
+                })
+            if pm.get('completed_date') and pm.get('status') == 'completed':
+                timeline.append({
+                    'date': pm['completed_date'],
+                    'type': 'pm_completed',
+                    'title': 'PM Completed',
+                    'description': f"PM: {pm['template_name']} completed by {pm.get('tech_name') or 'technician'}.",
+                    'ref_id': pm['id']
+                })
+
+        # 3. Accidents
+        cursor = await connection.execute(
+            'SELECT * FROM accident_reports WHERE cart_id = ? OR cart_id = ?',
+            (cart_id, cart_numeric)
+        )
+        for row in await cursor.fetchall():
+            acc = dict(row)
+            date = acc.get('incident_date') or acc.get('created_date')
+            if date:
+                timeline.append({
+                    'date': date,
+                    'type': 'accident',
+                    'title': 'Accident Damage Reported',
+                    'description': f"Accident-{acc['id']}: {acc['description']} (Severity: {acc['severity'].capitalize()}) reported by {acc.get('reported_by') or 'unknown'}.",
+                    'ref_id': acc['id']
+                })
+
+        # 4. Leases
+        cursor = await connection.execute(
+            '''
+            SELECT l.*, u.unit_code 
+            FROM leases l 
+            JOIN lease_units u ON l.unit_id = u.id 
+            WHERE u.fleet_cart_id = ? OR u.fleet_cart_id = ?
+            ''',
+            (cart_id, str(cart_numeric))
+        )
+        for row in await cursor.fetchall():
+            lease = dict(row)
+            if lease.get('start_date'):
+                timeline.append({
+                    'date': lease['start_date'],
+                    'type': 'lease_started',
+                    'title': 'Lease Checkout',
+                    'description': f"Lease-{lease['id']}: Checked out to {lease['customer_name']}.",
+                    'ref_id': lease['id']
+                })
+            if lease.get('actual_return') and lease.get('status') == 'returned':
+                timeline.append({
+                    'date': lease['actual_return'],
+                    'type': 'lease_returned',
+                    'title': 'Lease Returned',
+                    'description': f"Lease-{lease['id']}: Returned by {lease['customer_name']}.",
+                    'ref_id': lease['id']
+                })
+
+    timeline.sort(key=lambda x: x['date'], reverse=True)
+    return timeline
+
 
 
 @app.post('/api/carts', response_model=CartItem)
@@ -2947,8 +3068,8 @@ async def create_work_order(request: Request, item: WorkOrderCreate) -> WorkOrde
             INSERT INTO work_orders (
                 cart_id, cart_serial, title, description, priority, status, type,
                 assigned_to, location, created_date, due_date, completed_date,
-                labor_minutes, parts_used, comments, maintenance_sheet
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                labor_minutes, parts_used, comments, maintenance_sheet, labor_rate, part_cost
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
             (
                 item.cart_id,
@@ -2967,6 +3088,8 @@ async def create_work_order(request: Request, item: WorkOrderCreate) -> WorkOrde
                 json.dumps(item.parts_used or []),
                 json.dumps(item.comments or []),
                 json.dumps(item.maintenance_sheet or {}),
+                item.labor_rate,
+                item.part_cost,
             ),
         )
         await connection.commit()
@@ -2999,6 +3122,8 @@ async def create_work_order(request: Request, item: WorkOrderCreate) -> WorkOrde
         'parts_used': item.parts_used,
         'comments': item.comments,
         'maintenance_sheet': item.maintenance_sheet or {},
+        'labor_rate': item.labor_rate,
+        'part_cost': item.part_cost,
     })
 
 
@@ -3041,6 +3166,10 @@ async def update_work_order(request: Request, workorder_id: int, item: WorkOrder
             updated['completed_date'] = item.completed_date if item.completed_date else None
         if item.labor_minutes is not None:
             updated['labor_minutes'] = item.labor_minutes
+        if item.labor_rate is not None:
+            updated['labor_rate'] = item.labor_rate
+        if item.part_cost is not None:
+            updated['part_cost'] = item.part_cost
         if item.parts_used is not None:
             updated['parts_used'] = json.dumps(item.parts_used)
         if item.comments is not None:
@@ -3065,7 +3194,9 @@ async def update_work_order(request: Request, workorder_id: int, item: WorkOrder
                 labor_minutes = ?,
                 parts_used = ?,
                 comments = ?,
-                maintenance_sheet = ?
+                maintenance_sheet = ?,
+                labor_rate = ?,
+                part_cost = ?
             WHERE id = ?
             ''',
             (
@@ -3084,6 +3215,8 @@ async def update_work_order(request: Request, workorder_id: int, item: WorkOrder
                 updated['parts_used'],
                 updated['comments'],
                 updated.get('maintenance_sheet') or '{}',
+                updated.get('labor_rate', 75.0),
+                updated.get('part_cost', 0.0),
                 workorder_id,
             ),
         )

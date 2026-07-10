@@ -243,6 +243,9 @@ function openModal() {
   selectedWoCart = null;
   document.getElementById('wo-form').reset();
   document.getElementById('wo-labor-minutes').value = '0';
+  document.getElementById('wo-labor-rate').value = '75.0';
+  document.getElementById('wo-part-cost').value = '0.00';
+  calculateTotalCost();
   document.getElementById('wo-cart-list').innerHTML = '';
   renderCartSelection();
   document.getElementById('wo-selected-cart').textContent = 'Select a cart to populate work order fields.';
@@ -267,6 +270,9 @@ function openEditModal(wo) {
   document.getElementById('wo-location').value = wo.location || '';
   document.getElementById('wo-due-date').value = toDateInputValue(wo.due_date);
   document.getElementById('wo-labor-minutes').value = String(wo.labor_minutes ?? 0);
+  document.getElementById('wo-labor-rate').value = String(wo.labor_rate ?? 75.0);
+  document.getElementById('wo-part-cost').value = String(wo.part_cost ?? 0.0);
+  calculateTotalCost();
 
   renderCartSelection();
   if (selectedWoCart) {
@@ -278,6 +284,18 @@ function openEditModal(wo) {
   }
 
   document.getElementById('wo-modal').classList.remove('hidden');
+}
+
+
+function calculateTotalCost() {
+  const minutes = Number(document.getElementById('wo-labor-minutes').value || 0);
+  const rate = Number(document.getElementById('wo-labor-rate').value || 0);
+  const partCost = Number(document.getElementById('wo-part-cost').value || 0);
+  const total = (minutes / 60) * rate + partCost;
+  const totalInput = document.getElementById('wo-total-cost');
+  if (totalInput) {
+    totalInput.value = total.toFixed(2);
+  }
 }
 
 function closeModal() {
@@ -423,6 +441,8 @@ function serializeForm(forEdit = false) {
     location: document.getElementById('wo-location').value.trim(),
     due_date: dueDate ? `${dueDate}T00:00:00` : null,
     labor_minutes: Number(document.getElementById('wo-labor-minutes').value || 0),
+    labor_rate: Number(document.getElementById('wo-labor-rate').value || 75.0),
+    part_cost: Number(document.getElementById('wo-part-cost').value || 0.0),
   };
 
   if (cart) {
@@ -568,6 +588,9 @@ async function initWorkOrders() {
     applyTemplateDefaultsToForm(activeWoTemplate);
   });
 
+  document.getElementById('wo-labor-minutes').addEventListener('input', calculateTotalCost);
+  document.getElementById('wo-labor-rate').addEventListener('input', calculateTotalCost);
+  document.getElementById('wo-part-cost').addEventListener('input', calculateTotalCost);
   document.getElementById('new-wo-btn').addEventListener('click', openModal);
   document.getElementById('modal-close').addEventListener('click', closeModal);
   document.getElementById('modal-cancel').addEventListener('click', closeModal);

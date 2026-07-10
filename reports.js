@@ -152,6 +152,45 @@ function extractPartsUsageRows(workOrders, filters) {
 
 const REPORTS = [
   {
+    id: 'work-order-financials',
+    title: 'Work Order Cost Breakdown',
+    description: 'Financial analysis of work orders listing labor hours, labor cost, parts cost, and total cost.',
+    filters: [
+      { id: 'location', label: 'Location', type: 'select', optionsKey: 'locations', defaultValue: 'all' },
+      { id: 'days', label: 'Time Period', type: 'select', options: PERIOD_FILTER_OPTIONS, defaultValue: '30' },
+    ],
+    async load(filters) {
+      const cutoff = periodCutoffMs(filters.days);
+      const rows = (await db.getWorkOrders())
+        .filter((wo) => matchesLocation(wo.location, filters.location))
+        .filter((wo) => {
+          const stamp = wo.completed_date || wo.created_date;
+          return inPeriod(stamp, cutoff);
+        })
+        .sort((a, b) => b.id - a.id);
+      return {
+        subtitle: `${filters.location === 'all' ? 'All locations' : `Location: ${filters.location}`} · Last ${filters.days} days`,
+        rows,
+      };
+    },
+    columns: [
+      { label: 'WO #', value: (r) => r.id },
+      { label: 'Cart', value: (r) => r.cart_id },
+      { label: 'Title', value: (r) => r.title },
+      { label: 'Status', value: (r) => r.status },
+      { label: 'Labor Hours', value: (r) => ((r.labor_minutes || 0) / 60).toFixed(2) },
+      { label: 'Labor Rate', value: (r) => `$${(r.labor_rate ?? 75.0).toFixed(2)}` },
+      { label: 'Labor Cost', value: (r) => `$${(((r.labor_minutes || 0) / 60) * (r.labor_rate ?? 75.0)).toFixed(2)}` },
+      { label: 'Parts Cost', value: (r) => `$${(r.part_cost ?? 0.0).toFixed(2)}` },
+      { label: 'Total Cost', value: (r) => {
+        const labor = ((r.labor_minutes || 0) / 60) * (r.labor_rate ?? 75.0);
+        const parts = r.part_cost ?? 0.0;
+        return `$${(labor + parts).toFixed(2)}`;
+      } },
+      { label: 'Completed Date', value: (r) => formatReportDate(r.completed_date) },
+    ],
+  },
+  {
     id: 'open-work-orders',
     title: 'Open Work Orders',
     description: 'All work orders still open, in progress, or on hold.',
